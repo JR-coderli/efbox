@@ -1,0 +1,47 @@
+@import "./reset.css";
+
+/* 谷歌风格 Dialog 样式 */
+.google-dialog {
+  .el-dialog {
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+    border: none;
+  }
+
+  .el-dialog__header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid #e8eaed;
+  }
+
+  .el-dialog__title {
+    font-size: 18px;
+    font-weight: 500;
+    color: #202124;
+  }
+
+  .el-dialog__headerbtn {
+    top: 20px;
+    right: 20px;
+    width: 32px;
+    height: 32px;
+
+    .el-dialog__close {
+      color: #5f6368;
+      font-size: 18px;
+
+      &:hover {
+        color: #202124;
+      }
+    }
+  }
+
+  .el-dialog__body {
+    padding: 20px 24px;
+    color: #202124;
+  }
+
+  .el-dialog__footer {
+    padding: 16px 24px 20px;
+    border-top: 1px solid #e8eaed;
+  }
+}
