@@ -1,0 +1,9 @@
+node_modules
+
+tmpclaude-*
+
+.claude
+
+# 日志文件
+logs/
+*.log

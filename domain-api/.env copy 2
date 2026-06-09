@@ -1,0 +1,91 @@
+# NODE_ENV=production # 生产环境
+NODE_ENV=development # 开发环境
+
+
+# 一、服务器地址和端口
+# 本地
+DEV_SERVER_HOST=http://localhost
+DEV_SERVER_PORT=8001
+# 线上
+# PROD_SERVER_HOST=https://tools.eflow-media.com 
+PROD_SERVER_HOST=https://efbox.work
+PROD_SERVER_PORT=8001
+
+
+# 二、数据库配置
+# 本地
+DEV_DB_HOST=localhost
+DEV_DB_PORT=3306
+DEV_DB_DATABASE=url_cms
+DEV_DB_USER=root
+DEV_DB_PASSWORD=Coderwhy123.
+# 线上
+PROD_DB_HOST=localhost
+PROD_DB_PORT=3306
+PROD_DB_DATABASE=url_cms
+PROD_DB_USER=url_cms
+PROD_DB_PASSWORD=HscpF4GK6iXPMsMm
+
+# 三、浏览器Chrome软件配置 
+# 本地
+DEV_CHROME_PATH=C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe
+# 线上
+PROD_CHROME_PATH=/usr/bin/chromium-browser
+
+
+# 四、LibreOffice 软件配置
+DEV_SOFFICE_PATH=C:\\Program Files\\LibreOffice\\program\\soffice.exe # Windows
+PROD_SOFFICE_PATH=/usr/bin/soffice # Linux
+
+
+# 五、邮件配置 
+# 本地开发环境
+DEV_MAIL_USER=notice@eflow-media.com
+DEV_MAIL_PASS=e7Ac9Rc0qL5ij3NB
+DEV_MAIL_TO=lanlanboom@outlook.com
+# DEV_MAIL_BCC=lanlanboom@outlook.com
+
+# 线上生产环境
+PROD_MAIL_USER=notice@eflow-media.com
+PROD_MAIL_PASS=e7Ac9Rc0qL5ij3NB
+PROD_MAIL_TO=netapop@outlook.com
+
+
+# 六、websocket配置
+# 本地开发环境
+DEV_WS_PATH=/socket.io
+DEV_CORS_ORIGIN=http://localhost:5173
+
+# 线上开发环境
+PROD_WS_PATH=/socket.io
+# PROD_CORS_ORIGIN=https://tools.eflow-media.com
+PROD_CORS_ORIGIN=https://efbox.work
+
+
+# 七、LP-API 配置 - 用于全量同步
+# 本地开发环境
+DEV_LP_API_URL=http://localhost:8002
+# 线上生产环境 (服务器B的地址)
+PROD_LP_API_URL=http://8.134.108.134:8001
+
+# 八、公开接口的api-key
+PUBLIC_API_KEY=Ln5QpO8fQ6ZAJxFvuSQs9foeCliIYMAe4AcS6VQd
+# 本地环境 (预览图url)
+DEV_LP_SCREENSHOTS_BASE_URL=http://localhost:8001
+# 线上环境
+PROD_LP_SCREENSHOTS_BASE_URL=https://efbox.work/api
+
+# 九、Google的API_KEY
+SAFE_BROWSING_API_KEY=AIzaSyD9vj6yRGGHqFsmD10BuwcgkooNoV8-XP0
+
+# 十、飞书机器人配置
+# 本地开发环境
+DEV_FEISHU_APP_ID=cli_a96a2174c27a1cc7
+DEV_FEISHU_APP_SECRET=LbpS5qnjApgxRmZXSR5RBgA2sNcFLW1F
+DEV_FEISHU_ENCRYPT_KEY=
+DEV_FEISHU_VERIFICATION_TOKEN=
+# 线上生产环境
+PROD_FEISHU_APP_ID=cli_a96a2174c27a1cc7
+PROD_FEISHU_APP_SECRET=LbpS5qnjApgxRmZXSR5RBgA2sNcFLW1F
+PROD_FEISHU_ENCRYPT_KEY=
+PROD_FEISHU_VERIFICATION_TOKEN=

@@ -1,0 +1,20 @@
+{
+  "name": "pushnami-task",
+  "version": "2.0.0",
+  "description": "Pushnami Automation - Bid Adjust, Block, Budget Boost",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dry-run": "node src/index.js dry-run",
+    "trigger": "node src/index.js trigger",
+    "trigger:bid": "node src/index.js trigger bid_adjust",
+    "trigger:block": "node src/index.js trigger block",
+    "trigger:budget": "node src/index.js trigger budget_boost",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "dotenv": "^17.3.1",
+    "puppeteer-core": "^24.10.2"
+  }
+}
