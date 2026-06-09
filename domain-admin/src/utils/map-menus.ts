@@ -19,6 +19,7 @@ import feishu from '@/router/main/timer/feishu/feishu'
 import report from '@/router/main/webpage/report/report'
 import paymentCustomers from '@/router/main/payment/customers/customers'
 import paymentTracks from '@/router/main/payment/tracks/tracks'
+import monetstatusNotice from '@/router/main/webpage/monetstatus-notice/monetstatus-notice'
 
 
 function loadLocalRoutes() {
@@ -48,6 +49,7 @@ function loadLocalRoutes() {
   localRoutes.push(report)
   localRoutes.push(paymentCustomers)
   localRoutes.push(paymentTracks)
+  localRoutes.push(monetstatusNotice)
 
   return localRoutes
 }
