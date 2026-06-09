@@ -1462,7 +1462,7 @@ onUnmounted(() => {
   }
 })
 
-console.log("aaa")
+console.log("bbb")
 </script>
 
 <style lang="less">
