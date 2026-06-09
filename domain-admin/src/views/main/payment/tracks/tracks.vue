@@ -1461,6 +1461,8 @@ onUnmounted(() => {
     periodDocumentClickHandler = null
   }
 })
+
+console.log("111")
 </script>
 
 <style lang="less">

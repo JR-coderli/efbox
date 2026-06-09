@@ -24,7 +24,7 @@
     "jszip": "^3.10.1",
     "lodash": "^4.17.21",
     "normalize.css": "^8.0.1",
-    "pdfjs-dist": "^4.4.168",
+    "pdfjs-dist": "^4.10.38",
     "pinia": "^3.0.2",
     "socket.io-client": "^4.8.3",
     "sortablejs": "^1.15.6",
