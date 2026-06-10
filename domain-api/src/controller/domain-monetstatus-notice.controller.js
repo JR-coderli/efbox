@@ -6,12 +6,33 @@ class DomainMonetstatusNoticeController {
     const { domain, status } = ctx.request.body
 
     if (!domain || !status) {
-      ctx.body = { code: 1, message: 'domain 和 status 不能为空' }
+      ctx.body = {
+        code: 400,
+        error: 'Bad Request',
+        message: 'Fields "domain" and "status" are required. Please send a JSON body: { "domain": "example.com", "status": "flag" } with Content-Type: application/json'
+      }
       return
     }
 
-    const result = await monetstatusService.create(domain, status)
-    ctx.body = { code: 0, message: '接收成功', data: result }
+    if (status !== 'flag') {
+      ctx.body = {
+        code: 400,
+        error: 'Bad Request',
+        message: 'Invalid status value. Only "flag" is accepted.'
+      }
+      return
+    }
+
+    try {
+      await monetstatusService.create(domain, status)
+      ctx.body = { code: 200, data: 'received' }
+    } catch (err) {
+      ctx.body = {
+        code: 500,
+        error: 'Internal Server Error',
+        message: 'Failed to process the notification. Please try again later.'
+      }
+    }
   }
 
   async list(ctx) {
