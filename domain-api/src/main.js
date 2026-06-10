@@ -41,7 +41,9 @@ server.listen(SERVER_PORT, async () => {
 })
 
 
-require('./tasks/lander-sync.task').startLanderSync() // 会检查数据库开关，决定是否启动
+require('./tasks/lander-sync.task').startLanderSync().catch(err => {
+  console.error('[LanderSync] 启动失败，数据库不可用:', err.message)
+}) // 会检查数据库开关，决定是否启动
 
 
 
