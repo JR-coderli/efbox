@@ -2,15 +2,15 @@ const connection = require('../app/database')
 
 class DomainMonetstatusNoticeService {
 
-  async create(domain, status) {
-    const statement = 'INSERT INTO domain_monetstatus_notice (domain, status) VALUES (?, ?)'
-    const [result] = await connection.execute(statement, [domain, status])
+  async create(payload) {
+    const statement = 'INSERT INTO domain_monetstatus_notice (payload) VALUES (?)'
+    const [result] = await connection.execute(statement, [JSON.stringify(payload)])
     return result
   }
 
   async getList(offset = 0, size = 20) {
     const listStatement = `
-      SELECT id, domain, status, received_at
+      SELECT id, payload, received_at
       FROM domain_monetstatus_notice
       ORDER BY received_at DESC
       LIMIT ? OFFSET ?
