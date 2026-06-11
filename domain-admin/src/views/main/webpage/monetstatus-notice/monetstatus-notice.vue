@@ -18,12 +18,9 @@
         <el-table :data="tableData" style="width: 100%" stripe>
           <el-table-column type="index" label="序号" width="70" align="center"
             :index="indexMethod" />
-          <el-table-column prop="domain" label="Domain" min-width="200" />
-          <el-table-column prop="status" label="Status" width="150" align="center">
+          <el-table-column prop="payload" label="Payload" min-width="300">
             <template #default="{ row }">
-              <el-tag :type="row.status === 'flag' ? 'danger' : 'success'" effect="dark" size="small">
-                {{ row.status }}
-              </el-tag>
+              <pre class="payload-json">{{ formatPayload(row.payload) }}</pre>
             </template>
           </el-table-column>
           <el-table-column prop="received_at" label="接收时间" width="200" align="center">
@@ -75,6 +72,16 @@ function indexMethod(index) {
   return (page.value - 1) * pageSize.value + index + 1
 }
 
+function formatPayload(payload) {
+  if (!payload) return '-'
+  try {
+    const obj = typeof payload === 'string' ? JSON.parse(payload) : payload
+    return JSON.stringify(obj, null, 2)
+  } catch {
+    return String(payload)
+  }
+}
+
 function formatDateTime(dateStr) {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
@@ -109,7 +116,7 @@ async function loadData() {
 async function handleDelete(row) {
   try {
     await ElMessageBox.confirm(
-      `确定删除 ${row.domain} 的通知记录吗？`,
+      `确定删除 ID ${row.id} 的通知记录吗？`,
       '确认删除',
       { type: 'warning' }
     )
@@ -179,6 +186,19 @@ onMounted(() => {
 
   .g-table-wrapper {
     padding: 0;
+  }
+
+  .payload-json {
+    margin: 0;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    background: #f5f7fa;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 120px;
+    overflow-y: auto;
   }
 
   .g-pagination {
