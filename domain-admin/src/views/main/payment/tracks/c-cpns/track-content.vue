@@ -37,6 +37,26 @@
     <div class="page-header">
       <div class="header-left">
         <h1 class="page-title">{{ contentConfig.header?.title ?? '付款追踪' }}</h1>
+        <el-autocomplete
+          v-model="searchShortName"
+          placeholder="搜索客户简称"
+          clearable
+          class="google-search-input"
+          popper-class="short-name-popper"
+          :fetch-suggestions="queryShortNameSuggestions"
+          :trigger-on-focus="true"
+          value-key="value"
+          @select="onSearchSelect"
+          @clear="handleSearch"
+          @input="handleSearchDebounced"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+          <template #default="{ item }">
+            <span>{{ item.value }}</span>
+          </template>
+        </el-autocomplete>
       </div>
       <div class="header-actions">
         <!-- 列设置按钮 -->
@@ -216,7 +236,7 @@ import useSystemStore from '@/stores/main/system/system'
 import useLoginStore from '@/stores/login/login'
 import { storeToRefs } from 'pinia'
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { throttle } from 'lodash-es'
+import { throttle, debounce } from 'lodash-es'
 
 const props = defineProps({
   contentConfig: {
@@ -236,6 +256,36 @@ const loading = ref(false)
 
 const searchShortName = ref('')
 const searchPaymentStatus = ref('')
+
+// 客户简称候选列表（用于下拉提示）
+const customerShortNames = ref([])
+async function loadCustomerShortNames() {
+  try {
+    const list = await systemStore.getPaymentTrackCustomersAction()
+    customerShortNames.value = Array.from(
+      new Set((list || []).map(c => c.short_name).filter(Boolean))
+    )
+  } catch {
+    customerShortNames.value = []
+  }
+}
+
+// el-autocomplete 下拉过滤（纯客户端，避免每次按键都请求候选列表）
+function queryShortNameSuggestions(queryString, cb) {
+  const q = (queryString || '').trim().toLowerCase()
+  const source = customerShortNames.value.map(name => ({ value: name }))
+  const results = q
+    ? source.filter(item => item.value.toLowerCase().includes(q))
+    : source
+  cb(results)
+}
+
+function onSearchSelect() {
+  handleSearch()
+}
+
+// 输入时防抖搜索：持续输入不发起请求，停止输入 300ms 后才查询
+const handleSearchDebounced = debounce(handleSearch, 300)
 
 
 const STORAGE_KEY = 'payment_track_column_settings'
@@ -630,6 +680,7 @@ onMounted(() => {
   document.addEventListener('click', closeMenu)
   loadColumnSettings()
   fetchPageListData()
+  loadCustomerShortNames()
 })
 
 onUnmounted(() => {
@@ -682,6 +733,9 @@ defineExpose({
 .header-left {
   flex: 1;
   min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
 }
 
 .page-title {
@@ -689,6 +743,20 @@ defineExpose({
   font-weight: 500;
   color: #202124;
   margin: 0;
+}
+
+:deep(.google-search-input) {
+  max-width: 250px !important;
+  // flex-shrink: 0;
+  :deep(.el-input__wrapper) {
+    border-radius: 4px;
+    box-shadow: 0 0 0 1px #dadce0 inset;
+    &:hover { box-shadow: 0 0 0 1px #bdc1c6 inset; }
+    &.is-focus { box-shadow: 0 0 0 1px #1a73e8 inset; }
+  }
+  :deep(.el-input__prefix) {
+    color: #9aa0a6;
+  }
 }
 
 .google-btn {
