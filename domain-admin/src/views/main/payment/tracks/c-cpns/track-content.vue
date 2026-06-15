@@ -271,6 +271,8 @@ const loading = ref(false)
 
 const searchShortName = ref('')
 const searchPaymentStatus = ref('')
+const searchYear = ref('')   // 点击年份筛选（周期起始年份）
+const searchMonth = ref('')  // 点击月份筛选（周期起始月份）
 
 // 客户简称候选列表（用于下拉提示）
 const customerShortNames = ref([])
@@ -317,16 +319,40 @@ const activeFilters = computed(() => {
   if (name) {
     tags.push({ key: 'short_name', label: `客户：${name}` })
   }
+  if (searchYear.value) {
+    tags.push({ key: 'year', label: `年份：${searchYear.value}` })
+  }
+  if (searchMonth.value) {
+    tags.push({ key: 'month', label: `月份：${searchMonth.value}月` })
+  }
   return tags
 })
 
 // 移除某个搜索条件（点击标签上的 ×）
 function removeFilter(key) {
+  handleSearchDebounced.cancel()
   if (key === 'short_name') {
-    handleSearchDebounced.cancel()
     searchShortName.value = ''
-    handleSearch()
+  } else if (key === 'year') {
+    searchYear.value = ''
+  } else if (key === 'month') {
+    searchMonth.value = ''
   }
+  handleSearch()
+}
+
+// 点击年份徽章 → 按该年份筛选（供父组件通过 ref 调用）
+function searchByYear(year) {
+  searchYear.value = year ? Number(year) : ''
+  page.value = 1
+  fetchPageListData()
+}
+
+// 点击月份徽章 → 按该月份筛选（供父组件通过 ref 调用）
+function searchByMonth(month) {
+  searchMonth.value = month ? Number(month) : ''
+  page.value = 1
+  fetchPageListData()
 }
 
 
@@ -611,6 +637,8 @@ function fetchPageListData(showLoading = true) {
     pageSize: pageSize.value,
     short_name: searchShortName.value,
     payment_status: searchPaymentStatus.value,
+    year: searchYear.value || undefined,
+    month: searchMonth.value || undefined,
     role_name: loginStore.userInfo?.role?.name || '',
     user_id: loginStore.userInfo?.id
   }
@@ -731,7 +759,9 @@ onUnmounted(() => {
 
 defineExpose({
   fetchPageListData,
-  pageList
+  pageList,
+  searchByYear,
+  searchByMonth
 })
 </script>
 

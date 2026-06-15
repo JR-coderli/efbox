@@ -19,21 +19,23 @@
         </div>
       </template>
 
-      <!-- 年份（从周期提取起始年份，不同年份不同底色） -->
+      <!-- 年份（从周期提取起始年份，不同年份不同底色，可点击筛选） -->
       <template #period_year="scope">
         <span
           v-if="extractYear(scope.period)"
-          class="tag-badge"
+          class="tag-badge clickable-badge"
           :style="{ backgroundColor: getColor(extractYear(scope.period)).bg, color: getColor(extractYear(scope.period)).text }"
+          @click="onYearClick(scope.period)"
         >{{ extractYear(scope.period) }}</span>
       </template>
 
-      <!-- 月份（从周期提取起始月份，不同月份不同底色） -->
+      <!-- 月份（从周期提取起始月份，不同月份不同底色，可点击筛选） -->
       <template #period_month="scope">
         <span
           v-if="extractMonth(scope.period)"
-          class="tag-badge"
+          class="tag-badge clickable-badge"
           :style="{ backgroundColor: getColor(extractMonth(scope.period)).bg, color: getColor(extractMonth(scope.period)).text }"
+          @click="onMonthClick(scope.period)"
         >{{ extractMonth(scope.period) }}</span>
       </template>
 
@@ -584,6 +586,26 @@ function extractYear(period) {
   if (!start) return ''
   const year = parseInt(start.split('-')[0], 10)
   return year ? `${year}年` : ''
+}
+
+// 从周期起始日期解析数值年份/月份
+function periodStartNum(period, segment) {
+  if (!period || typeof period !== 'string') return NaN
+  const start = period.split(' - ')[0]
+  if (!start) return NaN
+  return parseInt(start.split('-')[segment], 10)
+}
+
+// 点击年份徽章 → 调用 track-content 按该年份筛选
+function onYearClick(period) {
+  const y = periodStartNum(period, 0)
+  if (y) contentRef.value?.searchByYear(y)
+}
+
+// 点击月份徽章 → 调用 track-content 按该月份筛选
+function onMonthClick(period) {
+  const m = periodStartNum(period, 1)
+  if (m) contentRef.value?.searchByMonth(m)
 }
 
 const modalRef = ref()
@@ -1950,6 +1972,11 @@ onUnmounted(() => {
   font-weight: 500;
   line-height: 1.5;
   white-space: nowrap;
+}
+
+.clickable-badge {
+  cursor: pointer;
+  &:hover { text-decoration: underline; }
 }
 
 .editable-cell:hover > .edit-hint {

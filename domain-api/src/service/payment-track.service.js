@@ -134,7 +134,7 @@ class PaymentTrackService {
 
 
   async list(trackInfo) {
-    const { page, pageSize, short_name, payment_status, role_name, user_id, sort_prop, sort_order } = trackInfo
+    const { page, pageSize, short_name, payment_status, year, month, role_name, user_id, sort_prop, sort_order } = trackInfo
 
 
     let sql = `
@@ -196,6 +196,24 @@ class PaymentTrackService {
       whereClauses.push('pt.payment_status = ?')
       params.push(payment_status)
       countParams.push(payment_status)
+    }
+
+
+    // 按周期起始日期的年份筛选（period 格式：YYYY-MM-DD - YYYY-MM-DD）
+    if (year !== undefined && year !== null && String(year).trim() !== '') {
+      whereClauses.push('LEFT(pt.period, 4) = ?')
+      const y = String(year).trim()
+      params.push(y)
+      countParams.push(y)
+    }
+
+
+    // 按周期起始日期的月份筛选
+    if (month !== undefined && month !== null && String(month).trim() !== '') {
+      whereClauses.push('SUBSTRING(pt.period, 6, 2) = ?')
+      const m = String(month).trim().padStart(2, '0')
+      params.push(m)
+      countParams.push(m)
     }
 
 
