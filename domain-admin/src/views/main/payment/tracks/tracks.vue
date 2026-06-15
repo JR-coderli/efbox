@@ -19,14 +19,22 @@
         </div>
       </template>
 
-      <!-- 年份（从周期提取起始年份） -->
+      <!-- 年份（从周期提取起始年份，不同年份不同底色） -->
       <template #period_year="scope">
-        <span>{{ extractYear(scope.period) }}</span>
+        <span
+          v-if="extractYear(scope.period)"
+          class="tag-badge"
+          :style="{ backgroundColor: getColor(extractYear(scope.period)).bg, color: getColor(extractYear(scope.period)).text }"
+        >{{ extractYear(scope.period) }}</span>
       </template>
 
-      <!-- 月份（从周期提取起始月份） -->
+      <!-- 月份（从周期提取起始月份，不同月份不同底色） -->
       <template #period_month="scope">
-        <span>{{ extractMonth(scope.period) }}</span>
+        <span
+          v-if="extractMonth(scope.period)"
+          class="tag-badge"
+          :style="{ backgroundColor: getColor(extractMonth(scope.period)).bg, color: getColor(extractMonth(scope.period)).text }"
+        >{{ extractMonth(scope.period) }}</span>
       </template>
 
       <!-- 周期 -->
