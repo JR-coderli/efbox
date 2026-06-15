@@ -134,7 +134,7 @@ class PaymentTrackService {
 
 
   async list(trackInfo) {
-    const { page, pageSize, short_name, payment_status, year, month, role_name, user_id, sort_prop, sort_order } = trackInfo
+    const { page, pageSize, short_name, payment_status, year, month, currency, payment_entity, role_name, user_id, sort_prop, sort_order } = trackInfo
 
 
     let sql = `
@@ -214,6 +214,24 @@ class PaymentTrackService {
       const m = String(month).trim().padStart(2, '0')
       params.push(m)
       countParams.push(m)
+    }
+
+
+    // 按币种精确筛选
+    if (currency && String(currency).trim() !== '') {
+      whereClauses.push('pt.currency = ?')
+      const c = String(currency).trim()
+      params.push(c)
+      countParams.push(c)
+    }
+
+
+    // 按付款主体精确筛选
+    if (payment_entity && String(payment_entity).trim() !== '') {
+      whereClauses.push('pt.payment_entity = ?')
+      const e = String(payment_entity).trim()
+      params.push(e)
+      countParams.push(e)
     }
 
 

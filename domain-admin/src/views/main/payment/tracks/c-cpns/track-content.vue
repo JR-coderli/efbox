@@ -273,6 +273,8 @@ const searchShortName = ref('')
 const searchPaymentStatus = ref('')
 const searchYear = ref('')   // 点击年份筛选（周期起始年份）
 const searchMonth = ref('')  // 点击月份筛选（周期起始月份）
+const searchCurrency = ref('')     // 点击币种筛选
+const searchEntity = ref('')       // 点击付款主体筛选
 
 // 客户简称候选列表（用于下拉提示）
 const customerShortNames = ref([])
@@ -325,6 +327,12 @@ const activeFilters = computed(() => {
   if (searchMonth.value) {
     tags.push({ key: 'month', label: `月份：${searchMonth.value}月` })
   }
+  if (searchCurrency.value) {
+    tags.push({ key: 'currency', label: `币种：${searchCurrency.value}` })
+  }
+  if (searchEntity.value) {
+    tags.push({ key: 'payment_entity', label: `主体：${searchEntity.value}` })
+  }
   return tags
 })
 
@@ -337,6 +345,10 @@ function removeFilter(key) {
     searchYear.value = ''
   } else if (key === 'month') {
     searchMonth.value = ''
+  } else if (key === 'currency') {
+    searchCurrency.value = ''
+  } else if (key === 'payment_entity') {
+    searchEntity.value = ''
   }
   handleSearch()
 }
@@ -351,6 +363,20 @@ function searchByYear(year) {
 // 点击月份徽章 → 按该月份筛选（供父组件通过 ref 调用）
 function searchByMonth(month) {
   searchMonth.value = month ? Number(month) : ''
+  page.value = 1
+  fetchPageListData()
+}
+
+// 点击币种徽章 → 按该币种筛选（供父组件通过 ref 调用）
+function searchByCurrency(currency) {
+  searchCurrency.value = currency || ''
+  page.value = 1
+  fetchPageListData()
+}
+
+// 点击付款主体徽章 → 按该主体筛选（供父组件通过 ref 调用）
+function searchByEntity(entity) {
+  searchEntity.value = entity || ''
   page.value = 1
   fetchPageListData()
 }
@@ -639,6 +665,8 @@ function fetchPageListData(showLoading = true) {
     payment_status: searchPaymentStatus.value,
     year: searchYear.value || undefined,
     month: searchMonth.value || undefined,
+    currency: searchCurrency.value || undefined,
+    payment_entity: searchEntity.value || undefined,
     role_name: loginStore.userInfo?.role?.name || '',
     user_id: loginStore.userInfo?.id
   }
@@ -761,7 +789,9 @@ defineExpose({
   fetchPageListData,
   pageList,
   searchByYear,
-  searchByMonth
+  searchByMonth,
+  searchByCurrency,
+  searchByEntity
 })
 </script>
 

@@ -53,26 +53,36 @@
         <div v-else class="inline-edit-placeholder"></div>
       </template>
 
-      <!-- 付款主体 -->
+      <!-- 付款主体（可点击筛选，双击编辑） -->
       <template #payment_entity="scope">
         <div
           class="editable-cell"
           :class="{ 'has-content': scope.payment_entity, 'is-empty': !scope.payment_entity, 'is-active': selectEdit.id === scope.id && selectEdit.field === 'payment_entity' }"
           @dblclick.stop="startSelectEdit($event, scope.id, 'payment_entity', scope.payment_entity)"
         >
-          <span v-if="scope.payment_entity" class="tag-badge" :style="{ backgroundColor: getEntityColor(scope.payment_entity).bg, color: getEntityColor(scope.payment_entity).text }">{{ scope.payment_entity }}</span>
+          <span
+            v-if="scope.payment_entity"
+            class="tag-badge clickable-badge"
+            :style="{ backgroundColor: getEntityColor(scope.payment_entity).bg, color: getEntityColor(scope.payment_entity).text }"
+            @click="onEntityBadgeClick(scope.payment_entity)"
+          >{{ scope.payment_entity }}</span>
           <span v-else class="edit-hint"></span>
         </div>
       </template>
 
-      <!-- 币种 -->
+      <!-- 币种（可点击筛选，双击编辑） -->
       <template #currency="scope">
         <div
           class="editable-cell"
           :class="{ 'has-content': scope.currency, 'is-empty': !scope.currency, 'is-active': selectEdit.id === scope.id && selectEdit.field === 'currency' }"
           @dblclick.stop="startSelectEdit($event, scope.id, 'currency', scope.currency)"
         >
-          <span v-if="scope.currency" class="tag-badge" :style="{ backgroundColor: getColor(scope.currency).bg, color: getColor(scope.currency).text }">{{ scope.currency }}</span>
+          <span
+            v-if="scope.currency"
+            class="tag-badge clickable-badge"
+            :style="{ backgroundColor: getColor(scope.currency).bg, color: getColor(scope.currency).text }"
+            @click="onCurrencyBadgeClick(scope.currency)"
+          >{{ scope.currency }}</span>
           <span v-else class="edit-hint"></span>
         </div>
       </template>
@@ -606,6 +616,33 @@ function onYearClick(period) {
 function onMonthClick(period) {
   const m = periodStartNum(period, 1)
   if (m) contentRef.value?.searchByMonth(m)
+}
+
+// —— 币种 / 付款主体徽章：区分单击（筛选）与双击（编辑） ——
+// 单击后延迟 250ms 执行筛选；若期间来了第二次点击（双击的一部分），则取消筛选、交给 dblclick 编辑
+let badgeFilterTimer = null
+function deferBadgeFilter(fn) {
+  if (badgeFilterTimer) {
+    clearTimeout(badgeFilterTimer)
+    badgeFilterTimer = null
+    return
+  }
+  badgeFilterTimer = setTimeout(() => {
+    badgeFilterTimer = null
+    fn()
+  }, 250)
+}
+
+// 点击币种徽章 → 按该币种筛选
+function onCurrencyBadgeClick(currency) {
+  if (!currency) return
+  deferBadgeFilter(() => contentRef.value?.searchByCurrency(currency))
+}
+
+// 点击付款主体徽章 → 按该主体筛选
+function onEntityBadgeClick(entity) {
+  if (!entity) return
+  deferBadgeFilter(() => contentRef.value?.searchByEntity(entity))
 }
 
 const modalRef = ref()
