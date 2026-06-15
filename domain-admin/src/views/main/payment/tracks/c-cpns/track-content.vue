@@ -57,6 +57,17 @@
             <span>{{ item.value }}</span>
           </template>
         </el-autocomplete>
+        <!-- 当前搜索条件（标签形式，点击 × 可移除） -->
+        <div class="active-filters">
+          <el-tag
+            v-for="tag in activeFilters"
+            :key="tag.key"
+            closable
+            @close="removeFilter(tag.key)"
+          >
+            {{ tag.label }}
+          </el-tag>
+        </div>
       </div>
       <div class="header-actions">
         <!-- 列设置按钮 -->
@@ -138,11 +149,15 @@
               </el-table-column>
             </template>
 
-            <!-- 客户简称 -->
+            <!-- 客户简称（可点击搜索） -->
             <template v-else-if="item.prop === 'short_name'">
               <el-table-column v-bind="item" show-overflow-tooltip>
                 <template #default="scope">
-                  <span class="name-text" v-if="scope.row.customer?.short_name">{{ scope.row.customer.short_name }}</span>
+                  <span
+                    class="clickable-name"
+                    v-if="scope.row.customer?.short_name"
+                    @click="handleNameClick(scope.row.customer.short_name)"
+                  >{{ scope.row.customer.short_name }}</span>
                   <span v-else class="empty-placeholder"></span>
                 </template>
               </el-table-column>
@@ -286,6 +301,33 @@ function onSearchSelect() {
 
 // 输入时防抖搜索：持续输入不发起请求，停止输入 300ms 后才查询
 const handleSearchDebounced = debounce(handleSearch, 300)
+
+// 点击表格中的客户简称 → 直接填入搜索框并立即搜索
+function handleNameClick(shortName) {
+  if (!shortName) return
+  handleSearchDebounced.cancel()
+  searchShortName.value = shortName
+  handleSearch()
+}
+
+// 当前生效的搜索条件（用于标签展示）
+const activeFilters = computed(() => {
+  const tags = []
+  const name = (searchShortName.value || '').trim()
+  if (name) {
+    tags.push({ key: 'short_name', label: `客户：${name}` })
+  }
+  return tags
+})
+
+// 移除某个搜索条件（点击标签上的 ×）
+function removeFilter(key) {
+  if (key === 'short_name') {
+    handleSearchDebounced.cancel()
+    searchShortName.value = ''
+    handleSearch()
+  }
+}
 
 
 const STORAGE_KEY = 'payment_track_column_settings'
@@ -735,7 +777,8 @@ defineExpose({
   min-width: 200px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .page-title {
@@ -743,6 +786,35 @@ defineExpose({
   font-weight: 500;
   color: #202124;
   margin: 0;
+}
+
+.active-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  :deep(.el-tag) {
+    background-color: #e8f0fe;
+    color: #1a73e8;
+    border: none;
+    border-radius: 4px;
+    padding: 0 10px;
+    height: 26px;
+    line-height: 24px;
+    font-size: 13px;
+    font-weight: 500;
+    .el-tag__close {
+      color: #1a73e8;
+      &:hover { background-color: #d2e3fc; }
+    }
+  }
+}
+
+.clickable-name {
+  color: #1a73e8;
+  cursor: pointer;
+  font-weight: 500;
+  &:hover { text-decoration: underline; }
 }
 
 :deep(.google-search-input) {
