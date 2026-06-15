@@ -603,7 +603,7 @@ onMounted(() => {
 <style lang="less" scoped>
 .domains-page {
   padding: 10px;
-  max-width: 1600px;
+  // max-width: 1600px;
   margin: 0 auto;
 }
 

@@ -1976,7 +1976,7 @@ onUnmounted(() => {
 
 .pushnami-page {
   padding: 5px 15px;
-  max-width: 1400px;
+  // max-width: 1400px;
   margin: 0 auto;
   font-family: 'Inter', 'SF Pro Display', -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   font-size: 14px;

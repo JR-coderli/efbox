@@ -569,7 +569,7 @@ defineExpose({
 
 .google-content {
   padding: 8px;
-  max-width: 1600px;
+  // max-width: 1600px;
   margin: 0 auto;
 }
 
