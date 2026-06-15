@@ -103,6 +103,8 @@
           class="google-table"
           :border="true"
           :stripe="false"
+          show-summary
+          :summary-method="getSummary"
           @row-contextmenu="handleContextMenu"
           :row-class-name="tableRowClassName"
         >
@@ -451,6 +453,37 @@ function getCurrencySymbol(currency) {
 }
 
 
+function getSummary({ columns, data }) {
+  const sumProps = ['amount', 'amount_paid', 'amount_diff']
+  const sums = []
+  columns.forEach((column, index) => {
+    if (index === 0) {
+      sums[index] = '合计'
+      return
+    }
+    const prop = column.property
+    if (!sumProps.includes(prop)) {
+      sums[index] = ''
+      return
+    }
+    // 按币种分组求和（不同币种直接相加无意义）
+    const currencyGroups = {}
+    data.forEach(row => {
+      const cur = row.currency || ''
+      const val = Number(row[prop]) || 0
+      if (!currencyGroups[cur]) currencyGroups[cur] = 0
+      currencyGroups[cur] += val
+    })
+    const parts = Object.entries(currencyGroups).map(([cur, val]) => {
+      const symbol = getCurrencySymbol(cur)
+      return (symbol || cur || '') + val.toFixed(2)
+    })
+    sums[index] = parts.join(' / ')
+  })
+  return sums
+}
+
+
 const finalList = computed(() => {
   const list = pageList.value
   if (list && Array.isArray(list) && list.length > 0) {
@@ -748,6 +781,30 @@ defineExpose({
         padding: 0 14px;
         .cell { padding: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-left: -10px; margin-right: -10px; }
       }
+    }
+  }
+
+  .el-table__footer-wrapper {
+    td {
+      background-color: #f1f3f4;
+      color: #202124;
+      font-size: 13px;
+      font-weight: 600;
+      height: 44px;
+      padding: 0 14px;
+      border-top: 1px solid #e8eaed;
+      .cell {
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        font-family: 'Roboto Mono', monospace;
+        &:first-letter { margin-right: 1px; }
+      }
+    }
+    td:first-child .cell {
+      justify-content: center;
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
     }
   }
 
