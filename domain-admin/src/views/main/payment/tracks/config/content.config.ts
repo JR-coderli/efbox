@@ -33,6 +33,53 @@ const contentConfig = {
     },
     {
       type: 'custom',
+      label: '月份',
+      prop: 'period_month',
+      slotName: 'period_month',
+      width: '70'
+    },
+    {
+      type: 'custom',
+      label: '年份',
+      prop: 'period_year',
+      slotName: 'period_year',
+      width: '70'
+    },
+    {
+      type: 'custom',
+      label: '应付金额',
+      prop: 'amount',
+      slotName: 'amount',
+      width: '110'
+    },
+    {
+      type: 'custom',
+      label: '状态',
+      prop: 'payment_status',
+      slotName: 'payment_status',
+      width: '120'
+    },
+    {
+      type: 'custom',
+      label: '已付金额',
+      prop: 'amount_paid',
+      slotName: 'amount_paid',
+      width: '110'
+    },
+    {
+      label: '应付日期',
+      prop: 'payable_date',
+      width: '110'
+    },
+    {
+      type: 'custom',
+      label: '付款主体',
+      prop: 'payment_entity',
+      slotName: 'payment_entity',
+      width: '120'
+    },
+    {
+      type: 'custom',
       label: '发票',
       prop: 'attachments',
       slotName: 'attachments',
@@ -47,10 +94,11 @@ const contentConfig = {
     },
     {
       type: 'custom',
-      label: '付款主体',
-      prop: 'payment_entity',
-      slotName: 'payment_entity',
-      width: '120'
+      label: '周期',
+      prop: 'period',
+      slotName: 'period',
+      width: '210',
+      showOverflowTooltip: true
     },
     {
       type: 'custom',
@@ -60,50 +108,9 @@ const contentConfig = {
       width: '100'
     },
     {
-      type: 'custom',
-      label: '应付金额',
-      prop: 'amount',
-      slotName: 'amount',
-      width: '110'
-    },
-    {
-      type: 'custom',
-      label: '已付金额',
-      prop: 'amount_paid',
-      slotName: 'amount_paid',
-      width: '110'
-    },
-    {
       label: '差额',
       prop: 'amount_diff',
       width: '100'
-    },
-    {
-      type: 'custom',
-      label: '周期',
-      prop: 'period',
-      slotName: 'period',
-      width: '210',
-      showOverflowTooltip: true
-    },
-    {
-      type: 'custom',
-      label: '月份',
-      prop: 'period_month',
-      slotName: 'period_month',
-      width: '70'
-    },
-    {
-      type: 'custom',
-      label: '状态',
-      prop: 'payment_status',
-      slotName: 'payment_status',
-      width: '120'
-    },
-    {
-      label: '应付日期',
-      prop: 'payable_date',
-      width: '110'
     },
     {
       label: '确认日期',

@@ -19,6 +19,11 @@
         </div>
       </template>
 
+      <!-- 年份（从周期提取起始年份） -->
+      <template #period_year="scope">
+        <span>{{ extractYear(scope.period) }}</span>
+      </template>
+
       <!-- 月份（从周期提取起始月份） -->
       <template #period_month="scope">
         <span>{{ extractMonth(scope.period) }}</span>
@@ -563,6 +568,14 @@ function extractMonth(period) {
   if (!start) return ''
   const month = parseInt(start.split('-')[1], 10)
   return month ? `${month}月` : ''
+}
+
+function extractYear(period) {
+  if (!period || typeof period !== 'string') return ''
+  const start = period.split(' - ')[0]
+  if (!start) return ''
+  const year = parseInt(start.split('-')[0], 10)
+  return year ? `${year}年` : ''
 }
 
 const modalRef = ref()

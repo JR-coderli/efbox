@@ -797,7 +797,7 @@ defineExpose({
         padding: 0;
         display: flex;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: center;
         font-family: 'Roboto Mono', monospace;
         &:first-letter { margin-right: 1px; }
       }
