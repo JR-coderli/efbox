@@ -257,9 +257,10 @@
                   <!-- 缩略图 -->
                   <div class="grid-thumb">
                     <img
-                      v-if="isImage(file.mimetype)"
+                      v-if="isImage(file.mimetype) && !file.isUploading"
                       :src="getFileUrl(file.destination, file.filename)"
                     />
+                    <div v-else-if="isImage(file.mimetype)" class="grid-file-type">IMG</div>
                     <img
                       v-else-if="file.thumbnail"
                       :src="getFileUrl(file.thumbnail)"
