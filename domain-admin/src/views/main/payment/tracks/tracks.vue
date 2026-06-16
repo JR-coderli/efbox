@@ -2005,6 +2005,7 @@ onUnmounted(() => {
 
 .remark-tooltip {
   max-width: 360px;
+  white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.5;
   color: #202124;
