@@ -207,7 +207,7 @@
 
       <!-- 备注 -->
       <template #remark="scope">
-        <el-tooltip v-if="!isEditing(scope.id, 'remark') && scope.remark" effect="light" placement="top" :show-after="300" :disabled="!scope.remark">
+        <el-tooltip v-if="!isEditing(scope.id, 'remark') && scope.remark" effect="dark" placement="top" :show-after="300" :disabled="!scope.remark">
           <template #content>
             <div class="remark-tooltip">{{ scope.remark }}</div>
           </template>
@@ -2008,7 +2008,7 @@ onUnmounted(() => {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.5;
-  color: #202124;
+  color: #fff;
 }
 
 .remark-cell {

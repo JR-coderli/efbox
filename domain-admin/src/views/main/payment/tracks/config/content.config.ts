@@ -110,7 +110,7 @@ const contentConfig = {
     {
       label: '差额',
       prop: 'amount_diff',
-      width: '100'
+      width: '130'
     },
     {
       label: '确认日期',
