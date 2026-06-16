@@ -5,3 +5,5 @@ tmpclaude-*
 .claude
 
 /logs/*.log
+
+.env
