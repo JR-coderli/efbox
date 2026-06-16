@@ -18,22 +18,44 @@ class BrowserManager {
    */
   async launch() {
     logger.info('正在启动浏览器...')
+    logger.info(`Chrome 路径: ${CONFIG.browser.chromePath}, headless: ${CONFIG.browser.headless}, 窗口: ${CONFIG.browser.windowSize}`)
 
     const [windowWidth, windowHeight] = CONFIG.browser.windowSize.split(',').map(v => parseInt(v.trim()))
 
-    this.browser = await puppeteer.launch({
-      executablePath: CONFIG.browser.chromePath,
-      headless: CONFIG.browser.headless,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process',
-        `--window-size=${CONFIG.browser.windowSize}`,
-        '--window-position=100,100'
-      ]
-    })
+    try {
+      this.browser = await puppeteer.launch({
+        executablePath: CONFIG.browser.chromePath,
+        headless: CONFIG.browser.headless,
+        protocolTimeout: 60000, // CDP 协议超时，避免通信挂起
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-blink-features=AutomationControlled',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+          `--window-size=${CONFIG.browser.windowSize}`,
+          '--window-position=100,100',
+          // CentOS/Linux 必备参数：避免 /dev/shm 共享内存不足导致 Chrome 崩溃/挂起
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--disable-extensions'
+        ]
+      })
+    } catch (error) {
+      logger.error(`浏览器启动失败: ${error.message}`)
+      logger.error(`Chrome 路径: ${CONFIG.browser.chromePath}`)
+      throw error
+    }
+
+    // 记录 Chrome 进程信息，便于排查僵尸进程
+    try {
+      const pid = this.browser.process()?.pid
+      const version = await this.browser.version()
+      logger.success(`浏览器启动成功 (PID: ${pid}, 版本: ${version})`)
+    } catch (e) {
+      logger.success('浏览器启动成功（无法获取进程信息）')
+    }
 
     this.page = await this.browser.newPage()
 
@@ -54,7 +76,6 @@ class BrowserManager {
     await this.page.setViewport({ width: windowWidth, height: windowHeight })
     await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
-    logger.success('浏览器启动成功')
     return this.page
   }
 
@@ -326,11 +347,47 @@ class BrowserManager {
 
   /**
    * 关闭浏览器
+   * 采用「优雅关闭 + 超时强制 kill」策略：
+   * 先尝试 browser.close()，超过 15 秒未返回则用 SIGKILL 强制结束 Chrome 进程
+   * finally 块确保状态一定被清理，避免对象悬挂导致后续任务被永久阻塞
    */
   async close() {
-    if (this.browser) {
-      logger.info('正在关闭浏览器...')
-      await this.browser.close()
+    if (!this.browser) {
+      return
+    }
+
+    const instance = this.browser
+    let pid = null
+    try {
+      pid = instance.process()?.pid
+    } catch (e) {
+      // 忽略获取 PID 失败
+    }
+
+    logger.info(`正在关闭浏览器 (PID: ${pid})...`)
+
+    try {
+      // 15 秒优雅关闭超时，防止 Chrome 进程挂起导致永久卡住
+      await Promise.race([
+        instance.close(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('CLOSE_TIMEOUT')), 15000))
+      ])
+      logger.success('浏览器关闭成功')
+    } catch (error) {
+      logger.error(`浏览器优雅关闭失败: ${error.message}，准备强制结束进程 (PID: ${pid})`)
+      try {
+        const proc = instance.process()
+        if (proc) {
+          proc.kill('SIGKILL')
+          logger.warning(`已强制结束 Chrome 进程 (PID: ${pid})`)
+        } else {
+          logger.warning('无法获取 Chrome 进程句柄，跳过强制结束（可能已退出）')
+        }
+      } catch (killError) {
+        logger.error(`强制结束进程失败: ${killError.message}`)
+      }
+    } finally {
+      // 无论成功失败，状态必须清理
       this.browser = null
       this.page = null
       this.isLoggedIn = false

@@ -4,6 +4,16 @@ const { SERVER_PORT } = require('./config/server')
 require('./utils/handle-error')
 
 
+// 全局错误处理：捕获未处理的 Promise 拒绝和未捕获异常
+// 仅记录日志便于排查，不退出进程，避免单个任务异常影响整个 domain-api 服务
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[全局] 未处理的 Promise 拒绝:', reason)
+})
+process.on('uncaughtException', (error) => {
+  console.error('[全局] 未捕获的异常:', error?.stack || error?.message || error)
+})
+
+
 const { startLanderSync } = require('./tasks/lander-sync.task')
 const { startRetryFailed } = require('./services/lander-screenshot.service')
 const landerService = require('./service/lander.service')

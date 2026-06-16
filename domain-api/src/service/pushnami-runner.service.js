@@ -100,17 +100,26 @@ class PushnamiRunnerService {
 
 
       validateConfig()
+      console.log('[PushnamiRunner] [步骤1/5] 配置校验通过')
 
 
+      console.log('[PushnamiRunner] [步骤2/5] 正在启动浏览器...')
       this.browserManager = new BrowserManager()
       await this.browserManager.launch()
+      console.log('[PushnamiRunner] [步骤2/5] 浏览器启动成功')
+
+
+      console.log('[PushnamiRunner] [步骤3/5] 正在登录 Pushnami...')
       await this.browserManager.login()
+      console.log('[PushnamiRunner] [步骤3/5] 登录成功')
 
 
+      console.log('[PushnamiRunner] [步骤4/5] 正在导航到 Campaigns 页面...')
       const navigated = await this.browserManager.navigateToCampaigns()
       if (!navigated) {
         throw new Error('导航到 Advertiser Campaigns 失败，请检查登录状态和页面结构')
       }
+      console.log('[PushnamiRunner] [步骤4/5] 导航成功')
 
 
       this.navigator = new Navigator(this.browserManager.page)
@@ -136,6 +145,7 @@ class PushnamiRunnerService {
         pushnamiService: require('./pushnami.service.js')
       }
 
+      console.log('[PushnamiRunner] [步骤5/5] 任务模块加载完成')
       this.isInitialized = true
       console.log('[PushnamiRunner] 初始化完成，浏览器已就绪')
 
@@ -145,6 +155,17 @@ class PushnamiRunnerService {
       }
     } catch (error) {
       console.error('[PushnamiRunner] 初始化失败:', error.message)
+      console.error('[PushnamiRunner] 错误堆栈:', error.stack)
+      // 初始化失败时尝试关闭已启动的浏览器，避免进程残留
+      if (this.browserManager) {
+        console.log('[PushnamiRunner] 初始化失败，正在清理浏览器...')
+        try {
+          await this.browserManager.close()
+        } catch (closeErr) {
+          console.error('[PushnamiRunner] 初始化失败后关闭浏览器也失败:', closeErr.message)
+        }
+        this.browserManager = null
+      }
       this.isInitialized = false
       throw error
     }
@@ -240,10 +261,60 @@ class PushnamiRunnerService {
 
     this.currentExecutionPromise = this._executeTask(taskType)
 
+    // 全局执行超时保护：50 分钟（小于 1 小时调度间隔），
+    // 防止任何环节卡死（如浏览器挂起）导致整条定时调度链永久阻塞
+    const TASK_MAX_EXECUTION_MS = 50 * 60 * 1000
+    let timeoutTimer = null
     try {
-      const result = await this.currentExecutionPromise
+      const result = await Promise.race([
+        this.currentExecutionPromise,
+        new Promise((_, reject) => {
+          timeoutTimer = setTimeout(
+            () => reject(new Error(`任务执行超时 (${TASK_MAX_EXECUTION_MS / 60000} 分钟)`)),
+            TASK_MAX_EXECUTION_MS
+          )
+        })
+      ])
       return result
+    } catch (error) {
+      const logger = this._modules?.logger
+      const logMsg = `[PushnamiRunner] 任务异常或超时: ${error.message}`
+      if (logger) {
+        logger.error(logMsg)
+      } else {
+        console.error(logMsg)
+      }
+      // 超时/异常后强制关闭浏览器（close 内部有 15s 超时 + 强制 kill 兜底）
+      if (this.browserManager) {
+        if (logger) {
+          logger.error('[PushnamiRunner] 因任务超时/异常，正在强制关闭浏览器...')
+        } else {
+          console.error('[PushnamiRunner] 因任务超时/异常，正在强制关闭浏览器...')
+        }
+        try {
+          await this.browserManager.close()
+        } catch (closeErr) {
+          const errMsg = `[PushnamiRunner] 超时后关闭浏览器失败: ${closeErr.message}`
+          if (logger) {
+            logger.error(errMsg)
+          } else {
+            console.error(errMsg)
+          }
+        }
+      }
+      return {
+        success: false,
+        taskType,
+        error: error.message
+      }
     } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer)
+      }
+      // 吞掉 _executeTask 可能的延迟 rejection，防止 unhandledRejection
+      if (this.currentExecutionPromise) {
+        this.currentExecutionPromise.catch(() => {})
+      }
       this.currentExecutionPromise = null
     }
   }
@@ -934,10 +1005,12 @@ class PushnamiRunnerService {
       closeLogFile()
 
       if (this.browserManager) {
+        logger.info('[PushnamiRunner] 任务结束，正在关闭浏览器...')
         try {
           await this.browserManager.close()
+          logger.success('[PushnamiRunner] 浏览器已关闭')
         } catch (e) {
-          console.warn('[PushnamiRunner] 关闭浏览器时出错:', e.message)
+          logger.error(`[PushnamiRunner] 关闭浏览器失败: ${e.message}`)
         }
         this.browserManager = null
         this.navigator = null
@@ -1061,10 +1134,12 @@ class PushnamiRunnerService {
       closeLogFile()
 
       if (this.browserManager) {
+        logger.info('[PushnamiRunner] 任务结束，正在关闭浏览器...')
         try {
           await this.browserManager.close()
+          logger.success('[PushnamiRunner] 浏览器已关闭')
         } catch (e) {
-          console.warn('[PushnamiRunner] 关闭浏览器时出错:', e.message)
+          logger.error(`[PushnamiRunner] 关闭浏览器失败: ${e.message}`)
         }
         this.browserManager = null
         this.navigator = null
@@ -1177,10 +1252,12 @@ class PushnamiRunnerService {
       closeLogFile()
 
       if (this.browserManager) {
+        logger.info('[PushnamiRunner] 任务结束，正在关闭浏览器...')
         try {
           await this.browserManager.close()
+          logger.success('[PushnamiRunner] 浏览器已关闭')
         } catch (e) {
-          console.warn('[PushnamiRunner] 关闭浏览器时出错:', e.message)
+          logger.error(`[PushnamiRunner] 关闭浏览器失败: ${e.message}`)
         }
         this.browserManager = null
         this.navigator = null
@@ -1326,7 +1403,13 @@ class PushnamiRunnerService {
     }
 
     if (this.browserManager) {
-      await this.browserManager.close()
+      console.log('[PushnamiRunner] 正在关闭浏览器...')
+      try {
+        await this.browserManager.close()
+        console.log('[PushnamiRunner] 浏览器已关闭')
+      } catch (error) {
+        console.error(`[PushnamiRunner] 关闭浏览器失败: ${error.message}`)
+      }
     }
 
     this.isInitialized = false
@@ -1361,6 +1444,7 @@ class PushnamiRunnerService {
     }
 
     if (this.browserManager) {
+      console.log('[PushnamiRunner] 正在关闭浏览器...')
       try {
         await this.browserManager.close()
         this.browserManager = null
@@ -1374,6 +1458,11 @@ class PushnamiRunnerService {
           message: '浏览器已关闭，下次任务执行时会自动重新打开'
         }
       } catch (error) {
+        console.error(`[PushnamiRunner] 关闭浏览器失败: ${error.message}`)
+        // 即使关闭失败也要清理引用，避免悬挂对象影响后续任务
+        this.browserManager = null
+        this.navigator = null
+        this.tasks = {}
         return {
           success: false,
           message: `关闭浏览器失败: ${error.message}`
@@ -1427,10 +1516,11 @@ class PushnamiRunnerService {
 
 
     if (this.browserManager) {
+      console.log('[PushnamiRunner] 重启：正在关闭浏览器...')
       try {
         await this.browserManager.close()
       } catch (error) {
-        console.warn('[PushnamiRunner] 关闭浏览器时出错:', error.message)
+        console.error(`[PushnamiRunner] 重启时关闭浏览器失败: ${error.message}`)
       }
     }
 
