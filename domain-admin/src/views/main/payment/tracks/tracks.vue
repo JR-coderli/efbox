@@ -295,6 +295,7 @@
                   <span>添加文件</span>
                 </div>
               </div>
+              <div class="paste-hint">也可按 Ctrl+V 粘贴文件上传</div>
             </div>
             <!-- 删除确认遮罩（放在 bubble-wrapper 层级，脱离 bubble-body 的 overflow:hidden） -->
             <div v-if="confirmDeleteId" class="delete-confirm-overlay" @click.stop="confirmDeleteId = null">
@@ -1021,8 +1022,7 @@ function triggerPreviewUpload() {
   previewFileInput.value?.click()
 }
 
-async function handlePreviewFileUpload(event) {
-  const files = event.target.files
+async function uploadFilesToPreview(files) {
   if (!files || files.length === 0 || !preview.trackId) return
 
   const fieldName = preview.type === 'attachment' ? 'payment_attachment' : 'payment_voucher'
@@ -1107,7 +1107,10 @@ async function handlePreviewFileUpload(event) {
     preview.files = preview.files.filter(f => !f.isUploading)
     ElNotification({ message: '文件上传失败', type: 'error' })
   }
+}
 
+async function handlePreviewFileUpload(event) {
+  await uploadFilesToPreview(event.target.files)
   event.target.value = ''
 }
 
@@ -1457,6 +1460,15 @@ function simulateProgress() {
 }
 
 async function handlePaste(event) {
+  // 预览弹窗打开时，走预览弹窗的上传流程（支持多文件、进度条在卡片上显示）
+  if (preview.visible && preview.trackId) {
+    const files = event.clipboardData?.files
+    if (!files || files.length === 0) return
+    event.preventDefault()
+    await uploadFilesToPreview(files)
+    return
+  }
+
   const { trackId, type } = pasteTarget.value
   if (!trackId || !type) return
 
@@ -1561,6 +1573,17 @@ onUnmounted(() => {
 
 .preview-bubble {
   padding: 10px;
+}
+
+
+.paste-hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e0e0e0;
+  font-size: 12px;
+  color: #999;
+  text-align: center;
+  user-select: none;
 }
 
 
