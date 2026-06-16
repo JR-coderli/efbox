@@ -193,9 +193,14 @@ class PaymentTrackService {
 
 
     if (payment_status && payment_status.trim() !== '') {
-      whereClauses.push('pt.payment_status = ?')
-      params.push(payment_status)
-      countParams.push(payment_status)
+      if (payment_status.trim() === '未付款') {
+        // 未付款 = payment_status 不是「【已付款】」（含 NULL、空字符串及其他自定义状态）
+        whereClauses.push("(pt.payment_status IS NULL OR pt.payment_status != '【已付款】')")
+      } else {
+        whereClauses.push('pt.payment_status = ?')
+        params.push(payment_status)
+        countParams.push(payment_status)
+      }
     }
 
 

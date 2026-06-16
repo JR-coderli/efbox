@@ -57,6 +57,24 @@
             <span>{{ item.value }}</span>
           </template>
         </el-autocomplete>
+        <!-- 付款状态快捷筛选 -->
+        <div class="quick-filter">
+          <button
+            class="filter-btn"
+            :class="{ active: !searchPaymentStatus }"
+            @click="quickFilterPaymentStatus('')"
+          >全部</button>
+          <button
+            class="filter-btn"
+            :class="{ active: searchPaymentStatus === '未付款' }"
+            @click="quickFilterPaymentStatus('未付款')"
+          >未付款</button>
+          <button
+            class="filter-btn"
+            :class="{ active: searchPaymentStatus === '【已付款】' }"
+            @click="quickFilterPaymentStatus('【已付款】')"
+          >已付款</button>
+        </div>
         <!-- 当前搜索条件（标签形式，点击 × 可移除） -->
         <div class="active-filters">
           <el-tag
@@ -333,6 +351,10 @@ const activeFilters = computed(() => {
   if (searchEntity.value) {
     tags.push({ key: 'payment_entity', label: `主体：${searchEntity.value}` })
   }
+  if (searchPaymentStatus.value) {
+    const label = searchPaymentStatus.value === '【已付款】' ? '已付款' : searchPaymentStatus.value
+    tags.push({ key: 'payment_status', label })
+  }
   return tags
 })
 
@@ -349,6 +371,8 @@ function removeFilter(key) {
     searchCurrency.value = ''
   } else if (key === 'payment_entity') {
     searchEntity.value = ''
+  } else if (key === 'payment_status') {
+    searchPaymentStatus.value = ''
   }
   handleSearch()
 }
@@ -377,6 +401,13 @@ function searchByCurrency(currency) {
 // 点击付款主体徽章 → 按该主体筛选（供父组件通过 ref 调用）
 function searchByEntity(entity) {
   searchEntity.value = entity || ''
+  page.value = 1
+  fetchPageListData()
+}
+
+// 快捷筛选付款状态（'' 全部 / '未付款' / '已付款'）
+function quickFilterPaymentStatus(status) {
+  searchPaymentStatus.value = status || ''
   page.value = 1
   fetchPageListData()
 }
@@ -866,6 +897,38 @@ defineExpose({
     .el-tag__close {
       color: #1a73e8;
       &:hover { background-color: #d2e3fc; }
+    }
+  }
+}
+
+.quick-filter {
+  display: inline-flex;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  overflow: hidden;
+
+  .filter-btn {
+    padding: 5px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #5f6368;
+    background: #fff;
+    border: none;
+    border-right: 1px solid #dadce0;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+
+    &:last-child {
+      border-right: none;
+    }
+
+    &:hover {
+      background-color: #f1f3f4;
+    }
+
+    &.active {
+      background-color: #e8f0fe;
+      color: #1a73e8;
     }
   }
 }
