@@ -376,12 +376,27 @@ class BrowserManager {
     } catch (error) {
       logger.error(`浏览器优雅关闭失败: ${error.message}，准备强制结束进程 (PID: ${pid})`)
       try {
-        const proc = instance.process()
-        if (proc) {
-          proc.kill('SIGKILL')
-          logger.warning(`已强制结束 Chrome 进程 (PID: ${pid})`)
+        if (pid) {
+          // 先尝试杀整个进程组（Chrome 通常自成进程组，能连带清理子进程，避免 CentOS 上僵尸进程残留）
+          let groupKilled = false
+          try {
+            process.kill(-pid, 'SIGKILL')
+            groupKilled = true
+            logger.warning(`已强制结束 Chrome 进程组 (PGID: ${pid})`)
+          } catch (groupErr) {
+            // 进程组不存在（Chrome 未自成进程组），回退到只杀主进程
+          }
+          if (!groupKilled) {
+            const proc = instance.process()
+            if (proc) {
+              proc.kill('SIGKILL')
+              logger.warning(`已强制结束 Chrome 主进程 (PID: ${pid})`)
+            } else {
+              logger.warning('无法获取 Chrome 进程句柄，跳过强制结束（可能已退出）')
+            }
+          }
         } else {
-          logger.warning('无法获取 Chrome 进程句柄，跳过强制结束（可能已退出）')
+          logger.warning('无法获取 Chrome PID，跳过强制结束')
         }
       } catch (killError) {
         logger.error(`强制结束进程失败: ${killError.message}`)

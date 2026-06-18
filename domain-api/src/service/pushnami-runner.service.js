@@ -57,6 +57,16 @@ function loadPushnamiEnv() {
 
 loadPushnamiEnv()
 
+/**
+ * 默认任务执行间隔（分钟）
+ * 当数据库不可用或配置缺失时作为兜底，确保调度链不会因取不到间隔而断裂
+ */
+const DEFAULT_TASK_INTERVALS = {
+  bid_adjust: 180,
+  block: 1440,
+  budget_boost: 1440
+}
+
 class PushnamiRunnerService {
   constructor() {
     this.isInitialized = false
@@ -199,6 +209,8 @@ class PushnamiRunnerService {
       } catch (error) {
         this.isRunning = false
         this.currentTask = null
+        // 初始化失败也要补调度下一次执行，否则调度链会永久断裂
+        await this._scheduleNextExecution(taskType).catch(() => {})
         return {
           success: false,
           message: `初始化失败: ${error.message}`
@@ -229,6 +241,8 @@ class PushnamiRunnerService {
           if (!restartResult.success) {
             this.isRunning = false
             this.currentTask = null
+            // 重启失败也要补调度下一次执行，否则调度链会永久断裂
+            await this._scheduleNextExecution(taskType).catch(() => {})
             return {
               success: false,
               message: `浏览器异常，重启失败: ${restartResult.message}`
@@ -238,6 +252,8 @@ class PushnamiRunnerService {
         } catch (error) {
           this.isRunning = false
           this.currentTask = null
+          // 重启异常也要补调度下一次执行，否则调度链会永久断裂
+          await this._scheduleNextExecution(taskType).catch(() => {})
           return {
             success: false,
             message: `浏览器异常，重启失败: ${error.message}`
@@ -302,6 +318,10 @@ class PushnamiRunnerService {
           }
         }
       }
+      // 超时/异常后补调度下一次执行，保证调度链不会因本次卡死而永久断裂
+      // 注意：后台仍在运行的 _executeTask 若最终完成也会自行调用 _scheduleNextExecution，
+      //       _scheduleNextExecution 内部会先 clearTimeout 旧定时器再设新的，不会重复调度
+      await this._scheduleNextExecution(taskType).catch(() => {})
       return {
         success: false,
         taskType,
@@ -453,7 +473,7 @@ class PushnamiRunnerService {
    * @param {string} taskType - 任务类型
    */
   async _scheduleNextExecution(taskType) {
-    const { logger } = this._modules
+    const logger = this._modules?.logger || console
 
     try {
 
@@ -473,10 +493,15 @@ class PushnamiRunnerService {
       }
 
 
-      const intervalMinutes = await this._getTaskInterval(taskType)
+      let intervalMinutes = await this._getTaskInterval(taskType)
       if (!intervalMinutes) {
-        logger.warning(`[PushnamiRunner] 无法获取任务 ${taskType} 的执行间隔，不调度下一次执行`)
-        return
+        // 数据库不可用或配置缺失时，使用默认间隔兜底，避免调度链断裂
+        intervalMinutes = DEFAULT_TASK_INTERVALS[taskType]
+        if (!intervalMinutes) {
+          logger.warning(`[PushnamiRunner] 无法获取任务 ${taskType} 的执行间隔且无默认值，不调度下一次执行`)
+          return
+        }
+        logger.warning(`[PushnamiRunner] 无法获取任务 ${taskType} 的执行间隔，使用默认间隔: ${intervalMinutes} 分钟`)
       }
 
       const intervalMs = intervalMinutes * 60 * 1000
