@@ -186,7 +186,7 @@
           <p>暂无替换详情</p>
         </div>
 
-        <div v-if="currentRecord.error_message" class="error-summary">
+        <div v-if="currentRecord.error_message && !isProgressJson(currentRecord.error_message)" class="error-summary">
           <h4>错误信息</h4>
           <p>{{ currentRecord.error_message }}</p>
         </div>
@@ -220,6 +220,22 @@ const pagination = ref({
 const detailVisible = ref(false)
 const currentRecord = ref(null)
 const replacementDetails = ref([])
+
+
+/**
+ * 判断 error_message 字段是否是进度对象 JSON（而非真正的错误信息）
+ * 后端在任务正常完成时会将最终进度对象序列化后写入 error_message 字段，
+ * 需要排除这种情况，避免把进度对象当作错误信息展示。
+ */
+const isProgressJson = (val) => {
+  if (typeof val !== 'string' || !val.trim().startsWith('{')) return false
+  try {
+    const obj = JSON.parse(val)
+    return obj !== null && typeof obj === 'object' && 'phase' in obj
+  } catch (e) {
+    return false
+  }
+}
 
 
 const fetchData = async () => {

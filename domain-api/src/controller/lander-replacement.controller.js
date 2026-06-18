@@ -112,7 +112,7 @@ class LanderReplacementController {
    * 预览域名替换（不执行实际替换）
    */
   async previewReplace(ctx, next) {
-    const { domain, replacement_domain, workspace_type = 'all', offset = 0, size = 100 } = ctx.request.body
+    const { domain, replacement_domain, workspace_type = 'all', offset = 0, size = 100, force_sync = false } = ctx.request.body
 
     if (!domain) {
       ctx.body = {
@@ -133,7 +133,7 @@ class LanderReplacementController {
     }
 
     try {
-      const result = await landerReplacementService.previewReplace(domain, replacement_domain, workspace_type, offset, size)
+      const result = await landerReplacementService.previewReplace(domain, replacement_domain, workspace_type, offset, size, force_sync)
 
       ctx.body = {
         code: 0,

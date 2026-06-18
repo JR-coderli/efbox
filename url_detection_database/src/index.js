@@ -42,6 +42,7 @@ async function checkUrls(urlObjs) {
 
 
     try {
+      console.log("url: ", url)
       if (!accessible || isDanger) {
 
         await updateDomainStatus(id, accessible ? 1 : 0, isDanger ? 0 : 1, url);
@@ -100,6 +101,7 @@ function startTimers() {
 
 (async () => {
   const urlObjs  = await getUrlsFromApi()
+  console.log("urlObjs: ", urlObjs)
 
   await checkUrls(urlObjs)
   startTimers()

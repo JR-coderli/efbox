@@ -166,11 +166,12 @@ export function batchReplaceLanderUrl(domain, replacementDomain, workspaceType =
 
 /**
  * 预览批量替换（不执行实际替换，只返回匹配的 lander 和替换后的 URL）
+ * @param {boolean} forceSync 是否强制先同步 Clickflare 数据（仅在打开预览窗口后首次点击时传 true）
  */
-export function previewBatchReplace(domain, replacementDomain, workspaceType = 'all', offset = 0, size = 100) {
+export function previewBatchReplace(domain, replacementDomain, workspaceType = 'all', offset = 0, size = 100, forceSync = false) {
   return hyRequest.post({
     url: '/lander-replacement/preview',
-    data: { domain, replacement_domain: replacementDomain, workspace_type: workspaceType, offset, size }
+    data: { domain, replacement_domain: replacementDomain, workspace_type: workspaceType, offset, size, force_sync: forceSync }
   })
 }
 

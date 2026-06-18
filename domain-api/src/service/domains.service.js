@@ -366,13 +366,23 @@ class DomainsService {
         const sNumber = match // 如 "s1", "s2"
         const backupPurpose = `${sNumber}-备用`
 
+        // 备用域名必须同时满足：
+        //   is_safe = 1       —— 未被 Google Safe Browsing 标记为危险
+        //   is_accessible = 1 —— HTTP 探测可达（服务器没宕机、域名没被墙）
+        //   is_important = 1  —— 已纳入监控范围（检测脚本会持续更新它的状态，
+        //                       避免选入"从未被检测"的候选导致状态字段过期失真）
+        // 任一条件不满足的候选都会被 SQL 直接排除，
+        // 因此 LIMIT 1 返回的就是第一个"既安全又能打开且在监控中"的备用域名；
+        // 若该 s 编号下所有备用候选都挂了，replacementRecords 为空，继续尝试下一个 s 编号，
+        // 全部 s 编号都找不到可用备用时，外层会返回 success:false，跳过整个替换。
         const [replacementRecords] = await connection.execute(
-          `SELECT landing_page_url FROM domains WHERE purpose LIKE ? AND is_safe = 1 LIMIT 1`,
+          `SELECT landing_page_url, purpose FROM domains WHERE purpose LIKE ? AND is_safe = 1 AND is_accessible = 1 AND is_important = 1 ORDER BY id ASC LIMIT 1`,
           [`%${backupPurpose}%`]
         )
 
         if (replacementRecords.length > 0) {
-          let replacementDomain = replacementRecords[0].landing_page_url
+          const selected = replacementRecords[0]
+          let replacementDomain = selected.landing_page_url
 
 
           try {
@@ -381,14 +391,14 @@ class DomainsService {
           } catch (e) {
 
           }
-          console.log(`危险域名 ${dangerousDomain} (purpose: ${dangerousPurpose}) -> 替换域名 ${replacementDomain} (purpose: ${backupPurpose})`)
+          console.log(`危险域名 ${dangerousDomain} (purpose: ${dangerousPurpose}) -> 替换域名 ${replacementDomain} (purpose: ${selected.purpose})`)
 
           return {
             success: true,
             dangerousDomain,
             dangerousPurpose,
             replacementDomain,
-            replacementPurpose: backupPurpose
+            replacementPurpose: selected.purpose
           }
         }
       }
@@ -397,7 +407,7 @@ class DomainsService {
       const sNumbers = purposeMatch.map(m => m).join(', ')
       return {
         success: false,
-        message: `未找到包含 "${sNumbers}-备用" 的替换域名，跳过替换`
+        message: `未找到符合条件的备用域名（要求 is_important=1、is_safe=1、is_accessible=1，purpose 含 "${sNumbers}-备用"），跳过替换`
       }
     } catch (error) {
       console.error('查询替换域名失败:', error)

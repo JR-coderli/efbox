@@ -1430,6 +1430,9 @@ const batchPreviewCount = ref(0)
 const batchPreviewSearched = ref(false)
 const batchReplaceFormRef = ref(null)
 const batchPreviewList = ref([])
+// 标记当前预览窗口会话是否已同步过 Clickflare 数据
+// 仅在打开窗口后首次点击「预览影响范围」时触发同步，避免每次重新搜索都重复同步
+const batchPreviewSynced = ref(false)
 
 const batchReplaceForm = reactive({
   domain: '',
@@ -1467,6 +1470,7 @@ const openBatchReplaceDialog = () => {
   batchPreviewCount.value = 0
   batchPreviewSearched.value = false
   batchPreviewList.value = []
+  batchPreviewSynced.value = false  // 重置同步标志：新窗口会话的首次预览会触发同步
   batchReplaceForm.domain = ''
   batchReplaceForm.replacementDomain = ''
   batchReplaceForm.landerType = 'private'
@@ -1534,14 +1538,22 @@ const handlePreviewBatchReplace = async () => {
   const valid = await batchReplaceFormRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  // 仅在窗口会话首次预览时触发同步（force_sync=true）
+  // 同步失败后端会返回 code !== 0，synced 不会被置 true，用户再次点击可继续重试
+  const forceSync = !batchPreviewSynced.value
+
   batchPreviewLoading.value = true
   try {
     const res = await previewBatchReplace(
       cleanDomain(batchReplaceForm.domain),
       cleanDomain(batchReplaceForm.replacementDomain),
-      batchReplaceForm.landerType
+      batchReplaceForm.landerType,
+      undefined,
+      undefined,
+      forceSync
     )
     if (res.code === 0) {
+      batchPreviewSynced.value = true  // 标记本次窗口会话已同步，后续点击不再同步
       batchPreviewCount.value = res.data.total || 0
       batchPreviewList.value = res.data.list || []
       batchPreviewSearched.value = true

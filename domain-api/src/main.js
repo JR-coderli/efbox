@@ -17,6 +17,7 @@ process.on('uncaughtException', (error) => {
 const { startLanderSync } = require('./tasks/lander-sync.task')
 const { startRetryFailed } = require('./services/lander-screenshot.service')
 const landerService = require('./service/lander.service')
+const landerReplacementService = require('./service/lander-replacement.service')
 
 
 const pushnamiRunner = require('./service/pushnami-runner.service')
@@ -34,6 +35,16 @@ server.listen(SERVER_PORT, async () => {
     }
   } catch (error) {
     console.error('[启动清理] 清理 processing 记录失败:', error)
+  }
+
+
+  try {
+    const resetCount = await landerReplacementService.resetStuckReplacements()
+    if (resetCount > 0) {
+      console.log(`[启动清理] 已将 ${resetCount} 个未完成的批量替换任务标记为中断`)
+    }
+  } catch (error) {
+    console.error('[启动清理] 清理未完成替换任务失败:', error)
   }
 
 
