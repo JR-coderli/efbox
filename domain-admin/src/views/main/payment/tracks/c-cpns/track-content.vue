@@ -75,21 +75,6 @@
             @click="quickFilterPaymentStatus('【已付款】')"
           >已付款</button>
         </div>
-        <!-- 日期范围筛选（按创建时间） -->
-        <el-date-picker
-          v-model="searchDateRange"
-          type="daterange"
-          unlink-panels
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          :shortcuts="dateShortcuts"
-          format="YYYY-MM-DD"
-          value-format="YYYY-MM-DD"
-          clearable
-          class="date-range-picker"
-          @change="handleDateChange"
-        />
         <!-- 当前搜索条件（标签形式，点击 × 可移除） -->
         <div class="active-filters">
           <el-tag
@@ -103,6 +88,22 @@
         </div>
       </div>
       <div class="header-actions">
+        <!-- 日期范围筛选（按创建时间） -->
+        <el-date-picker
+          v-model="searchDateRange"
+          type="daterange"
+          unlink-panels
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          :shortcuts="dateShortcuts"
+          format="YYYY-MM-DD"
+          value-format="YYYY-MM-DD"
+          clearable
+          popper-class="payment-date-popper"
+          class="date-range-picker"
+          @change="handleDateChange"
+        />
         <!-- 列设置按钮 -->
         <el-dropdown trigger="click" @command="handleColumnSetting" :hide-on-click="false">
           <el-button icon="Setting" circle title="列设置" class="column-setting-trigger" />
@@ -1079,16 +1080,29 @@ defineExpose({
   gap: 12px;
 }
 
+// 日期范围筛选触发器：未选中时只显示一个小日历图标（选中后的值由 active-filters 标签展示）
 :deep(.date-range-picker) {
-  width: 280px;
+  // 关键：取消 Element Plus 日期编辑器的固定宽度（默认 ~350px），禁止在 flex 容器中伸展
+  --el-date-editor-width: auto;
+  width: fit-content !important;
+  max-width: 40px;
+  flex: 0 0 auto; // 不伸展、不收缩，按内容尺寸
+  flex-grow: 0;
   flex-shrink: 0;
 
   .el-range-editor.el-input__wrapper {
-    box-shadow: 0 0 0 1px #dadce0 inset;
+    width: auto !important;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px !important;
     border-radius: 4px;
+    box-shadow: 0 0 0 1px #dadce0 inset;
+    cursor: pointer;
+    transition: box-shadow 0.15s, background-color 0.15s;
 
     &:hover {
       box-shadow: 0 0 0 1px #bdc1c6 inset;
+      background-color: #f8f9fa;
     }
 
     &.is-focus {
@@ -1096,18 +1110,21 @@ defineExpose({
     }
   }
 
-  .el-range__icon,
-  .el-range-separator,
-  .el-range__close-icon,
+  // 仅保留前导日历图标，隐藏输入框文字 / 分隔符 / 清除按钮
   .el-range-input {
-    font-size: 13px;
-    color: #5f6368;
+    display: none;
+  }
+  .el-range-separator {
+    display: none;
+  }
+  .el-range__close-icon {
+    display: none;
   }
 
-  .el-range-input {
-    &::placeholder {
-      color: #9aa0a6;
-    }
+  .el-range__icon {
+    margin-right: 0;
+    color: #5f6368;
+    font-size: 16px;
   }
 }
 
@@ -1338,5 +1355,73 @@ defineExpose({
 :deep(.column-setting-menu .el-checkbox) {
   margin: 0;
   .el-checkbox__label { font-size: 13px; color: #606266; }
+}
+</style>
+
+// <!-- 日期范围选择器弹出面板样式（非 scoped：面板 teleport 到 body，仅通过 .payment-date-popper 作用域生效，参考设计图） -->
+
+<style lang="less">
+.payment-date-popper {
+  // 主题色统一为设计图蓝色：日历选中/范围高亮、快捷按钮高亮
+  --el-color-primary: #3b82f6;
+  --el-color-primary-light-3: #6ea3f9;
+  --el-color-primary-light-5: #a7c9fb;
+  --el-color-primary-light-7: #cddd;
+  --el-color-primary-light-8: #e3edfd;
+  --el-color-primary-light-9: #eff6ff;
+
+  // 整体面板圆角 + 阴影
+  .el-picker-panel {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  // 左侧快捷选择区
+  .el-picker-panel__sidebar {
+    width: 132px;
+    padding: 16px 12px;
+    border-right: 1px solid #f0f0f0;
+    background: #fff;
+  }
+
+  // 快捷日期按钮 → 圆角块状按钮（默认白底，悬停/选中蓝色填充）
+  .el-picker-panel__shortcut {
+    height: auto;
+    min-height: 34px;
+    line-height: 1.4;
+    padding: 7px 14px;
+    margin-bottom: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #374151;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+
+    &:last-child { margin-bottom: 0; }
+
+    &:hover,
+    &:focus {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+  }
+
+  // 右侧日历内容区留白
+  .el-picker-panel__body {
+    padding: 12px 16px;
+  }
+
+  // 日期格子圆角化 + 悬停浅蓝
+  .el-date-table td .el-date-table-cell {
+    border-radius: 8px;
+  }
+  .el-date-table td:hover:not(.in-range):not(.start-date):not(.end-date) .el-date-table-cell {
+    color: #3b82f6;
+  }
 }
 </style>
