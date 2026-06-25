@@ -45,3 +45,65 @@
     border-top: 1px solid #e8eaed;
   }
 }
+
+/* 日期范围选择器弹出面板样式（参考设计图，通过 .payment-date-popper 作用域，多页面共用） */
+.payment-date-popper {
+  --el-color-primary: #3b82f6;
+  --el-color-primary-light-3: #6ea3f9;
+  --el-color-primary-light-5: #a7c9fb;
+  --el-color-primary-light-7: #cddd;
+  --el-color-primary-light-8: #e3edfd;
+  --el-color-primary-light-9: #eff6ff;
+
+  .el-picker-panel {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .el-picker-panel__sidebar {
+    width: 132px;
+    padding: 16px 12px;
+    border-right: 1px solid #f0f0f0;
+    background: #fff;
+  }
+
+  .el-picker-panel__shortcut {
+    height: auto;
+    min-height: 34px;
+    line-height: 1.4;
+    padding: 7px 14px;
+    margin-bottom: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #374151;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  .el-picker-panel__shortcut:last-child {
+    margin-bottom: 0;
+  }
+
+  .el-picker-panel__shortcut:hover,
+  .el-picker-panel__shortcut:focus {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+  }
+
+  .el-picker-panel__body {
+    padding: 12px 16px;
+  }
+
+  .el-date-table td .el-date-table-cell {
+    border-radius: 8px;
+  }
+
+  .el-date-table td:hover:not(.in-range):not(.start-date):not(.end-date) .el-date-table-cell {
+    color: #3b82f6;
+  }
+}

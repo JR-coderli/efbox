@@ -210,7 +210,7 @@ class CusAttachmentsService {
 
 
   async attalist(cusAttachmentsInfo) {
-    const { page, pageSize, short_name, payment_status, role_name, user_id, sort_prop, sort_order } = cusAttachmentsInfo;
+    const { page, pageSize, short_name, payment_status, start_date, end_date, role_name, user_id, sort_prop, sort_order } = cusAttachmentsInfo;
 
 
 
@@ -277,6 +277,34 @@ class CusAttachmentsService {
       whereClauses.push('ca.payment_status = ?');
       params.push(payment_status);
       countParams.push(payment_status);
+    }
+
+
+    // 按周期起始日期范围筛选（period 是英文可读字符串，如 "From March 11th to 12th 2026"。
+    // 通过 SUBSTRING_INDEX 截取起始段、REGEXP_REPLACE 去掉序数后缀、IF 补上年份，再 STR_TO_DATE）
+    const periodStartDateExpr = `
+      STR_TO_DATE(
+        CONCAT(
+          TRIM(REGEXP_REPLACE(REPLACE(SUBSTRING_INDEX(ca.period, ' to ', 1), 'From ', ''), '(st|nd|rd|th)', '')),
+          IF(
+            SUBSTRING_INDEX(ca.period, ' to ', 1) REGEXP '[0-9]{4}',
+            '',
+            CONCAT(' ', REGEXP_SUBSTR(ca.period, '[0-9]{4}$'))
+          )
+        ),
+        '%M %d %Y'
+      )
+    `;
+
+    if (start_date && String(start_date).trim() !== '') {
+      whereClauses.push(`ca.period IS NOT NULL AND ca.period != '' AND ${periodStartDateExpr} >= ?`);
+      params.push(String(start_date).trim());
+      countParams.push(String(start_date).trim());
+    }
+    if (end_date && String(end_date).trim() !== '') {
+      whereClauses.push(`ca.period IS NOT NULL AND ca.period != '' AND ${periodStartDateExpr} <= ?`);
+      params.push(String(end_date).trim());
+      countParams.push(String(end_date).trim());
     }
 
 

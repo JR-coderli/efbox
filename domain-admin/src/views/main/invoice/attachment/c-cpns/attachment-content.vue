@@ -40,6 +40,23 @@
       </div>
 
       <div class="btns">
+        <!-- 日期范围筛选（按周期起始日期） -->
+        <el-date-picker
+          v-model="searchDateRange"
+          type="daterange"
+          unlink-panels
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          :shortcuts="dateShortcuts"
+          format="YYYY-MM-DD"
+          value-format="YYYY-MM-DD"
+          clearable
+          popper-class="payment-date-popper"
+          class="date-range-picker"
+          @change="handleDateChange"
+        />
+
         <!-- 刷新按钮 -->
         <el-button :icon="Refresh" circle title="刷新" @click="handleRefresh" />
 
@@ -976,6 +993,74 @@ const sortState = ref({
 })
 
 
+// 日期范围筛选（按周期起始日期，直接读写 store 的 allQueryInfo）
+const dateShortcuts = [
+  {
+    text: '前七天',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 7)
+      return [start, end]
+    }
+  },
+  {
+    text: '前三十天',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 30)
+      return [start, end]
+    }
+  },
+  {
+    text: '上个月',
+    value: () => {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const end = new Date(now.getFullYear(), now.getMonth(), 0)
+      return [start, end]
+    }
+  },
+  {
+    text: '这个月',
+    value: () => {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      const end = new Date()
+      return [start, end]
+    }
+  },
+  {
+    text: '今年',
+    value: () => {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), 0, 1)
+      const end = new Date()
+      return [start, end]
+    }
+  }
+]
+
+const searchDateRange = computed({
+  get() {
+    const s = allQueryInfo.value?.start_date
+    const e = allQueryInfo.value?.end_date
+    return (s && e) ? [s, e] : null
+  },
+  set(val) {
+    allQueryInfo.value.start_date = val?.[0] || undefined
+    allQueryInfo.value.end_date = val?.[1] || undefined
+  }
+})
+
+
+function handleDateChange() {
+  allQueryInfo.value.page = 1
+  fetchPageListData({}, true, true)
+}
+
+
 const isCreate = usePermissions(`${props.contentConfig.pageName}:create`)
 const isDelete = usePermissions(`${props.contentConfig.pageName}:delete`)
 const isUpdate = usePermissions(`${props.contentConfig.pageName}:update`)
@@ -1501,6 +1586,13 @@ const activeFilters = computed(() => {
     })
   }
 
+  if (q.start_date && q.end_date) {
+    tags.push({
+      key: 'date_range',
+      label: `日期：${q.start_date} 至 ${q.end_date}`,
+    })
+  }
+
   return tags
 })
 
@@ -1510,6 +1602,9 @@ function removeFilter(key) {
     allQueryInfo.value.short_name = ""
   } else if (key === "payment_status") {
     allQueryInfo.value.payment_status = undefined
+  } else if (key === "date_range") {
+    allQueryInfo.value.start_date = undefined
+    allQueryInfo.value.end_date = undefined
   }
 
 
@@ -2249,6 +2344,48 @@ defineExpose({
 
   &.is-disabled .el-checkbox__label {
     color: #c0c4cc;
+  }
+}
+
+// 日期范围筛选触发器：未选中时只显示一个小日历图标
+:deep(.date-range-picker) {
+  --el-date-editor-width: auto;
+  width: fit-content !important;
+  max-width: 40px;
+  flex: 0 0 auto;
+  flex-grow: 0;
+  flex-shrink: 0;
+
+  .el-range-editor.el-input__wrapper {
+    width: auto !important;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px !important;
+    border-radius: 4px;
+    box-shadow: 0 0 0 1px #dadce0 inset;
+    cursor: pointer;
+    transition: box-shadow 0.15s, background-color 0.15s;
+
+    &:hover {
+      box-shadow: 0 0 0 1px #bdc1c6 inset;
+      background-color: #f8f9fa;
+    }
+
+    &.is-focus {
+      box-shadow: 0 0 0 1px #1a73e8 inset;
+    }
+  }
+
+  .el-range-input,
+  .el-range-separator,
+  .el-range__close-icon {
+    display: none;
+  }
+
+  .el-range__icon {
+    margin-right: 0;
+    color: #5f6368;
+    font-size: 16px;
   }
 }
 
