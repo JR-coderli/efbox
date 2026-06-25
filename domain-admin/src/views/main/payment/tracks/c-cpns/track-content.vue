@@ -75,6 +75,21 @@
             @click="quickFilterPaymentStatus('【已付款】')"
           >已付款</button>
         </div>
+        <!-- 日期范围筛选（按创建时间） -->
+        <el-date-picker
+          v-model="searchDateRange"
+          type="daterange"
+          unlink-panels
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          :shortcuts="dateShortcuts"
+          format="YYYY-MM-DD"
+          value-format="YYYY-MM-DD"
+          clearable
+          class="date-range-picker"
+          @change="handleDateChange"
+        />
         <!-- 当前搜索条件（标签形式，点击 × 可移除） -->
         <div class="active-filters">
           <el-tag
@@ -293,6 +308,56 @@ const searchYear = ref('')   // 点击年份筛选（周期起始年份）
 const searchMonth = ref('')  // 点击月份筛选（周期起始月份）
 const searchCurrency = ref('')     // 点击币种筛选
 const searchEntity = ref('')       // 点击付款主体筛选
+const searchDateRange = ref(null)  // 日期范围筛选（格式 ['YYYY-MM-DD', 'YYYY-MM-DD']）
+
+// 快捷日期选项：前七天 / 前三十天 / 上个月 / 这个月 / 今年
+const dateShortcuts = [
+  {
+    text: '前七天',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 7)
+      return [start, end]
+    }
+  },
+  {
+    text: '前三十天',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 30)
+      return [start, end]
+    }
+  },
+  {
+    text: '上个月',
+    value: () => {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const end = new Date(now.getFullYear(), now.getMonth(), 0)
+      return [start, end]
+    }
+  },
+  {
+    text: '这个月',
+    value: () => {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      const end = new Date()
+      return [start, end]
+    }
+  },
+  {
+    text: '今年',
+    value: () => {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), 0, 1)
+      const end = new Date()
+      return [start, end]
+    }
+  }
+]
 
 // 客户简称候选列表（用于下拉提示）
 const customerShortNames = ref([])
@@ -351,6 +416,10 @@ const activeFilters = computed(() => {
   if (searchEntity.value) {
     tags.push({ key: 'payment_entity', label: `主体：${searchEntity.value}` })
   }
+  if (searchDateRange.value && searchDateRange.value.length === 2) {
+    const [s, e] = searchDateRange.value
+    tags.push({ key: 'date_range', label: `日期：${s} 至 ${e}` })
+  }
   if (searchPaymentStatus.value) {
     const label = searchPaymentStatus.value === '【已付款】' ? '已付款' : searchPaymentStatus.value
     tags.push({ key: 'payment_status', label })
@@ -371,6 +440,8 @@ function removeFilter(key) {
     searchCurrency.value = ''
   } else if (key === 'payment_entity') {
     searchEntity.value = ''
+  } else if (key === 'date_range') {
+    searchDateRange.value = null
   } else if (key === 'payment_status') {
     searchPaymentStatus.value = ''
   }
@@ -698,6 +769,8 @@ function fetchPageListData(showLoading = true) {
     month: searchMonth.value || undefined,
     currency: searchCurrency.value || undefined,
     payment_entity: searchEntity.value || undefined,
+    start_date: searchDateRange.value?.[0] || undefined,
+    end_date: searchDateRange.value?.[1] || undefined,
     role_name: loginStore.userInfo?.role?.name || '',
     user_id: loginStore.userInfo?.id
   }
@@ -723,10 +796,17 @@ function handleSearch() {
   fetchPageListData()
 }
 
+// 日期范围变化时重新查询
+function handleDateChange() {
+  page.value = 1
+  fetchPageListData()
+}
+
 
 function handleReset() {
   searchShortName.value = ''
   searchPaymentStatus.value = ''
+  searchDateRange.value = null
   page.value = 1
   fetchPageListData()
 }
@@ -997,6 +1077,38 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+:deep(.date-range-picker) {
+  width: 280px;
+  flex-shrink: 0;
+
+  .el-range-editor.el-input__wrapper {
+    box-shadow: 0 0 0 1px #dadce0 inset;
+    border-radius: 4px;
+
+    &:hover {
+      box-shadow: 0 0 0 1px #bdc1c6 inset;
+    }
+
+    &.is-focus {
+      box-shadow: 0 0 0 1px #1a73e8 inset;
+    }
+  }
+
+  .el-range__icon,
+  .el-range-separator,
+  .el-range__close-icon,
+  .el-range-input {
+    font-size: 13px;
+    color: #5f6368;
+  }
+
+  .el-range-input {
+    &::placeholder {
+      color: #9aa0a6;
+    }
+  }
 }
 
 .content-card {

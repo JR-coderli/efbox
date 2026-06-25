@@ -123,6 +123,11 @@ const contentConfig = {
       width: '80'
     },
     {
+      label: '创建时间',
+      prop: 'createAt',
+      width: '170'
+    },
+    {
       type: 'handler',
       label: '操作',
       width: '80'

@@ -134,7 +134,7 @@ class PaymentTrackService {
 
 
   async list(trackInfo) {
-    const { page, pageSize, short_name, payment_status, year, month, currency, payment_entity, role_name, user_id, sort_prop, sort_order } = trackInfo
+    const { page, pageSize, short_name, payment_status, year, month, currency, payment_entity, start_date, end_date, role_name, user_id, sort_prop, sort_order } = trackInfo
 
 
     let sql = `
@@ -237,6 +237,21 @@ class PaymentTrackService {
       const e = String(payment_entity).trim()
       params.push(e)
       countParams.push(e)
+    }
+
+
+    // 按创建时间范围筛选（createAt 为 DATETIME，补齐时分秒以保证整天范围包含）
+    if (start_date && String(start_date).trim() !== '') {
+      whereClauses.push('pt.createAt >= ?')
+      const d = String(start_date).trim()
+      params.push(`${d} 00:00:00`)
+      countParams.push(`${d} 00:00:00`)
+    }
+    if (end_date && String(end_date).trim() !== '') {
+      whereClauses.push('pt.createAt <= ?')
+      const d = String(end_date).trim()
+      params.push(`${d} 23:59:59`)
+      countParams.push(`${d} 23:59:59`)
     }
 
 
