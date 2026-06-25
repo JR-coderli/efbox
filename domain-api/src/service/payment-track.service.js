@@ -240,18 +240,16 @@ class PaymentTrackService {
     }
 
 
-    // 按创建时间范围筛选（createAt 为 DATETIME，补齐时分秒以保证整天范围包含）
+    // 按周期起始日期范围筛选（period 格式：YYYY-MM-DD - YYYY-MM-DD，LEFT 取前 10 位即起始日期，可直接字符串比较）
     if (start_date && String(start_date).trim() !== '') {
-      whereClauses.push('pt.createAt >= ?')
-      const d = String(start_date).trim()
-      params.push(`${d} 00:00:00`)
-      countParams.push(`${d} 00:00:00`)
+      whereClauses.push('LEFT(pt.period, 10) >= ?')
+      params.push(String(start_date).trim())
+      countParams.push(String(start_date).trim())
     }
     if (end_date && String(end_date).trim() !== '') {
-      whereClauses.push('pt.createAt <= ?')
-      const d = String(end_date).trim()
-      params.push(`${d} 23:59:59`)
-      countParams.push(`${d} 23:59:59`)
+      whereClauses.push('LEFT(pt.period, 10) <= ?')
+      params.push(String(end_date).trim())
+      countParams.push(String(end_date).trim())
     }
 
 

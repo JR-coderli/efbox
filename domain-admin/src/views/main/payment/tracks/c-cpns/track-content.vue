@@ -88,7 +88,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <!-- 日期范围筛选（按创建时间） -->
+        <!-- 日期范围筛选（按周期起始日期） -->
         <el-date-picker
           v-model="searchDateRange"
           type="daterange"
