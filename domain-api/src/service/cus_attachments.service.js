@@ -281,15 +281,22 @@ class CusAttachmentsService {
 
 
     // 按周期起始日期范围筛选（period 是英文可读字符串，如 "From March 11th to 12th 2026"。
-    // 通过 SUBSTRING_INDEX 截取起始段、REGEXP_REPLACE 去掉序数后缀、IF 补上年份，再 STR_TO_DATE）
+    // 注意：REGEXP_REPLACE / REGEXP_SUBSTR 仅 MySQL 8.0+ 支持，线上 5.7 会报
+    // "FUNCTION xxx.REGEXP_REPLACE does not exist"。这里只用 5.7 兼容的函数：
+    // SUBSTRING_INDEX 截取起始段、CAST 提取日的数字(自动忽略 st/nd/rd/th 后缀)、
+    // IF + RIGHT 补上年份，再 STR_TO_DATE 解析。REGEXP 操作符 5.7 仍可用。
+    const startSegExpr = `REPLACE(SUBSTRING_INDEX(ca.period, ' to ', 1), 'From ', '')`;
     const periodStartDateExpr = `
       STR_TO_DATE(
         CONCAT(
-          TRIM(REGEXP_REPLACE(REPLACE(SUBSTRING_INDEX(ca.period, ' to ', 1), 'From ', ''), '(st|nd|rd|th)', '')),
+          SUBSTRING_INDEX(${startSegExpr}, ' ', 1),
+          ' ',
+          CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(${startSegExpr}, ' ', 2), ' ', -1) AS SIGNED),
+          ' ',
           IF(
-            SUBSTRING_INDEX(ca.period, ' to ', 1) REGEXP '[0-9]{4}',
-            '',
-            CONCAT(' ', REGEXP_SUBSTR(ca.period, '[0-9]{4}$'))
+            ${startSegExpr} REGEXP '[0-9]{4}',
+            RIGHT(TRIM(${startSegExpr}), 4),
+            RIGHT(TRIM(ca.period), 4)
           )
         ),
         '%M %d %Y'
