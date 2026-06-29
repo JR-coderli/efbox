@@ -22,7 +22,8 @@ import {
   deletePaymentTrackVoucher,
   getPaymentTrackEntityOptions,
   getPaymentTrackCurrencyOptions,
-  getPaymentTrackStatusOptions
+  getPaymentTrackStatusOptions,
+  renamePaymentTrackStatus
 } from '@/services/main/system/system'
 
 
@@ -385,6 +386,12 @@ const useSystemStore = defineStore('system', {
     async getPaymentTrackStatusOptionsAction() {
       const result = await getPaymentTrackStatusOptions()
       return result.data.list
+    },
+
+
+    async renamePaymentTrackStatusAction(oldStatus, newStatus) {
+      const result = await renamePaymentTrackStatus(oldStatus, newStatus)
+      return result.data
     }
   }
 })

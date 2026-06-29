@@ -5,7 +5,7 @@ const {
   create, remove, update, list,
   uploadAttachment, uploadVoucher,
   removeAttachment, removeVoucher,
-  customerList, entityOptions, currencyOptions, statusOptions
+  customerList, entityOptions, currencyOptions, statusOptions, renameStatus
 } = require('../controller/payment-track.controller')
 
 
@@ -34,6 +34,8 @@ paymentTrackRouter.post('/options/entity', verifyAuth, entityOptions)
 paymentTrackRouter.post('/options/currency', verifyAuth, currencyOptions)
 
 paymentTrackRouter.post('/options/status', verifyAuth, statusOptions)
+
+paymentTrackRouter.post('/options/status/rename', verifyAuth, renameStatus)
 
 paymentTrackRouter.delete('/:trackId', verifyAuth, remove)
 

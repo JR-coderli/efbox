@@ -159,3 +159,11 @@ export function getPaymentTrackStatusOptions() {
     url: `/payment_tracks/options/status`
   })
 }
+
+
+export function renamePaymentTrackStatus(oldStatus, newStatus) {
+  return hyRequest.post({
+    url: `/payment_tracks/options/status/rename`,
+    data: { oldStatus, newStatus }
+  })
+}

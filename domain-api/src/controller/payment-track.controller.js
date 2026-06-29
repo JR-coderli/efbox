@@ -268,6 +268,45 @@ class PaymentTrackController {
       data: { list: result }
     }
   }
+
+
+  async renameStatus(ctx, next) {
+    const { oldStatus, newStatus } = ctx.request.body || {}
+
+    const oldText = oldStatus != null ? String(oldStatus).trim() : ''
+    const newText = newStatus != null ? String(newStatus).trim() : ''
+
+    if (!oldText) {
+      ctx.body = { code: -1, message: '缺少原状态文本' }
+      return
+    }
+    if (!newText) {
+      ctx.body = { code: -1, message: '状态名称不能为空' }
+      return
+    }
+    if (oldText === newText) {
+      ctx.body = { code: 0, message: '状态名称未变化', data: { affectedRows: 0 } }
+      return
+    }
+
+    const result = await paymentTrackService.renameStatus(oldText, newText)
+
+    operationLogService.log(
+      ctx.user.id,
+      ctx.user.name,
+      'payment_track',
+      'update',
+      `重命名付款状态: ${oldText} -> ${newText}（影响 ${result.affectedRows} 条）`,
+      null,
+      { oldStatus: oldText, newStatus: newText, affectedRows: result.affectedRows }
+    )
+
+    ctx.body = {
+      code: 0,
+      message: '状态重命名成功',
+      data: { affectedRows: result.affectedRows }
+    }
+  }
 }
 
 module.exports = new PaymentTrackController()

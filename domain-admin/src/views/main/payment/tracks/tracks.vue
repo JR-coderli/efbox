@@ -344,10 +344,34 @@
                   v-for="opt in filteredSelectOptions"
                   :key="opt"
                   class="entity-option-item"
-                  :class="{ 'is-active': selectEdit.value === opt }"
-                  @click="selectOption(opt)"
+                  :class="{ 'is-active': selectEdit.value === opt, 'is-renaming': isEditingStatusOption(opt) }"
+                  @click="onOptionClick(opt)"
                 >
-                  <span class="select-pill" :style="selectOptionStyle(selectEdit.field, opt)">{{ opt }}</span>
+                  <!-- 重命名编辑态 -->
+                  <template v-if="isEditingStatusOption(opt)">
+                    <input
+                      :ref="el => { statusRenameInputEl = el }"
+                      v-model="selectEditingOption.newText"
+                      class="status-rename-input"
+                      @click.stop
+                      @keydown.enter.prevent="confirmStatusRename"
+                      @keydown.esc.prevent="cancelStatusRename"
+                    />
+                    <button class="status-rename-confirm" title="确认" @click.stop="confirmStatusRename">
+                      <svg viewBox="0 0 24 24" width="14" height="14"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/></svg>
+                    </button>
+                  </template>
+                  <!-- 正常态 -->
+                  <template v-else>
+                    <span class="select-pill" :style="selectOptionStyle(selectEdit.field, opt)">{{ opt }}</span>
+                    <svg
+                      v-if="selectEdit.field === 'payment_status' && !isLockedStatus(opt)"
+                      class="status-edit-dots"
+                      viewBox="0 0 24 24"
+                      title="重命名"
+                      @click.stop="startStatusRename(opt)"
+                    ><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                  </template>
                 </div>
                 <div v-if="selectSearch && !filteredSelectOptions.length" class="entity-option-create" @click="selectOption(selectSearch)">
                   创建 "{{ selectSearch }}"
@@ -566,6 +590,10 @@ function getEntityColor(str) {
   if (entityColorMap[str]) return entityColorMap[str]
   return getColor(str)
 }
+
+
+// 状态内置默认项：锁定，不允许重命名（代码多处依赖其字面值，如「未付款」筛选、已付款写确认日期等）
+const STATUS_DEFAULTS = ['【已付款】', '已收invoice', '可付款!']
 
 
 const statusColorMap = {
@@ -1177,6 +1205,9 @@ const selectInputRef = ref(null)
 const selectOptions = ref([])
 const selectRect = ref(null)
 const selectBubblePlacement = ref('top')
+// 状态选项重命名（行内编辑）
+const selectEditingOption = ref({ oldText: null, newText: '' })
+let statusRenameInputEl = null
 
 const filteredSelectOptions = computed(() => {
   if (!selectSearch.value) return selectOptions.value
@@ -1225,6 +1256,14 @@ const selectArrowStyle = computed(() => {
   return { left: `${left}px` }
 })
 
+// 构建状态下拉选项：3 个内置默认 + 历史去重
+async function buildStatusOptionList() {
+  const merged = [...STATUS_DEFAULTS]
+  const history = await systemStore.getPaymentTrackStatusOptionsAction()
+  ;(history || []).forEach(s => { if (!merged.includes(s)) merged.push(s) })
+  return merged
+}
+
 async function startSelectEdit(event, id, field, value) {
   selectRect.value = event.currentTarget.getBoundingClientRect()
   selectEdit.value = { id, field, value: value || '', initialValue: value || '' }
@@ -1246,11 +1285,7 @@ async function startSelectEdit(event, id, field, value) {
     list = merged
   } else if (field === 'payment_status') {
 
-    const defaults = ['【已付款】', '已收invoice', '可付款!']
-    const history = await systemStore.getPaymentTrackStatusOptionsAction()
-    const merged = [...defaults]
-    ;(history || []).forEach(s => { if (!merged.includes(s)) merged.push(s) })
-    list = merged
+    list = await buildStatusOptionList()
   }
   selectOptions.value = list || []
 
@@ -1291,6 +1326,61 @@ function confirmSelectOption() {
 function cancelSelectEdit() {
   selectEdit.value = { id: null, field: null, value: '', initialValue: '' }
   selectSearch.value = ''
+  selectEditingOption.value = { oldText: null, newText: '' }
+}
+
+// 内置默认状态：锁定不可重命名
+function isLockedStatus(opt) {
+  return STATUS_DEFAULTS.includes(opt)
+}
+
+// 某个选项是否处于重命名编辑态
+function isEditingStatusOption(opt) {
+  return selectEditingOption.value.oldText === opt
+}
+
+// 选项行点击：编辑态下不触发选择
+function onOptionClick(opt) {
+  if (isEditingStatusOption(opt)) return
+  selectOption(opt)
+}
+
+function startStatusRename(opt) {
+  selectEditingOption.value = { oldText: opt, newText: opt }
+  nextTick(() => {
+    statusRenameInputEl?.focus()
+    statusRenameInputEl?.select()
+  })
+}
+
+function cancelStatusRename() {
+  selectEditingOption.value = { oldText: null, newText: '' }
+}
+
+async function confirmStatusRename() {
+  const { oldText, newText } = selectEditingOption.value
+  const trimmed = (newText || '').trim()
+  if (!oldText) return
+  if (!trimmed || trimmed === oldText) {
+    cancelStatusRename()
+    return
+  }
+  try {
+    const data = await systemStore.renamePaymentTrackStatusAction(oldText, trimmed)
+    ElNotification({
+      message: `状态重命名成功${data?.affectedRows != null ? `（${data.affectedRows} 条）` : ''}`,
+      type: 'success',
+      duration: 2000
+    })
+    // 当前单元格原值即被改状态时，高亮跟随新名
+    if (selectEdit.value.value === oldText) selectEdit.value.value = trimmed
+    selectEditingOption.value = { oldText: null, newText: '' }
+    // 刷新表格 + 选项列表
+    await contentRef.value?.fetchPageListData()
+    selectOptions.value = await buildStatusOptionList()
+  } catch {
+    ElNotification({ message: '状态重命名失败', type: 'error' })
+  }
 }
 
 function handleNewClick() {
@@ -2171,7 +2261,7 @@ onUnmounted(() => {
 
   .entity-option-item {
     display: flex;
-    justify-content: flex-start;
+    justify-content: space-between;
     align-items: center;
     width: 100%;
     box-sizing: border-box;
@@ -2191,6 +2281,12 @@ onUnmounted(() => {
       background-color: #e3e5e8;
     }
 
+    // 重命名编辑态：白底，避免与选中/悬停灰底冲突
+    &.is-renaming,
+    &.is-renaming:hover {
+      background-color: #fff;
+    }
+
     .select-pill {
       padding: 3px 14px;
       border-radius: 12px;
@@ -2198,6 +2294,61 @@ onUnmounted(() => {
       font-weight: 500;
       line-height: 1.5;
       white-space: nowrap;
+    }
+
+    // 「⋮」重命名入口（仅状态、非内置默认项显示）
+    .status-edit-dots {
+      width: 16px;
+      height: 16px;
+      margin-left: 6px;
+      flex-shrink: 0;
+      fill: #80868b;
+      opacity: 0.65;
+      cursor: pointer;
+      transition: fill 0.12s, opacity 0.12s;
+
+      &:hover {
+        fill: #1a73e8;
+        opacity: 1;
+      }
+    }
+
+    &:hover .status-edit-dots {
+      opacity: 1;
+    }
+
+    .status-rename-input {
+      flex: 1;
+      min-width: 0;
+      height: 28px;
+      padding: 0 8px;
+      border: 1px solid #1a73e8;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #202124;
+      background: #fff;
+      outline: none;
+      box-sizing: border-box;
+    }
+
+    .status-rename-confirm {
+      flex-shrink: 0;
+      margin-left: 6px;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 6px;
+      background: #1a73e8;
+      color: #fff;
+      cursor: pointer;
+      transition: background-color 0.12s;
+
+      &:hover {
+        background: #1765cc;
+      }
     }
   }
 }

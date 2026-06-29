@@ -404,6 +404,16 @@ class PaymentTrackService {
   }
 
 
+  // 重命名状态：把所有 payment_status = oldStatus 的行批量改为 newStatus（全局生效）
+  async renameStatus(oldStatus, newStatus) {
+    const [result] = await connection.execute(
+      'UPDATE payment_tracks SET payment_status = ? WHERE payment_status = ?',
+      [newStatus, oldStatus]
+    )
+    return { affectedRows: result.affectedRows }
+  }
+
+
   async customerList() {
     const [rows] = await connection.execute('SELECT id, full_name, short_name, payment_cycle_days FROM payment_customers')
     return rows
