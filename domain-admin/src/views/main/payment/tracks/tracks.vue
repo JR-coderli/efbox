@@ -328,7 +328,7 @@
             @mousedown.stop
           >
             <div class="bubble-arrow" :class="selectBubblePlacement === 'bottom' ? 'arrow-up' : 'arrow-down'" :style="selectArrowStyle"></div>
-            <div class="bubble-body entity-select-bubble">
+            <div class="bubble-body entity-select-bubble" :class="{ 'status-options-bubble': selectEdit.field === 'payment_status' }">
               <div class="entity-search-wrap">
                 <input
                   v-model="selectSearch"
@@ -344,10 +344,15 @@
                   v-for="opt in filteredSelectOptions"
                   :key="opt"
                   class="entity-option-item"
-                  :class="{ 'is-active': selectEdit.value === opt }"
+                  :class="{ 'is-active': selectEdit.value === opt, 'is-status': selectEdit.field === 'payment_status' }"
                   @click="selectOption(opt)"
                 >
-                  {{ opt }}
+                  <span
+                    v-if="selectEdit.field === 'payment_status'"
+                    class="status-pill"
+                    :style="statusOptionStyle(opt)"
+                  >{{ opt }}</span>
+                  <template v-else>{{ opt }}</template>
                 </div>
                 <div v-if="selectSearch && !filteredSelectOptions.length" class="entity-option-create" @click="selectOption(selectSearch)">
                   创建 "{{ selectSearch }}"
@@ -581,6 +586,12 @@ function getStatusColor(str) {
   if (str.includes('已付款')) return statusColorMap['【已付款】']
 
   return getColor(str)
+}
+
+// 状态下拉项：使用与单元格徽章一致的背景色/文字色
+function statusOptionStyle(opt) {
+  const c = getStatusColor(opt)
+  return { backgroundColor: c.bg, color: c.text }
 }
 
 
@@ -2150,6 +2161,47 @@ onUnmounted(() => {
   text-align: center;
   font-size: 13px;
   color: #9aa0a6;
+}
+
+// 状态下拉：每个选项独占一行；选中行整行置灰背景，行内为跟随内容宽度的彩色状态徽章
+.status-options-bubble {
+  .entity-options-list {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+
+  .entity-option-item.is-status {
+    display: flex;
+    // justify-content: center;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 3px 6px;
+    border: none;
+    border-radius: 6px;
+    background-color: transparent;
+    cursor: pointer;
+    transition: background-color 0.12s;
+
+    &:hover {
+      background-color: #f1f3f4;
+    }
+
+    // 选中状态：整行灰色背景（写在 :hover 之后以覆盖悬停）
+    &.is-active {
+      background-color: #e3e5e8;
+    }
+
+    .status-pill {
+      padding: 3px 14px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+  }
 }
 
 
