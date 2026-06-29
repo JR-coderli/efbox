@@ -328,7 +328,7 @@
             @mousedown.stop
           >
             <div class="bubble-arrow" :class="selectBubblePlacement === 'bottom' ? 'arrow-up' : 'arrow-down'" :style="selectArrowStyle"></div>
-            <div class="bubble-body entity-select-bubble" :class="{ 'status-options-bubble': selectEdit.field === 'payment_status' }">
+            <div class="bubble-body entity-select-bubble">
               <div class="entity-search-wrap">
                 <input
                   v-model="selectSearch"
@@ -344,15 +344,10 @@
                   v-for="opt in filteredSelectOptions"
                   :key="opt"
                   class="entity-option-item"
-                  :class="{ 'is-active': selectEdit.value === opt, 'is-status': selectEdit.field === 'payment_status' }"
+                  :class="{ 'is-active': selectEdit.value === opt }"
                   @click="selectOption(opt)"
                 >
-                  <span
-                    v-if="selectEdit.field === 'payment_status'"
-                    class="status-pill"
-                    :style="statusOptionStyle(opt)"
-                  >{{ opt }}</span>
-                  <template v-else>{{ opt }}</template>
+                  <span class="select-pill" :style="selectOptionStyle(selectEdit.field, opt)">{{ opt }}</span>
                 </div>
                 <div v-if="selectSearch && !filteredSelectOptions.length" class="entity-option-create" @click="selectOption(selectSearch)">
                   创建 "{{ selectSearch }}"
@@ -588,9 +583,12 @@ function getStatusColor(str) {
   return getColor(str)
 }
 
-// 状态下拉项：使用与单元格徽章一致的背景色/文字色
-function statusOptionStyle(opt) {
-  const c = getStatusColor(opt)
+// 选择气泡下拉项：按字段取对应配色（状态/付款主体/币种），与单元格徽章一致
+function selectOptionStyle(field, opt) {
+  let c
+  if (field === 'payment_status') c = getStatusColor(opt)
+  else if (field === 'payment_entity') c = getEntityColor(opt)
+  else c = getColor(opt)
   return { backgroundColor: c.bg, color: c.text }
 }
 
@@ -2163,21 +2161,21 @@ onUnmounted(() => {
   color: #9aa0a6;
 }
 
-// 状态下拉：每个选项独占一行；选中行整行置灰背景，行内为跟随内容宽度的彩色状态徽章
-.status-options-bubble {
+// 选择气泡下拉（付款主体/币种/状态）：每个选项独占一行；选项靠左排布并显示各自底色，选中行整行置灰
+.entity-select-bubble {
   .entity-options-list {
     flex-direction: column;
     align-items: stretch;
     gap: 2px;
   }
 
-  .entity-option-item.is-status {
+  .entity-option-item {
     display: flex;
-    // justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     width: 100%;
     box-sizing: border-box;
-    padding: 3px 6px;
+    padding: 3px 8px;
     border: none;
     border-radius: 6px;
     background-color: transparent;
@@ -2193,7 +2191,7 @@ onUnmounted(() => {
       background-color: #e3e5e8;
     }
 
-    .status-pill {
+    .select-pill {
       padding: 3px 14px;
       border-radius: 12px;
       font-size: 12px;
