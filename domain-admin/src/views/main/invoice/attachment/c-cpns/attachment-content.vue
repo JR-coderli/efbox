@@ -2349,6 +2349,7 @@ defineExpose({
 
 // 日期范围筛选触发器：未选中时只显示一个小日历图标
 :deep(.date-range-picker) {
+  cursor: pointer;
   --el-date-editor-width: auto;
   width: fit-content !important;
   max-width: 40px;

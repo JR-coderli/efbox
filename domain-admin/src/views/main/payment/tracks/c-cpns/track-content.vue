@@ -1083,6 +1083,7 @@ defineExpose({
 // 日期范围筛选触发器：未选中时只显示一个小日历图标（选中后的值由 active-filters 标签展示）
 :deep(.date-range-picker) {
   // 关键：取消 Element Plus 日期编辑器的固定宽度（默认 ~350px），禁止在 flex 容器中伸展
+  cursor: pointer;
   --el-date-editor-width: auto;
   width: fit-content !important;
   max-width: 40px;
