@@ -1,5 +1,5 @@
 require('./utils/loadEnv')();
-const { getUrlsFromApi, updateDomainStatus } = require('./utils/api')
+const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant } = require('./utils/api')
 const writeLog = require('./utils/writeLog')
 const sendMail = require('./utils/sendEmail')
 const checkSafeBrowsing = require('./utils/checkSafeBrowsing')
@@ -15,6 +15,7 @@ let lastReportDate = null // 记录上次发送日报的日期
 let intervalTimer = null  // 定时检测的定时器
 let dailyTimer = null // 定时发送日报的定时器
 let abnormalUrls = new Set()  // 保存当前异常的 URL
+let abnormalStreak = new Map()  // 保存每个域名连续异常的轮数 (id -> 次数)
 
 
 async function checkUrls(urlObjs) {
@@ -47,11 +48,24 @@ async function checkUrls(urlObjs) {
 
         await updateDomainStatus(id, accessible ? 1 : 0, isDanger ? 0 : 1, url);
         abnormalUrls.add(url);
+
+        // 连续异常轮数 +1; 连续 3 轮(约 45 分钟)仍异常则降级为非重要域名
+        const streak = (abnormalStreak.get(id) || 0) + 1
+        abnormalStreak.set(id, streak)
+        if (streak >= 3) {
+          const ok = await setDomainNotImportant(id)
+          if (ok) {
+            abnormalStreak.delete(id)  // 降级成功后会移出监控列表, 清空计数
+            writeLog(`域名连续 ${streak} 轮异常, 已降级为非重要域名: ${url}`)
+          }
+          // 降级失败则保留计数, 下一轮继续重试 (streak 仍 >= 3)
+        }
       } else if (abnormalUrls.has(url)) {
 
         console.log('恢复')
         await updateDomainStatus(id, 1, 1, url);
         abnormalUrls.delete(url);
+        abnormalStreak.delete(id)  // 恢复正常, 清空连续异常计数
       }
     } catch (err) {
       writeLog(`❌ 调用状态更新接口失败 ${url}: ${err.message}`);

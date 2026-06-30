@@ -26,6 +26,22 @@ async function getUrlsFromApi() {
 }
 
 
+// 将域名降级为非重要域名 (is_important = 0)
+// 供检测脚本在域名连续多轮异常后调用, 降级后该域名会移出 import_list 监控范围
+async function setDomainNotImportant(id) {
+  try {
+    const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
+    const apiUrl = `${baseUrl}/domains/internal/is_important/${id}/0`
+
+    await axios.patch(apiUrl)
+    return true
+  } catch (err) {
+    console.log(`❌ 降级域名为非重要失败 id=${id}: ${err.message}`)
+    return false
+  }
+}
+
+
 async function updateDomainStatus(id, isAccessible, isSafe, url) {
   try {
     const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
@@ -161,5 +177,6 @@ function extractDomain(url) {
 module.exports = {
   getUrlsFromApi,
   updateDomainStatus,
+  setDomainNotImportant,
   replaceDangerousDomain
 }

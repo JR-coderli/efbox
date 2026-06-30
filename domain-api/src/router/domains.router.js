@@ -19,6 +19,7 @@ domainsRouter.delete('/:domainId', verifyAuth, remove)
 domainsRouter.patch('/:domainId', verifyAuth, update)
 
 domainsRouter.patch('/is_important/:domainId/:isImportant', verifyAuth, updateIsImportant)
+domainsRouter.patch('/internal/is_important/:domainId/:isImportant', updateIsImportant) // 外部调用
 
 domainsRouter.patch('/internal/is_normal/:id', updateIsNormal) // 外部调用
 domainsRouter.patch('/is_normal/:id', verifyAuth, updateIsNormal) // 内部调用
