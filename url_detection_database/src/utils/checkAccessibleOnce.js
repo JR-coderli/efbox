@@ -5,10 +5,10 @@ const delay = require('./delay'); // 延迟函数
 async function checkAccessibleOnce(url) {
   try {
     const res = await fetch(url, { method: "HEAD", redirect: "follow" });
-    console.log("res.url: ", res.url)
+    console.log("可访问: ", res.url)
     return res.ok;
   } catch (err) {
-    console.log('err.code, url: ', err.code, url)
+    console.log('不可访问: ', url)
     return false;
   }
 }

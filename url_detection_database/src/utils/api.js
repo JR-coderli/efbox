@@ -5,9 +5,11 @@ async function getUrlsFromApi() {
   try {
     const res = await axios.post(process.env.API_BASE_URL + '/domains/import_list', {
       offset: 0,
-      size: 100
+      size: 200
     });
-    const list = res?.data?.data?.list || [];
+    const data = res?.data?.data
+    const list = data?.list || [];
+    const allCount = data?.allCount ?? 0  // 重要域名总数
 
 
     const urls = list
@@ -18,10 +20,12 @@ async function getUrlsFromApi() {
       }))
 
 
-    return urls
+    // ok 且 fetchedCount >= allCount 表示本轮已把全部重要域名拉全,
+    // 调用方可据此安全清理"已移出监控"的域名计数
+    return { urls, allCount, fetchedCount: list.length, ok: true }
   } catch (err) {
 
-    return []
+    return { urls: [], allCount: 0, fetchedCount: 0, ok: false }
   }
 }
 
@@ -174,9 +178,34 @@ function extractDomain(url) {
   }
 }
 
+// 触发飞书电话加急通知 (异常告警时与预警邮件一起发出)
+// 接收人 open_id 通过环境变量 FEISHU_ALERT_OPEN_ID 配置, 支持逗号分隔多个; 未配置则跳过
+async function triggerUrgentPhoneCall(text) {
+  const raw = process.env.FEISHU_ALERT_OPEN_ID
+  if (!raw) {
+    console.log('⚠️ 未配置 FEISHU_ALERT_OPEN_ID, 跳过电话加急通知')
+    return false
+  }
+
+  const openIds = raw.split(',').map(s => s.trim()).filter(Boolean)
+  if (!openIds.length) return false
+
+  const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
+  for (const receiveId of openIds) {
+    try {
+      await axios.post(`${baseUrl}/feishu/send/urgent-phone`, { receiveId, text })
+    } catch (err) {
+      console.log(`❌ 电话加急通知失败 (${receiveId}): ${err.message}`)
+    }
+  }
+  return true
+}
+
+
 module.exports = {
   getUrlsFromApi,
   updateDomainStatus,
   setDomainNotImportant,
+  triggerUrgentPhoneCall,
   replaceDangerousDomain
 }

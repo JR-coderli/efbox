@@ -1,9 +1,9 @@
 require('./utils/loadEnv')();
-const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant } = require('./utils/api')
+const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall } = require('./utils/api')
 const writeLog = require('./utils/writeLog')
 const sendMail = require('./utils/sendEmail')
 const checkSafeBrowsing = require('./utils/checkSafeBrowsing')
-const { buildStatus, buildNormalReportHtml, buildDailyReportHtml } = require('./utils/buildReportHtml')
+const { buildStatus, buildNormalReportHtml, buildDailyReportHtml, buildAlertText } = require('./utils/buildReportHtml')
 const checkAccessible = require('./utils/checkAccessibleOnce')
 
 
@@ -18,7 +18,17 @@ let abnormalUrls = new Set()  // 保存当前异常的 URL
 let abnormalStreak = new Map()  // 保存每个域名连续异常的轮数 (id -> 次数)
 
 
-async function checkUrls(urlObjs) {
+async function checkUrls(urlObjs, isComplete = false) {
+  // 本轮已把全部重要域名拉全时, 清理"已移出监控(被自动降级或手动改为非重要)"的域名的连续异常计数。
+  // 这样域名被重新加回重要列表后, 会从 0 重新累计满 3 轮才会再次降级。
+  // (仅在拉取完整时执行, 避免网络失败或分页截断时误清仍在监控中的计数)
+  if (isComplete) {
+    const currentIds = new Set(urlObjs.map(item => item.id))
+    for (const id of [...abnormalStreak.keys()]) {
+      if (!currentIds.has(id)) abnormalStreak.delete(id)
+    }
+  }
+
   if (!urlObjs.length) {
     writeLog('没有可检测的URL')
     return
@@ -43,7 +53,6 @@ async function checkUrls(urlObjs) {
 
 
     try {
-      console.log("url: ", url)
       if (!accessible || isDanger) {
 
         await updateDomainStatus(id, accessible ? 1 : 0, isDanger ? 0 : 1, url);
@@ -81,6 +90,8 @@ async function checkUrls(urlObjs) {
   const filteredAlerts = alerts.filter(Boolean);
   if (filteredAlerts.length > 0) {
     await sendMail(buildNormalReportHtml(filteredAlerts));
+    // 异常告警: 发邮件的同时触发飞书电话加急 (早上8点的日报只发邮件, 不打电话)
+    await triggerUrgentPhoneCall(buildAlertText(filteredAlerts));
   }
 }
 
@@ -92,8 +103,8 @@ function startTimers() {
 
 
   intervalTimer = setInterval(async () => {
-    const urlObjs  = await getUrlsFromApi()
-    checkUrls(urlObjs)
+    const { urls: urlObjs, allCount, fetchedCount, ok } = await getUrlsFromApi()
+    checkUrls(urlObjs, ok && fetchedCount >= allCount)
   }, 15 * 60 * 1000) // 每 15 分钟检测一次
 
 
@@ -114,10 +125,10 @@ function startTimers() {
 
 
 (async () => {
-  const urlObjs  = await getUrlsFromApi()
+  const { urls: urlObjs, allCount, fetchedCount, ok } = await getUrlsFromApi()
   console.log("urlObjs: ", urlObjs)
 
-  await checkUrls(urlObjs)
+  await checkUrls(urlObjs, ok && fetchedCount >= allCount)
   startTimers()
 })();
 

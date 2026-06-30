@@ -62,9 +62,17 @@ function buildDailyReportHtml(dailyReport, dailyCount) {
   `;
 }
 
+// 构建异常告警的纯文本摘要 (用于飞书电话加急的文本消息)
+function buildAlertText(alerts) {
+  const time = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+  const list = alerts.map(a => `- ${a.url}`).join('\n')
+  return `【网页监控】异常告警 ${time}\n检测到 ${alerts.length} 个异常域名(无法访问或被标记为危险):\n${list}\n请尽快处理`
+}
+
 module.exports = {
   buildStatus,
   buildNormalReportHtml,
-  buildDailyReportHtml
+  buildDailyReportHtml,
+  buildAlertText
 }
 
