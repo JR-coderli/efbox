@@ -1003,7 +1003,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Refresh, Camera, Search, Picture, WarningFilled, Warning, Setting, Menu, Upload, FullScreen, Crop, Plus, InfoFilled, CirclePlusFilled, Edit, CircleCheck, CircleClose, Download, Loading
@@ -2353,7 +2353,15 @@ const fetchScreenshotStats = async () => {
 }
 
 
-const handleSearch = () => {
+// 将表格滚动回顶部：等 nextTick（DOM 渲染完新数据后）再重置，
+// 复用 el-table 内部 scrollbar（与点击分页一致）
+const scrollToTableTop = async () => {
+  await nextTick()
+  tableRef.value?.scrollBarRef?.setScrollTop(0)
+}
+
+
+const handleSearch = async () => {
   pagination.page = 1
 
 
@@ -2372,15 +2380,17 @@ const handleSearch = () => {
     }).catch(err => console.error('记录日志失败:', err))
   }
 
-  getList()
+  await getList()
+  await scrollToTableTop()
 }
 
 
-const handleReset = () => {
+const handleReset = async () => {
   searchForm.name = ''
   searchForm.url = ''
   pagination.page = 1
-  getList()
+  await getList()
+  await scrollToTableTop()
 }
 
 
@@ -2422,17 +2432,19 @@ const fetchData = async (row) => {
 }
 
 
-const handleNameClear = () => {
+const handleNameClear = async () => {
   searchForm.name = ''
   pagination.page = 1
-  getList()
+  await getList()
+  await scrollToTableTop()
 }
 
 
-const handleUrlClear = () => {
+const handleUrlClear = async () => {
   searchForm.url = ''
   pagination.page = 1
-  getList()
+  await getList()
+  await scrollToTableTop()
 }
 
 
