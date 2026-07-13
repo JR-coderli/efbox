@@ -133,6 +133,15 @@ class CrawlerController {
       }
 
 
+      // 预生成 ZIP：下载时直接返回静态文件，避免大文件实时压缩导致下载失败
+      // 失败不影响任务完成状态，下载时会自动回退到实时压缩
+      try {
+        await crawler.generateTaskZip(taskFolder)
+      } catch (e) {
+        console.error('预生成 ZIP 失败，下载时将回退到实时压缩:', e)
+      }
+
+
       const baseUrl = OUTPUT_BASE_URL
       await connection.execute(
         `UPDATE crawler_tasks
@@ -395,15 +404,32 @@ class CrawlerController {
 
   /**
    * 下载 ZIP 文件
+   * 优先返回爬取完成时预生成的静态 ZIP（带 Content-Length，大文件也能稳定下载、支持断点续传）；
+   * 若预生成包不存在（历史任务），则回退到实时压缩——此时不能 await finalize，
+   * 否则 Koa 在真正消费流之前，大文件会让 archiver 内部缓冲写满触发背压死锁，下载会挂起失败。
    */
   async download(ctx) {
     const { taskFolder } = ctx.params
+    const crawler = new CrawlerService(CRAWLER_OUTPUT_DIR)
 
     try {
-      const crawler = new CrawlerService(CRAWLER_OUTPUT_DIR)
+      const zipPath = crawler.getTaskZipPath(taskFolder)
+
+      // 1) 优先返回预生成的静态 ZIP
+      if (fs.existsSync(zipPath)) {
+        const stat = fs.statSync(zipPath)
+        ctx.set('Content-Type', 'application/zip')
+        ctx.set('Content-Disposition', `attachment; filename="${taskFolder}.zip"`)
+        ctx.set('Content-Length', stat.size)
+        ctx.body = fs.createReadStream(zipPath)
+        ctx.status = 200
+        return
+      }
+
+      // 2) 回退：文件夹存在但没有预生成 ZIP，实时压缩
       const folderPath = crawler.getTaskFolderPath(taskFolder)
 
-      console.log('下载请求 - taskFolder:', taskFolder)
+      console.log('下载请求(实时压缩) - taskFolder:', taskFolder)
       console.log('文件夹路径:', folderPath)
       console.log('文件夹是否存在:', fs.existsSync(folderPath))
 
@@ -437,11 +463,12 @@ class CrawlerController {
       archive.directory(folderPath, false)
 
 
+      // 关键：不要 await archive.finalize()。
+      // Koa 在中间件 resolve 之后才会把 ctx.body(流) 消费(管道)给响应，
+      // 这里先挂上流并启动 finalize，resolve 后由 Koa 拉取数据驱动背压，大文件也能正常下载。
       ctx.body = archive
+      archive.finalize()
       ctx.status = 200
-
-
-      await archive.finalize()
     } catch (error) {
       console.error('下载错误:', error)
       ctx.status = 500

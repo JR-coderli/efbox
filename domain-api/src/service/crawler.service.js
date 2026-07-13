@@ -1306,11 +1306,57 @@ class CrawlerService {
   }
 
   /**
-   * 删除任务文件夹
+   * 获取任务预生成 ZIP 文件路径
+   */
+  getTaskZipPath(taskFolder) {
+    return path.join(this.outputDir, `${taskFolder}.zip`)
+  }
+
+  /**
+   * 预生成任务 ZIP 压缩包
+   * 爬取完成后调用一次，下载时直接返回该静态文件，
+   * 避免大文件（如 10M）在请求中实时压缩时因背压死锁导致下载失败。
+   * 写入目标是文件流（会持续消费），所以可以安全 await，不会死锁。
+   * 返回生成的 ZIP 大小（字节）；源文件夹不存在时返回 0。
+   */
+  async generateTaskZip(taskFolder) {
+    const archiver = require('archiver')
+    const folderPath = this.getTaskFolderPath(taskFolder)
+    const zipPath = this.getTaskZipPath(taskFolder)
+
+    // 旧包先删除，避免混入历史文件
+    if (await fs.pathExists(zipPath)) {
+      await fs.remove(zipPath)
+    }
+    if (!(await fs.pathExists(folderPath))) {
+      return 0
+    }
+
+    return new Promise((resolve, reject) => {
+      const output = fs.createWriteStream(zipPath)
+      const archive = archiver('zip', { zlib: { level: 1 } })
+
+      output.on('close', () => resolve(archive.pointer()))
+      output.on('error', (err) => {
+        fs.remove(zipPath).catch(() => {})
+        reject(err)
+      })
+      archive.on('error', reject)
+
+      archive.pipe(output)
+      archive.directory(folderPath, false)
+      archive.finalize()
+    })
+  }
+
+  /**
+   * 删除任务文件夹及其预生成的 ZIP
    */
   async deleteTaskFolder(taskFolder) {
     const folderPath = this.getTaskFolderPath(taskFolder)
+    const zipPath = this.getTaskZipPath(taskFolder)
     await fs.remove(folderPath)
+    await fs.remove(zipPath)
   }
 }
 
