@@ -1528,10 +1528,8 @@ function quickFilterPaymentStatus(status) {
   allQueryInfo.value.page = 1
   allQueryInfo.value.payment_status = status || undefined
 
-  const hasSearch = !!allQueryInfo.value.short_name
   const condition = {
     ...allQueryInfo.value,
-    ...(hasSearch ? { page: 1, pageSize: 10000 } : {}),
     "role_name": loginStore.userInfo.role.name || '',
     "user_id": loginStore.userInfo.id
   }
@@ -1544,14 +1542,14 @@ const handleHeaderCommand = (command, column) => {
   console.log('选择状态：', command)
   console.log('点击列信息：', column)
 
+  const isGroupView = groupBy.value !== 'merged'
   allQueryInfo.value.page = 1
   allQueryInfo.value.payment_status = command
 
 
-  const hasSearch = !!allQueryInfo.value.short_name
   const condition = {
     ...allQueryInfo.value,
-    ...(hasSearch ? { page: 1, pageSize: 10000 } : {}),
+    ...(isGroupView ? { pageSize: 10000 } : {}),
     "role_name": loginStore.userInfo.role.name || '',
     "user_id": loginStore.userInfo.id
   }
@@ -1597,6 +1595,7 @@ const activeFilters = computed(() => {
 })
 
 function removeFilter(key) {
+  const isGroupView = groupBy.value !== 'merged'
 
   if (key === "short_name") {
     allQueryInfo.value.short_name = ""
@@ -1606,12 +1605,11 @@ function removeFilter(key) {
     allQueryInfo.value.start_date = undefined
     allQueryInfo.value.end_date = undefined
   }
+  allQueryInfo.value.page = 1
 
-
-  const hasSearch = !!allQueryInfo.value.short_name
   const condition = {
     ...allQueryInfo.value,
-    ...(hasSearch ? { page: 1, pageSize: 10000 } : {}),
+    ...(isGroupView ? { pageSize: 10000 } : {}),
     "role_name": loginStore.userInfo.role.name || '',
     "user_id": loginStore.userInfo.id
   }

@@ -335,15 +335,16 @@ const loginStore = useLoginStore()
 function handleCustomerClick(customer) {
   if (!customer?.short_name) return
 
+  // 分组视图需要一次性拉取全部数据用于前端分组；合并视图走服务端正常分页
+  const isGroupView = attachmentContentRef.value?.groupBy !== 'merged'
+
   searchState.value = customer.short_name
   allQueryInfo.value.short_name = customer.short_name
   allQueryInfo.value.page = 1
 
   const queryInfo = {
     ...allQueryInfo.value,
-
-    page: 1,
-    pageSize: 10000,
+    ...(isGroupView ? { pageSize: 10000 } : {}),
     "role_name": loginStore.userInfo.role.name || '',
     "user_id": loginStore.userInfo.id
   }
@@ -411,18 +412,18 @@ function selectCustomer(item, type) {
   console.log("item", item)
 
   if (type === "attachment-content") {
+    const isGroupView = attachmentContentRef.value?.groupBy !== 'merged'
     allQueryInfo.value.short_name = item.value // 记录被选中的客户
+    allQueryInfo.value.page = 1
 
     const queryInfo = {
       ...allQueryInfo.value,
-
-      page: 1,
-      pageSize: 10000,
+      ...(isGroupView ? { pageSize: 10000 } : {}),
       "role_name": loginStore.userInfo.role.name || '',
       "user_id": loginStore.userInfo.id
     }
     systemStore.postPageListAction(contentConfig.pageName, queryInfo, "attalist")
-    
+
   } else if (type === "attachment-modal") {
 
     selectedCustomer.value = {
@@ -470,14 +471,14 @@ function handleModalBlur() {
 
 
 const handleSearchEnter = () => {
+  const isGroupView = attachmentContentRef.value?.groupBy !== 'merged'
   allQueryInfo.value.page = 1 // 回到第一页
   allQueryInfo.value.short_name = searchState.value
 
 
-  const hasSearch = !!allQueryInfo.value.short_name
   const queryInfo = {
     ...allQueryInfo.value,
-    ...(hasSearch ? { page: 1, pageSize: 10000 } : {}),
+    ...(isGroupView ? { pageSize: 10000 } : {}),
     "role_name": loginStore.userInfo.role.name || '',
     "user_id": loginStore.userInfo.id
   }
@@ -490,11 +491,11 @@ const handleSearchEnter = () => {
 }
 
 const triggerTableSearch = () => {
+  const isGroupView = attachmentContentRef.value?.groupBy !== 'merged'
 
-  const hasSearch = !!allQueryInfo.value.short_name
   const queryInfo = {
     ...allQueryInfo.value,
-    ...(hasSearch ? { page: 1, pageSize: 10000 } : {}),
+    ...(isGroupView ? { pageSize: 10000 } : {}),
     "role_name": loginStore.userInfo.role.name || '',
     "user_id": loginStore.userInfo.id
   }
