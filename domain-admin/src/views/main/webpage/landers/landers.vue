@@ -422,7 +422,7 @@
 
           <!-- URL 地址 -->
           <template v-else-if="item.key === 'url'">
-            <el-table-column :label="item.label" min-width="250" align="center">
+            <el-table-column :label="item.label" min-width="210" align="center">
               <template #default="{ row }">
                 <span v-if="row.url" class="url-link">
                   <span>{{ row.url }}</span>
@@ -455,7 +455,7 @@
 
           <!-- workspace_id -->
           <template v-else-if="item.key === 'workspace_id'">
-            <el-table-column :label="item.label" width="140" align="center">
+            <el-table-column :label="item.label" width="135" align="center">
               <template #default="{ row }">
                 <el-popconfirm
                   v-if="hasApprovePermission"
@@ -549,7 +549,7 @@
 
           <!-- 数据汇总 -->
           <template v-else-if="item.key === 'stats_summary'">
-            <el-table-column :label="item.label" :min-width="isMobile ? 120 : 120" align="center">
+            <el-table-column :label="item.label" :width="isMobile ? 140 : 170" align="center">
               <template #default="{ row }">
                 <!-- 有免加载权限、Antivirus 或已获取：直接显示数据 -->
                 <div v-if="hasNoLoadDataPermission || isAntivirus(row) || row.dataLoaded" class="stats-summary-wrapper">
@@ -3641,9 +3641,9 @@ onUnmounted(() => {
 
       .stats-summary-wrapper {
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px 16px;
-        justify-content: center;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
         padding: 4px 0;
 
         .stats-item {
@@ -3651,6 +3651,7 @@ onUnmounted(() => {
           align-items: center;
           gap: 6px;
           font-size: 14px;
+          white-space: nowrap;
 
           .stats-label {
             color: #5f6368;

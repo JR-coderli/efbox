@@ -1,31 +1,35 @@
 <template>
   <div class="clickflare-container">
-    <!-- 顶部操作栏 -->
-    <div class="toolbar">
-      <el-button
-        v-if="hasBatchReplacePermission"
-        :icon="Edit"
-        type="primary"
-        class="google-btn google-btn-primary"
-        @click="openBatchReplaceDialog"
-      >
-        批量修改lander
-      </el-button>
-    </div>
+    <div class="content-card">
+      <!-- 页面标题和操作栏（谷歌风格） -->
+      <div class="page-header">
+        <div class="header-left">
+          <h1 class="page-title">Clickflare 域名替换</h1>
+          <span class="page-subtitle">危险域名自动检测与 Lander 批量替换记录</span>
+        </div>
+        <div class="header-actions">
+          <el-button
+            v-if="hasBatchReplacePermission"
+            class="google-btn google-btn-primary"
+            @click="openBatchReplaceDialog"
+          >
+            <el-icon class="btn-icon"><Edit /></el-icon>
+            <span>批量修改 Lander</span>
+          </el-button>
+        </div>
+      </div>
 
-    <!-- 数据表格 -->
-    <div class="table-container">
+      <!-- 数据表格 -->
+      <div class="table-container">
       <el-table
         :data="tableData"
         v-loading="loading"
         class="google-table"
-        stripe
-        border
         style="width: 100%"
       >
         <el-table-column type="index" label="序号" width="80" align="center" />
 
-        <el-table-column prop="dangerous_domain" label="危险域名" width="180" align="center">
+        <el-table-column prop="dangerous_domain" label="危险域名" min-width="190">
           <template #default="{ row }">
             <el-tooltip placement="top" :show-after="200">
               <template #content>
@@ -36,7 +40,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="replacement_domain" label="替换域名" width="210" align="center">
+        <el-table-column prop="replacement_domain" label="替换域名" min-width="210">
           <template #default="{ row }">
             <el-tooltip placement="top" :show-after="200">
               <template #content>
@@ -113,6 +117,7 @@
         <p class="empty-text">暂无域名替换记录</p>
         <p class="empty-hint">当检测到危险域名时，系统会自动替换 Lander 中的域名并在此处显示</p>
       </div> -->
+    </div>
     </div>
 
     <!-- 详情对话框 -->
@@ -828,18 +833,66 @@ onMounted(() => {
 
 <style lang="less" scoped>
 .clickflare-container {
-  padding: 12px;
+  padding: 16px;
   background: #f8f9fa;
   height: 100%;
   display: flex;
   flex-direction: column;
+  font-family: 'Roboto', 'Google Sans', 'Helvetica Neue', Arial, 'Microsoft YaHei', sans-serif;
+
+  .content-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3),
+      0 1px 3px 1px rgba(60, 64, 67, 0.15);
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e8eaed;
+    gap: 16px;
+    flex-shrink: 0;
+
+    .header-left {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 500;
+      color: #202124;
+      margin: 0;
+      line-height: 24px;
+    }
+
+    .page-subtitle {
+      font-size: 12px;
+      color: #5f6368;
+      line-height: 16px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+  }
 
   .table-container {
     padding: 0;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    overflow: hidden;
     flex: 1;
     min-height: 0;
     display: flex;
@@ -878,25 +931,31 @@ onMounted(() => {
 
       thead th {
         background: #f8f9fa;
-        color: #3c4043;
+        color: #5f6368;
         font-weight: 500;
         font-size: 13px;
         border-bottom: 1px solid #e8eaed;
-        padding: 0 14px;
-        height: 40px;
+        padding: 0 16px;
+        height: 48px;
       }
 
       tbody tr {
-        &:hover {
-          background: #f8f9fa !important;
+        height: 48px;
+
+        &:hover > td {
+          background: #f1f3f4 !important;
         }
 
         td {
           border-bottom: 1px solid #e8eaed;
           color: #202124;
           font-size: 13px;
-          padding: 0 14px;
+          padding: 0 16px;
           vertical-align: middle;
+        }
+
+        &:last-child td {
+          border-bottom: none;
         }
       }
 
@@ -1122,16 +1181,6 @@ onMounted(() => {
 }
 
 
-/* 顶部操作栏 */
-.toolbar {
-  padding: 0 0 12px 0;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-
 :deep(.google-dialog) {
   .el-dialog__header {
     padding: 20px 24px 16px;
@@ -1232,6 +1281,10 @@ onMounted(() => {
 
 
 .google-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-width: 80px;
   height: 36px;
   padding: 0 16px;
@@ -1240,6 +1293,10 @@ onMounted(() => {
   font-weight: 500;
   border: none;
   transition: all 0.2s;
+
+  .btn-icon {
+    font-size: 16px;
+  }
 
   &.google-btn-secondary {
     background: #fff;
