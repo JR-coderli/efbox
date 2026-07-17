@@ -168,13 +168,26 @@ class LanderService {
    * @param {string} sort_order - 排序方向
    * @param {string} workspace_type - 工作区类型过滤: 'all'(全部), 'public'(无workspace_id), 'private'(有workspace_id)
    */
-  async list(name, url, offset, size, sort_by = 'cf_created_at', sort_order = 'desc', workspace_type = 'all') {
+  async list(name, url, offset, size, sort_by = 'cf_created_at', sort_order = 'desc', workspace_type = 'all', userId = null, favoritesOnly = false) {
     const limit = parseInt(size)
     const offsetVal = parseInt(offset)
 
 
     const conditions = []
     const params = []
+
+    // 收藏关联：userId 存在时 JOIN 收藏表，并在每行输出 is_favorite 标记
+    // 注意：JOIN 的占位参数必须先入栈（SQL 中 JOIN 出现在 WHERE 之前）
+    let favoritesJoin = ''
+    let isFavoriteSelect = ''
+    if (userId) {
+      // 显式指定 COLLATE：cf_landers.lander_key 在本地 8.0 是 utf8mb4_0900_ai_ci、线上 5.7 是 general_ci，
+      // 收藏表统一用 general_ci，JOIN 时强制比较排序规则，避免 "Illegal mix of collations"（general_ci 在 5.7/8.0 都存在）
+      const joinType = favoritesOnly ? 'INNER JOIN' : 'LEFT JOIN'
+      favoritesJoin = `${joinType} \`cf_lander_favorites\` fav ON fav.lander_key = l.lander_key COLLATE utf8mb4_general_ci AND fav.user_id = ?`
+      isFavoriteSelect = ', CASE WHEN fav.user_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite'
+      params.push(userId)
+    }
 
     if (name && name.trim()) {
       conditions.push('l.name LIKE ?')
@@ -226,7 +239,7 @@ class LanderService {
           WHEN COALESCE(stats.total_cost, 0) > 0
           THEN ROUND((COALESCE(stats.total_revenue, 0) - COALESCE(stats.total_cost, 0)) / stats.total_cost * 100, 2)
           ELSE 0
-        END as total_roi
+        END as total_roi${isFavoriteSelect}
       FROM cf_landers l
       LEFT JOIN cf_lander_previews lp ON lp.lander_key = l.lander_key
       LEFT JOIN cf_workspaces w ON w.workspace_id = l.workspace_id
@@ -241,6 +254,7 @@ class LanderService {
         FROM cf_report_daily
         GROUP BY landing_id
       ) stats ON stats.landing_id = l.lander_key
+      ${favoritesJoin}
       WHERE ${whereClause}
       ORDER BY l.${safeSortBy} ${safeSortOrder}
       LIMIT ${limit} OFFSET ${offsetVal}
@@ -248,10 +262,44 @@ class LanderService {
 
     const [list] = await connection.query(statement, params)
 
-    const countStatement = `SELECT COUNT(*) AS total FROM \`cf_landers\` l WHERE ${whereClause}`
+    const countStatement = `SELECT COUNT(*) AS total FROM \`cf_landers\` l ${favoritesJoin} WHERE ${whereClause}`
     const [countResult] = await connection.execute(countStatement, params)
 
     return [list, countResult[0].total]
+  }
+
+  /**
+   * 切换收藏状态（已收藏则取消，未收藏则新增）
+   * @returns {Promise<{is_favorite: boolean}>}
+   */
+  async toggleFavorite(userId, landerKey) {
+    const [rows] = await connection.execute(
+      'SELECT `id` FROM `cf_lander_favorites` WHERE `user_id` = ? AND `lander_key` = ?',
+      [userId, landerKey]
+    )
+
+    if (rows.length > 0) {
+      await connection.execute('DELETE FROM `cf_lander_favorites` WHERE `id` = ?', [rows[0].id])
+      return { is_favorite: false }
+    }
+
+    await connection.execute(
+      'INSERT INTO `cf_lander_favorites` (`user_id`, `lander_key`) VALUES (?, ?)',
+      [userId, landerKey]
+    )
+    return { is_favorite: true }
+  }
+
+  /**
+   * 获取某用户收藏的全部 lander_key
+   * @returns {Promise<string[]>}
+   */
+  async getFavoriteKeys(userId) {
+    const [rows] = await connection.execute(
+      'SELECT `lander_key` FROM `cf_lander_favorites` WHERE `user_id` = ? ORDER BY `id` DESC',
+      [userId]
+    )
+    return rows.map(r => r.lander_key)
   }
 
   /**

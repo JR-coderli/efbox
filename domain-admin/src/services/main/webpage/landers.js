@@ -11,6 +11,25 @@ export function getLanderList(queryInfo) {
 }
 
 /**
+ * 切换（收藏/取消收藏）某个 Lander
+ */
+export function toggleLanderFavorite(landerKey) {
+  return hyRequest.post({
+    url: '/lander/favorite/toggle',
+    data: { lander_key: landerKey }
+  })
+}
+
+/**
+ * 获取当前用户收藏的全部 lander_key 列表
+ */
+export function getLanderFavorites() {
+  return hyRequest.get({
+    url: '/lander/favorites'
+  })
+}
+
+/**
  * 获取单个 Lander 详情
  */
 export function getLander(landerKey) {

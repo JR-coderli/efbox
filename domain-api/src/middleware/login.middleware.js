@@ -70,7 +70,40 @@ const verifyAuth = async(ctx, next) => {
   }
 }
 
+
+/**
+ * 软鉴权：尝试从 token 解析当前用户，token 缺失或无效都不报错（按未登录处理）。
+ * 用于「无论是否登录都必须能返回数据」的接口（如 /lander/list）。
+ * 仅当 token 有效时附带 ctx.user，供收藏等个性化功能使用；token 过期不会让请求失败。
+ */
+const verifyAuthOptional = async(ctx, next) => {
+  let token = null
+
+  const authorization = ctx.headers.authorization
+  if (authorization) {
+    token = authorization.replace('Bearer ', '')
+  }
+
+  if (!token && ctx.query.token) {
+    token = ctx.query.token
+  }
+
+  ctx.user = null
+  if (token) {
+    try {
+      ctx.user = jwt.verify(token, PUBLIC_KEY, {
+        algorithms: ['RS256']
+      })
+    } catch(error) {
+      ctx.user = null
+    }
+  }
+
+  await next()
+}
+
 module.exports = {
   verifyLogin,
-  verifyAuth
+  verifyAuth,
+  verifyAuthOptional
 }

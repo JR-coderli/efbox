@@ -9,14 +9,61 @@ class LanderController {
    * 获取 Lander 列表
    */
   async list(ctx, next) {
-    const { name = '', url = '', offset = 0, size = 10, sort_by = 'cf_created_at', sort_order = 'desc', workspace_type = 'all' } = ctx.request.body
+    const { name = '', url = '', offset = 0, size = 10, sort_by = 'cf_created_at', sort_order = 'desc', workspace_type = 'all', favorites_only = false } = ctx.request.body
+    const userId = ctx.user?.id ?? null
 
-    const [list, total] = await landerService.list(name, url, offset, size, sort_by, sort_order, workspace_type)
+    const [list, total] = await landerService.list(name, url, offset, size, sort_by, sort_order, workspace_type, userId, favorites_only ? true : false)
 
     ctx.body = {
       code: 0,
       message: '获取 Lander 列表成功',
       data: { list, total }
+    }
+  }
+
+  /**
+   * 切换当前登录用户的 Lander 收藏状态
+   */
+  async toggleFavorite(ctx, next) {
+    const userId = ctx.user?.id
+    const { lander_key } = ctx.request.body
+
+    if (!userId) {
+      ctx.body = {
+        code: -1005,
+        message: '登录已过期，请重新登录后再收藏'
+      }
+      return
+    }
+
+    if (!lander_key) {
+      ctx.body = {
+        code: 1,
+        message: '缺少 lander_key'
+      }
+      return
+    }
+
+    const data = await landerService.toggleFavorite(userId, lander_key)
+
+    ctx.body = {
+      code: 0,
+      message: data.is_favorite ? '已收藏' : '已取消收藏',
+      data
+    }
+  }
+
+  /**
+   * 获取当前登录用户收藏的 lander_key 列表
+   */
+  async getFavorites(ctx, next) {
+    const userId = ctx.user?.id
+    const list = userId ? await landerService.getFavoriteKeys(userId) : []
+
+    ctx.body = {
+      code: 0,
+      message: '获取成功',
+      data: { list }
     }
   }
 

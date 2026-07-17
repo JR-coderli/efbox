@@ -48,6 +48,14 @@
           </div>
         </div>
         <div class="toolbar-actions">
+          <el-button
+            class="icon-btn favorite-toggle-btn"
+            :type="favoritesOnly ? 'warning' : ''"
+            :icon="favoritesOnly ? StarFilled : Star"
+            @click="handleToggleFavoritesOnly"
+            :title="favoritesOnly ? '显示全部' : '只看收藏'"
+            circle
+          />
           <el-button v-if="hasControlPermission" class="icon-btn sync-info-btn" :icon="InfoFilled" @click="syncInfoVisible = !syncInfoVisible" :title="syncInfoVisible ? '隐藏同步信息' : '同步信息'" circle />
           <el-button v-if="hasBatchReplacePermission" class="icon-btn" :icon="Edit" @click="openBatchReplaceDialog" title="批量修改URL" circle />
           <el-button v-if="hasCreatePermission" class="icon-btn" :icon="Plus" @click="openCreatePrivateDialog" title="创建 Private Lander" circle />
@@ -403,6 +411,15 @@
             <el-table-column :label="item.label" min-width="200" align="center">
               <template #default="{ row }">
                 <div class="lander-name-wrapper">
+                  <el-icon
+                    class="favorite-star"
+                    :class="{ 'is-favorite': !!row.is_favorite }"
+                    @click.stop="handleToggleFavorite(row)"
+                    :title="row.is_favorite ? '取消收藏' : '收藏'"
+                  >
+                    <StarFilled v-if="row.is_favorite" />
+                    <Star v-else />
+                  </el-icon>
                   <span class="lander-name" :title="row.name">{{ row.name }}</span>
                   <!-- <a
                     v-if="row.url"
@@ -1006,7 +1023,7 @@
 import { ref, reactive, onMounted, onUnmounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  Refresh, Camera, Search, Picture, WarningFilled, Warning, Setting, Menu, Upload, FullScreen, Crop, Plus, InfoFilled, CirclePlusFilled, Edit, CircleCheck, CircleClose, Download, Loading
+  Refresh, Camera, Search, Picture, WarningFilled, Warning, Setting, Menu, Upload, FullScreen, Crop, Plus, InfoFilled, CirclePlusFilled, Edit, CircleCheck, CircleClose, Download, Loading, Star, StarFilled
 } from '@element-plus/icons-vue'
 import {
   getLanderList,
@@ -1022,7 +1039,8 @@ import {
   updateLander,
   batchReplaceLanderUrl,
   previewBatchReplace,
-  getBatchReplaceProgress
+  getBatchReplaceProgress,
+  toggleLanderFavorite
 } from '@/services/main/webpage/landers'
 import { syncWorkspaces } from '@/services/main/webpage/workspaces'
 import { getLanderConfig, setLanderConfig } from '@/services/main/webpage/system-config'
@@ -1758,6 +1776,10 @@ const searchForm = reactive({
 })
 
 
+// 是否只看收藏（按当前登录用户隔离）
+const favoritesOnly = ref(false)
+
+
 const tableData = ref([])
 const loading = ref(false)
 
@@ -2310,7 +2332,8 @@ const getList = async () => {
       offset: (pagination.page - 1) * pagination.size,
       size: pagination.size,
       sort_by: 'cf_created_at',  // 按 CF 创建时间排序
-      sort_order: 'desc'           // 倒序
+      sort_order: 'desc',          // 倒序
+      favorites_only: favoritesOnly.value ? 1 : undefined
     })
     if (res.code === 0) {
       tableData.value = res.data.list || []
@@ -2388,6 +2411,37 @@ const handleSearch = async () => {
 const handleReset = async () => {
   searchForm.name = ''
   searchForm.url = ''
+  pagination.page = 1
+  await getList()
+  await scrollToTableTop()
+}
+
+
+// 切换收藏状态（星星点击）
+const handleToggleFavorite = async (row) => {
+  try {
+    const res = await toggleLanderFavorite(row.lander_key)
+    if (res.code === 0) {
+      row.is_favorite = res.data.is_favorite ? 1 : 0
+      ElMessage.success(res.message || (res.data.is_favorite ? '已收藏' : '已取消收藏'))
+
+      // 若当前处于「只看收藏」且刚刚取消了收藏，则从列表移除该行
+      if (favoritesOnly.value && !res.data.is_favorite) {
+        tableData.value = tableData.value.filter(item => item.lander_key !== row.lander_key)
+        pagination.total = Math.max(0, pagination.total - 1)
+      }
+    } else {
+      ElMessage.error(res.message || '操作失败')
+    }
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+
+// 切换「只看收藏」
+const handleToggleFavoritesOnly = async () => {
+  favoritesOnly.value = !favoritesOnly.value
   pagination.page = 1
   await getList()
   await scrollToTableTop()
@@ -3463,6 +3517,24 @@ onUnmounted(() => {
           text-overflow: ellipsis;
           flex: 1;
           text-align: center;
+        }
+
+        .favorite-star {
+          flex-shrink: 0;
+          margin-top: 3px;
+          font-size: 16px;
+          color: #bdc1c6;
+          cursor: pointer;
+          transition: all 0.2s;
+
+          &:hover {
+            color: #f9ab00;
+            transform: scale(1.15);
+          }
+
+          &.is-favorite {
+            color: #f9ab00;
+          }
         }
       }
 

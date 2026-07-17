@@ -1,7 +1,7 @@
 const KoaRouter = require('@koa/router')
 const path = require('path')
-const { verifyAuth } = require('../middleware/login.middleware')
-const { list, get, sync, syncStatus, screenshotStats, remove, triggerScreenshot, getScreenshotConfig, updateScreenshotConfig, uploadScreenshot } = require('../controller/lander.controller')
+const { verifyAuth, verifyAuthOptional } = require('../middleware/login.middleware')
+const { list, get, sync, syncStatus, screenshotStats, remove, triggerScreenshot, getScreenshotConfig, updateScreenshotConfig, uploadScreenshot, toggleFavorite, getFavorites } = require('../controller/lander.controller')
 const multer = require('@koa/multer')
 
 
@@ -20,7 +20,11 @@ const upload = multer({ storage })
 const landerRouter = new KoaRouter({ prefix: '/lander' })
 
 
-landerRouter.post('/list', list)
+landerRouter.post('/list', verifyAuthOptional, list)
+
+// 收藏相关路由：必须在 /:landerKey 之前注册，否则 GET /lander/favorites 会被参数路由匹配成 landerKey="favorites"
+landerRouter.post('/favorite/toggle', verifyAuthOptional, toggleFavorite)
+landerRouter.get('/favorites', verifyAuthOptional, getFavorites)
 
 
 landerRouter.get('/:landerKey', verifyAuth, get)
