@@ -20,6 +20,7 @@ import report from '@/router/main/webpage/report/report'
 import paymentCustomers from '@/router/main/payment/customers/customers'
 import paymentTracks from '@/router/main/payment/tracks/tracks'
 import monetstatusNotice from '@/router/main/webpage/monetstatus-notice/monetstatus-notice'
+import emailCollect from '@/router/main/webpage/email-collect/email-collect'
 
 
 function loadLocalRoutes() {
@@ -50,6 +51,7 @@ function loadLocalRoutes() {
   localRoutes.push(paymentCustomers)
   localRoutes.push(paymentTracks)
   localRoutes.push(monetstatusNotice)
+  localRoutes.push(emailCollect)
 
   return localRoutes
 }
