@@ -18,69 +18,31 @@
 
     <!-- 内容卡片 -->
     <div class="content-card">
-      <!-- 筛选条件 -->
-      <div class="filter-section">
-        <div class="filter-row">
-          <div class="filter-items">
-            <el-form :inline="false" class="filter-form">
-              <el-form-item label="关键字">
-                <el-input
-                  v-model="keyword"
-                  placeholder="搜索邮箱 / 落地页地址"
-                  clearable
-                  class="google-input"
-                  style="width: 280px"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                >
-                  <template #prefix>
-                    <el-icon><Search /></el-icon>
-                  </template>
-                </el-input>
-              </el-form-item>
-            </el-form>
-          </div>
-          <div class="filter-actions">
-            <button class="google-btn google-btn-primary" @click="handleSearch">
-              <svg class="btn-icon" viewBox="0 0 24 24">
-                <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-              </svg>
-              <span>查询</span>
-            </button>
-            <button class="google-btn google-btn-secondary" @click="handleReset">
-              <svg class="btn-icon" viewBox="0 0 24 24">
-                <path d="M19 13H5v-2h14v2z"/>
-              </svg>
-              <span>重置</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- 邮箱表格 -->
       <div class="table-wrapper">
         <el-table
-          :data="pagedData"
+          :data="tableData"
           v-loading="loading"
           class="google-table"
           :border="false"
           :stripe="false"
         >
-          <el-table-column label="#" type="index" width="60" align="center" class-name="index-column">
+          <el-table-column label="序号" type="index" width="60" align="center" class-name="index-column">
             <template #default="scope">
               <span class="row-index">{{ indexMethod(scope.$index) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="邮箱" prop="email" min-width="220" show-overflow-tooltip>
+          <el-table-column label="邮箱" prop="email" min-width="100" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="email-text">{{ row.email || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="落地页地址" prop="lander_url" min-width="320" show-overflow-tooltip>
+          <el-table-column label="落地页地址" prop="lander_url" min-width="320">
             <template #default="{ row }">
               <span
                 v-if="row.lander_url"
-                rel="noopener noreferrer"
+                class="url-link"
+                @click="copyLanderUrl(row.lander_url)"
               >
                 {{ row.lander_url }}
               </span>
@@ -104,7 +66,7 @@
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :page-sizes="[20, 50, 100]"
-          :total="filteredTotal"
+          :total="total"
           layout="total, sizes, prev, pager, next"
           class="google-pagination"
           @size-change="handleSizeChange"
@@ -116,48 +78,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
 import { getEmailList } from '@/services/main/webpage/email-collect'
 
 const loading = ref(false)
 const tableData = ref([])
-const keyword = ref('')
+const total = ref(0)
 
-// 接口返回全量数据，前端做关键字过滤 + 分页
+// 服务端分页：page 从 1 开始，limit 为每页条数（接口上限 100）
 const pagination = reactive({
   page: 1,
   pageSize: 20
 })
 
-// 按关键字过滤后的数据
-const filteredData = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return tableData.value
-  return tableData.value.filter((item) => {
-    const email = (item.email || '').toLowerCase()
-    const url = (item.lander_url || '').toLowerCase()
-    return email.includes(kw) || url.includes(kw)
-  })
-})
-
-// 过滤后的总条数，驱动分页器
-const filteredTotal = computed(() => filteredData.value.length)
-
-// 当前分页展示的数据
-const pagedData = computed(() => {
-  const start = (pagination.page - 1) * pagination.pageSize
-  return filteredData.value.slice(start, start + pagination.pageSize)
-})
-
-// 关键字变化时回到第一页，避免停留在空页
-watch(keyword, () => {
-  pagination.page = 1
-})
-
 function indexMethod(index) {
-  return (pagination.page - 1) * pagination.pageSize + index + 1
+  // 序号倒序：最新一条序号最大（= 总数），向下递减到 1；邮箱数据顺序不变
+  return total.value - ((pagination.page - 1) * pagination.pageSize + index)
 }
 
 function formatDateTime(dateStr) {
@@ -168,14 +105,38 @@ function formatDateTime(dateStr) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
+// 点击复制落地页地址：优先用 Clipboard API，http 等非安全上下文下回退到 execCommand
+async function copyLanderUrl(url) {
+  if (!url) return
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = url
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+    ElMessage.success('落地页地址已复制')
+  } catch (error) {
+    ElMessage.error('复制失败: ' + (error?.message || '请手动复制'))
+  }
+}
+
 async function loadData() {
   loading.value = true
   try {
-    const result = await getEmailList()
-    // 接口返回结构: { count, list: [...], total }
-    const list = result?.list || []
-    tableData.value = list
-    pagination.page = 1
+    const result = await getEmailList({
+      page: pagination.page,
+      limit: pagination.pageSize
+    })
+    // 接口返回结构: { count, list, page, pages, size, total }
+    tableData.value = result?.list || []
+    total.value = result?.total ?? 0
   } catch (error) {
     ElMessage.error('加载邮箱数据失败: ' + (error?.message || '网络错误'))
   } finally {
@@ -183,21 +144,15 @@ async function loadData() {
   }
 }
 
-function handleSearch() {
+function handleSizeChange(size) {
+  pagination.pageSize = size
   pagination.page = 1
+  loadData()
 }
 
-function handleReset() {
-  keyword.value = ''
-  pagination.page = 1
-}
-
-function handleSizeChange() {
-  pagination.page = 1
-}
-
-function handleCurrentChange() {
-  // 翻页由 pagedData 自动计算
+function handleCurrentChange(page) {
+  pagination.page = page
+  loadData()
 }
 
 onMounted(() => {
@@ -464,10 +419,14 @@ onMounted(() => {
 
 
 .url-link {
+  display: block;
+  max-width: 100%;
   color: #1a73e8;
   font-size: 13px;
-  text-decoration: none;
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
 
   &:hover {
     text-decoration: underline;
