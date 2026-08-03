@@ -592,21 +592,27 @@ function getEntityColor(str) {
 }
 
 
-// 状态内置默认项：锁定，不允许重命名（代码多处依赖其字面值，如「未付款」筛选、已付款写确认日期等）
-const STATUS_DEFAULTS = ['【已付款】', '已收invoice', '可付款!']
+// 状态内置默认项：锁定，不允许重命名（数组顺序即下拉选项顺序；代码用 includes 匹配“已付款”/“可付款!”，不依赖完整字面值）
+const STATUS_DEFAULTS = ['0.已收Invoice', '1.已核对', '2.可付款!', '3.【已付款】']
 
 
 const statusColorMap = {
-  '【已付款】': { bg: '#4E81F5', text: '#fff' },
-  '已收invoice': { bg: '#C79819', text: '#fff' },
-  '可付款!': { bg: '#11A896', text: '#fff' },
+  // 新固定标签
+  '0.已收Invoice': { bg: '#D9A300', text: '#fff' }, // 黄
+  '1.已核对': { bg: '#4E81F5', text: '#fff' },      // 蓝
+  '2.可付款!': { bg: '#D93025', text: '#fff' },     // 红
+  '3.【已付款】': { bg: '#1E8E3E', text: '#fff' },   // 绿
+  // 旧标签兼容（历史数据未迁移时也按新配色显示）
+  '已收invoice': { bg: '#D9A300', text: '#fff' },
+  '可付款!': { bg: '#D93025', text: '#fff' },
+  '【已付款】': { bg: '#1E8E3E', text: '#fff' },
 }
 
 function getStatusColor(str) {
   if (!str) return { bg: '#f1f3f4', text: '#5f6368' }
   if (statusColorMap[str]) return statusColorMap[str]
 
-  if (str.includes('已付款')) return statusColorMap['【已付款】']
+  if (str.includes('已付款')) return statusColorMap['3.【已付款】']
 
   return getColor(str)
 }

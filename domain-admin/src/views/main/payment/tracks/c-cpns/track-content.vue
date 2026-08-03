@@ -71,8 +71,8 @@
           >未付款</button>
           <button
             class="filter-btn"
-            :class="{ active: searchPaymentStatus === '【已付款】' }"
-            @click="quickFilterPaymentStatus('【已付款】')"
+            :class="{ active: searchPaymentStatus === '3.【已付款】' }"
+            @click="quickFilterPaymentStatus('3.【已付款】')"
           >已付款</button>
         </div>
         <!-- 当前搜索条件（标签形式，点击 × 可移除） -->
@@ -422,7 +422,7 @@ const activeFilters = computed(() => {
     tags.push({ key: 'date_range', label: `日期：${s} 至 ${e}` })
   }
   if (searchPaymentStatus.value) {
-    const label = searchPaymentStatus.value === '【已付款】' ? '已付款' : searchPaymentStatus.value
+    const label = searchPaymentStatus.value === '3.【已付款】' ? '已付款' : searchPaymentStatus.value
     tags.push({ key: 'payment_status', label })
   }
   return tags
