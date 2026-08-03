@@ -666,7 +666,7 @@
 
           <div class="info-item">
             <label>结算总计</label>
-            <div class="content1 price-text">{{ "$" + clickedRowData.amount }}</div>
+            <div class="content1 price-text">{{ formatCurrency(clickedRowData.amount) }}</div>
           </div>
 
           <div class="info-item">
@@ -715,6 +715,7 @@ import { throttle } from 'lodash'
 import { storeToRefs } from 'pinia'
 import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import convertDateRange from '@/utils/convert-date-range'
+import formatCurrency from '@/utils/format-currency'
 
 
 const STORAGE_KEY = 'attachment_column_settings'

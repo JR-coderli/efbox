@@ -6,6 +6,7 @@ const Docxtemplater = require('docxtemplater')
 const util = require('util');
 const exec = util.promisify(require('child_process').exec)
 const { getMailConfig } = require('../utils/email-transporter')
+const formatCurrency = require('../utils/format-currency')
 const operationLogService = require('../service/operation-log.service')
 const { OUTPUT_BASE_URL } = require('../config/server')
 
@@ -183,8 +184,8 @@ class CusAttachmentsController {
         id: nextId || '',
         date: attachment.date || '',
         company_address: attachment.company_address || '',
-        items: attachment.items || [],
-        total_amount: attachment.totalAmount || '',
+        items: (attachment.items || []).map(item => ({ ...item, amount: formatCurrency(item.amount) })),
+        total_amount: formatCurrency(attachment.totalAmount),
 
         account_name: invoiceEntity.account_name || '',
         account_number: invoiceEntity.account_number || '',

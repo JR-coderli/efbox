@@ -130,8 +130,7 @@
                       <template #default="{ row }">
                         <el-input-number
                           v-model="row.amount"
-                          :min="0"
-                          placeholder="请输入金额"
+                          placeholder="请输入金额（可填负数）"
                           :controls="false"
                           class="google-number"
                         />
@@ -188,6 +187,7 @@
 import useSystemStore from '@/stores/main/system/system'
 import useLoginStore from '@/stores/login/login'
 import formatDateRange from '@/utils/format-date-range'
+import formatCurrency from '@/utils/format-currency'
 import getTodayStr from '@/utils/get-today-str'
 import { reactive, ref } from 'vue'
 
@@ -357,7 +357,7 @@ function getSummaries({ columns, data }) {
 
     if (column.property === "amount") {
       const total = data.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
-      sums[index] = `$ ${total.toFixed(2)}`
+      sums[index] = formatCurrency(total.toFixed(2))
       totalAmount = total.toFixed(2)
     } else {
       sums[index] = "" // 其他列为空

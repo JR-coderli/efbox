@@ -52,7 +52,7 @@
 
       <!-- 1.5 金额 -->
       <template #amount="{ amount }">
-        <div class="currency-amount">${{ amount }}</div>
+        <div class="currency-amount">{{ formatCurrency(amount) }}</div>
       </template>
 
       <!-- 2. 文件名 -->
@@ -140,7 +140,7 @@
             'diff-zero': Number(amount_received) - Number(amount) === 0
           }"
         >
-          ${{ (Number(amount_received) - Number(amount)).toFixed(2) }}
+          {{ formatCurrency((Number(amount_received) - Number(amount)).toFixed(2)) }}
         </div>
       </template>
 
@@ -235,6 +235,7 @@ import getTodayStr from '@/utils/get-today-str'
 import getNowTimestampStr from '@/utils/get-now-timestamp'
 import useSystemStore from '@/stores/main/system/system'
 import convertDateRange from '@/utils/convert-date-range'
+import formatCurrency from '@/utils/format-currency'
 import { storeToRefs } from 'pinia'
 const systemStore = useSystemStore()
 
