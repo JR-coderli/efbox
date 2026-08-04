@@ -3552,8 +3552,8 @@ onUnmounted(() => {
           transition: all 0.2s;
 
           .external-icon {
-            width: 14px;
-            height: 14px;
+            width: 15px;
+            height: 15px;
             fill: currentColor;
           }
 
