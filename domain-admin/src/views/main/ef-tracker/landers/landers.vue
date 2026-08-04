@@ -72,7 +72,7 @@
                   v-if="row.screenshot_url && row.screenshot_status === 'success'"
                   :src="getFullImageUrl(row.screenshot_url)"
                   :preview-src-list="[getFullImageUrl(row.screenshot_url)]"
-                  fit="contain"
+                  fit="cover"
                   preview-teleported
                   hide-on-click-modal
                   class="shot-img"
@@ -559,7 +559,7 @@ onMounted(() => {
 .shot-wrap {
   position: relative;
   width: 100%;
-  height: 220px;
+  height: 230px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -568,14 +568,14 @@ onMounted(() => {
 }
 
 .shot-img {
-  width: 100%;
+  width: 85%;
   height: 100%;
   border-radius: 4px;
   border: 1px solid #e8eaed;
 }
 
 .shot-empty {
-  width: 100%;
+  width: 85%;
   height: 100%;
   display: flex;
   align-items: center;
