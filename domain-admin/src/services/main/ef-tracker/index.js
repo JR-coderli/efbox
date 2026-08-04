@@ -1,4 +1,5 @@
 import axios from 'axios'
+import hyRequest from '@/services/request'
 
 // ef-tracker 数据来自外部系统的 query 只读接口，不经过 domain-admin 后端，这里单独创建 axios 实例。
 // host 统一：https://s3.rapidsupplys.com
@@ -70,3 +71,47 @@ export async function getConversions(params = {}) {
 export function getLanders(params = {}) {
   return query('/query/landers', params)
 }
+
+// ============================================================
+// 以下走本地 domain-admin 后端（hyRequest），用于 ef-归因系统 落地页截图（方案 B）
+// 与上面的 /query 外部接口无关，互不影响。
+// ============================================================
+
+/**
+ * 批量按 lander id 取已缓存的截图（列表展示用）
+ * @param {number[]} landerIds  当前页所有 lander 的 id
+ * @returns { code, data: { [lander_id]: { screenshot_url, screenshot_status } } }
+ */
+export function getEfLanderScreenshots(landerIds = []) {
+  return hyRequest.post({
+    url: '/ef-lander/screenshots/batch',
+    data: { lander_ids: landerIds }
+  })
+}
+
+/**
+ * 触发单个 lander 截图（手动按钮，后端同步等待 puppeteer 完成）
+ * @param {number} landerId   ab_landers 的 id
+ * @param {string} landerUrl  ab_landers 的 url（裸 url，签名由后端拼）
+ * @returns { code, data: { screenshot_url } }
+ */
+export function triggerEfLanderScreenshot(landerId, landerUrl) {
+  return hyRequest.post({
+    url: '/ef-lander/screenshot',
+    data: { lander_id: landerId, lander_url: landerUrl },
+    timeout: 60000 // puppeteer 截图较慢，给 60s
+  })
+}
+
+/**
+ * 手动上传截图（覆盖现有截图）
+ * @param {FormData} formData  含字段：screenshot(文件)、lander_id、lander_url
+ */
+export function uploadEfLanderScreenshot(formData) {
+  return hyRequest.post({
+    url: '/ef-lander/screenshot/upload',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+

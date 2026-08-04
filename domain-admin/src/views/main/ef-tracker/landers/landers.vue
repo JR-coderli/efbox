@@ -65,6 +65,46 @@
       <!-- 表格 -->
       <div class="table-wrapper">
         <el-table :data="tableData" v-loading="loading" class="google-table" :border="false">
+          <el-table-column label="截图" width="200" align="center">
+            <template #default="{ row }">
+              <div class="shot-wrap">
+                <el-image
+                  v-if="row.screenshot_url && row.screenshot_status === 'success'"
+                  :src="getFullImageUrl(row.screenshot_url)"
+                  :preview-src-list="[getFullImageUrl(row.screenshot_url)]"
+                  fit="contain"
+                  preview-teleported
+                  hide-on-click-modal
+                  class="shot-img"
+                />
+                <div v-else class="shot-empty">
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :loading="!!shotLoading[row.id]"
+                    @click="handleScreenshot(row)"
+                  >
+                    {{ row.screenshot_status === 'failed' ? '重试截图' : '截图' }}
+                  </el-button>
+                </div>
+                <button
+                  v-if="row.screenshot_url && row.screenshot_status === 'success'"
+                  class="shot-upload-btn"
+                  :disabled="!!uploadLoading[row.id]"
+                  :title="uploadLoading[row.id] ? '上传中...' : '手动上传截图'"
+                  @click.stop="triggerUpload(row)"
+                >
+                  <svg v-if="!uploadLoading[row.id]" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
+                  </svg>
+                  <svg v-else class="shot-spin" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                  </svg>
+                </button>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="ID" prop="id" width="80" align="center" />
           <el-table-column label="name" prop="name" min-width="160" show-overflow-tooltip />
           <el-table-column label="url" prop="url" min-width="280" show-overflow-tooltip />
@@ -114,7 +154,8 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getLanders } from '@/services/main/ef-tracker'
+import { getLanders, getEfLanderScreenshots, triggerEfLanderScreenshot, uploadEfLanderScreenshot } from '@/services/main/ef-tracker'
+import { BASE_URL } from '@/services/request/config'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -145,6 +186,97 @@ const filters = reactive({
 })
 
 const dateRange = ref([])
+
+// 截图按钮的 per-row loading 状态：{ [lander_id]: true/false }
+const shotLoading = reactive({})
+
+// 上传按钮的 per-row loading 状态
+const uploadLoading = reactive({})
+
+// 拼接截图完整 URL（截图存在本地 domain-api 的 /uploads 下，与外部 /query 无关）
+function getFullImageUrl(url) {
+  if (!url) return ''
+  return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
+}
+
+// 列表加载后，按当前页 lander id 批量取已缓存的截图，合并到行上
+async function fetchScreenshots() {
+  const ids = tableData.value.map((r) => r.id)
+  if (ids.length === 0) return
+  try {
+    const res = await getEfLanderScreenshots(ids)
+    const map = res?.data || {}
+    tableData.value.forEach((r) => {
+      const s = map[r.id]
+      if (s) {
+        r.screenshot_url = s.screenshot_url
+        r.screenshot_status = s.screenshot_status
+      }
+    })
+  } catch (e) {
+    // 取截图失败不阻塞列表展示
+  }
+}
+
+// 手动触发单行截图（成功后原地刷新预览图）
+async function handleScreenshot(row) {
+  if (!row?.url) {
+    ElMessage.warning('该落地页没有 url，无法截图')
+    return
+  }
+  shotLoading[row.id] = true
+  try {
+    const res = await triggerEfLanderScreenshot(row.id, row.url)
+    if (res?.code === 0 && res.data?.screenshot_url) {
+      row.screenshot_url = res.data.screenshot_url
+      row.screenshot_status = 'success'
+      ElMessage.success('截图成功')
+    } else {
+      row.screenshot_status = 'failed'
+      ElMessage.error(res?.message || '截图失败')
+    }
+  } catch (error) {
+    row.screenshot_status = 'failed'
+    ElMessage.error('截图失败: ' + (error?.message || '网络错误'))
+  } finally {
+    shotLoading[row.id] = false
+  }
+}
+
+// 手动上传截图（点击预览图右上角按钮，弹文件选择）
+function triggerUpload(row) {
+  if (!row?.id) return
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/jpeg,image/png,image/gif,image/webp'
+  input.onchange = async () => {
+    const file = input.files && input.files[0]
+    if (file) await uploadScreenshot(row, file)
+  }
+  input.click()
+}
+
+async function uploadScreenshot(row, file) {
+  uploadLoading[row.id] = true
+  try {
+    const formData = new FormData()
+    formData.append('screenshot', file)
+    formData.append('lander_id', row.id)
+    formData.append('lander_url', row.url || '')
+    const res = await uploadEfLanderScreenshot(formData)
+    if (res?.code === 0 && res.data?.screenshot_url) {
+      row.screenshot_url = res.data.screenshot_url
+      row.screenshot_status = 'success'
+      ElMessage.success('上传成功')
+    } else {
+      ElMessage.error(res?.message || '上传失败')
+    }
+  } catch (error) {
+    ElMessage.error('上传失败: ' + (error?.message || '网络错误'))
+  } finally {
+    uploadLoading[row.id] = false
+  }
+}
 
 function fmtTime(s) {
   if (!s) return '-'
@@ -180,6 +312,7 @@ async function loadData() {
     const result = await getLanders(buildParams())
     tableData.value = result?.list || []
     total.value = result?.total ?? 0
+    await fetchScreenshots()
   } catch (error) {
     ElMessage.error('加载失败: ' + (error?.response?.data?.error || error?.message || '网络错误'))
   } finally {
@@ -402,8 +535,8 @@ onMounted(() => {
       td {
         color: #202124;
         font-size: 13px;
-        height: 48px;
         padding: 0 14px;
+        vertical-align: middle;
 
         .cell {
           padding: 0;
@@ -421,6 +554,67 @@ onMounted(() => {
 .date-text {
   color: #5f6368;
   font-size: 13px;
+}
+
+.shot-wrap {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.shot-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  border: 1px solid #e8eaed;
+}
+
+.shot-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e8eaed;
+}
+
+.shot-upload-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+
+  &:hover:not(:disabled) {
+    background: rgba(26, 115, 232, 0.9);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.shot-spin {
+  animation: btn-spin 0.8s linear infinite;
 }
 
 .pagination-wrapper {
@@ -469,6 +663,15 @@ onMounted(() => {
       color: #5f6368;
       font-size: 13px;
     }
+  }
+}
+</style>
+
+<style>
+.el-image-viewer__canvas {
+  .el-image-viewer__img {
+    max-width: 65vw !important;
+    max-height: 75vh !important;
   }
 }
 </style>
