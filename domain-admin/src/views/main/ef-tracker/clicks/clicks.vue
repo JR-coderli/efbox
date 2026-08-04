@@ -73,7 +73,7 @@
 
       <!-- 表格 -->
       <div class="table-wrapper">
-        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false">
+        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :tooltip-options="{ popperClass: 'clicks-overflow-tooltip' }">
           <el-table-column label="ID" prop="id" width="80" align="center" />
           <el-table-column label="创建时间" prop="created_at" width="200">
             <template #default="{ row }">
@@ -489,5 +489,13 @@ onMounted(() => {
       font-size: 13px;
     }
   }
+}
+</style>
+
+<style>
+/* el-table 溢出 tooltip（已传送到 body，scoped 选不中）：限制最大宽度，避免 lander_url 等长文本超出屏幕 */
+.clicks-overflow-tooltip {
+  max-width: 400px;
+  word-break: break-all;
 }
 </style>

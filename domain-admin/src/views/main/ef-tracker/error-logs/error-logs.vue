@@ -67,7 +67,7 @@
 
       <!-- 表格 -->
       <div class="table-wrapper">
-        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false">
+        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :tooltip-options="{ popperClass: 'error-logs-overflow-tooltip' }">
           <el-table-column label="ID" prop="id" width="80" align="center" />
           <el-table-column label="error_code" prop="error_code" width="120" show-overflow-tooltip />
           <el-table-column label="http状态" prop="http_status" width="90" align="center" />
@@ -469,5 +469,13 @@ onMounted(() => {
       font-size: 13px;
     }
   }
+}
+</style>
+
+<style>
+/* el-table 溢出 tooltip（已传送到 body，scoped 选不中）：限制最大宽度，避免 request_url 等长文本超出屏幕 */
+.error-logs-overflow-tooltip {
+  max-width: 400px;
+  word-break: break-all;
 }
 </style>

@@ -64,7 +64,7 @@
 
       <!-- 表格 -->
       <div class="table-wrapper">
-        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false">
+        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :tooltip-options="{ popperClass: 'lp-visit-overflow-tooltip' }">
           <el-table-column label="ID" prop="id" width="80" align="center" />
           <el-table-column label="system_click_id" prop="system_click_id" min-width="200" show-overflow-tooltip />
           <el-table-column label="media_click_id" prop="media_click_id" min-width="160" show-overflow-tooltip />
@@ -460,5 +460,13 @@ onMounted(() => {
       font-size: 13px;
     }
   }
+}
+</style>
+
+<style>
+/* el-table 溢出 tooltip（已传送到 body，scoped 选不中）：限制最大宽度，避免 user_agent 等长文本超出屏幕 */
+.lp-visit-overflow-tooltip {
+  max-width: 400px;
+  word-break: break-all;
 }
 </style>
