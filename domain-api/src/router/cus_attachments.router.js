@@ -1,6 +1,6 @@
 const KoaRouter = require('@koa/router')
 const { verifyAuth } = require('../middleware/login.middleware')
-const { create, remove, update, list, attalist, customerList, generateInvoice, sendEmail } = require('../controller/cus_attachments.controller')
+const { create, remove, update, list, attalist, customerList, generateInvoice, sendEmail, updateRemark } = require('../controller/cus_attachments.controller')
 
 
 const cusAttachmentsRouter = new KoaRouter({ prefix: '/cus_attachments' })
@@ -20,6 +20,9 @@ cusAttachmentsRouter.post('/customers', verifyAuth, customerList) // 所有客�
 cusAttachmentsRouter.post('/generate', verifyAuth, generateInvoice)
 
 cusAttachmentsRouter.post('/send-email', verifyAuth, sendEmail)
+
+// 独立接口：更新备注（双击单元格编辑）
+cusAttachmentsRouter.patch('/remark/:cusAttachmentId', verifyAuth, updateRemark)
 
 
 module.exports = cusAttachmentsRouter

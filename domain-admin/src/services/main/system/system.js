@@ -73,6 +73,14 @@ export function editCustomerRemark(id, remarkInfo) {
 }
 
 
+export function editAttachmentRemark(id, remarkInfo) {
+  return hyRequest.patch({
+    url: `/cus_attachments/remark/${id}`,
+    data: remarkInfo
+  })
+}
+
+
 export function editCustomerPayDay(id, dayInfo) {
   return hyRequest.patch({
     url: `/customers/pay_cycle_days/${id}`,

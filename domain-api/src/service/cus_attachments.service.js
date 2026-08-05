@@ -217,6 +217,7 @@ class CusAttachmentsService {
     let sql = `
       SELECT
         ca.id AS attachment_id,
+        ca.remark,
         ca.amount,
         ca.period,
         ca.filename,
@@ -393,6 +394,7 @@ class CusAttachmentsService {
       const formatted = rows.map(item => {
         return {
           id: item.attachment_id,
+          remark: item.remark,
           amount: item.amount,
           period: item.period,
           filename: item.filename,
@@ -442,6 +444,17 @@ class CusAttachmentsService {
 
     const [rows] = await connection.execute(sql, params)
     return rows
+  }
+
+  // 独立接口：更新备注（双击编辑用，与通用 update 分离）
+  // 注意：实际表名是 customer_attachments（cus_attachments 只是路由前缀）
+  async updateRemark(id, remark) {
+    const statement = `
+      UPDATE customer_attachments
+      SET remark = ?
+      WHERE id = ?;
+    `
+    await connection.execute(statement, [remark, id])
   }
 }
 

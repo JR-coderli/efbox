@@ -25,6 +25,26 @@
         {{ reverse_index !== undefined ? reverse_index : (pageAllCount - (allQueryInfo.page - 1) * allQueryInfo.pageSize - $index) }}
       </template>
 
+      <!-- 备注（双击编辑；悬浮提示「双击编辑」；编辑框在组件根 teleport，风格对齐付款追踪） -->
+      <template #remark="scope">
+        <el-tooltip
+          v-if="editingRemarkId !== scope.id"
+          content="双击编辑"
+          placement="top"
+          effect="dark"
+          :show-after="200"
+        >
+          <div
+            class="remark-display"
+            :class="{ 'remark-empty': !scope.remark }"
+            @dblclick="startRemarkEdit($event, scope.id, scope.remark || '')"
+          >
+            <span v-if="scope.remark">{{ scope.remark }}</span>
+            <span v-else>+ 添加备注</span>
+          </div>
+        </el-tooltip>
+      </template>
+
       <!-- 1. 周期 -->
       <template #period="{ period }">
         <div>{{ convertDateRange(period) }}</div>
@@ -218,6 +238,22 @@
         </el-select>
       </template>
     </attachment-modal>
+
+    <!-- 备注行内编辑（teleport 到 body，风格对齐付款追踪） -->
+    <teleport to="body">
+      <div v-if="editingRemarkId !== null" class="inline-edit-overlay" @mousedown="saveRemarkEdit">
+        <div class="inline-edit-wrapper" :style="remarkEditStyle" @mousedown.stop>
+          <textarea
+            v-model="remarkText"
+            ref="remarkInputRef"
+            class="inline-edit-textarea"
+            placeholder="请输入备注..."
+            @input="autoResizeRemark"
+            @keydown.esc.prevent="cancelRemarkEdit"
+          />
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -234,6 +270,7 @@ import useLoginStore from '@/stores/login/login'
 import getTodayStr from '@/utils/get-today-str'
 import getNowTimestampStr from '@/utils/get-now-timestamp'
 import useSystemStore from '@/stores/main/system/system'
+import { editAttachmentRemark } from '@/services/main/system/system'
 import convertDateRange from '@/utils/convert-date-range'
 import formatCurrency from '@/utils/format-currency'
 import { storeToRefs } from 'pinia'
@@ -283,6 +320,11 @@ const editText = ref(0) // 收款金额输入框中输入的内容
 const inputRef = ref(null) // input输入框元素
 const inputPosition = ref({ top: '0px', left: '0px' }) // 输入框位置
 const amountInitialValue = ref(0) // 记录收款金额的初始金额
+const editingRemarkId = ref(null) // 当前正在编辑备注的行id
+const remarkText = ref('') // 备注输入框内容
+const remarkInitialValue = ref('') // 备注初始值（判断是否变化）
+const remarkInputRef = ref(null) // 备注输入框元素（原生 textarea）
+const remarkEditStyle = ref({}) // 备注输入框定位样式（对齐单元格）
 const tableShowLoading = ref(false) // 表格显示加载动画?
 let searchTimer = null // 记录定时器
 
@@ -576,6 +618,78 @@ function saveEdit(id) {
 }
 
 
+// 备注：双击编辑（走独立接口 editAttachmentRemark，风格对齐付款追踪）
+function startRemarkEdit(event, id, startValue) {
+  const cellEl = event.currentTarget
+  const cellRect = cellEl.getBoundingClientRect()
+
+  remarkInitialValue.value = startValue || ''
+  editingRemarkId.value = id
+  remarkText.value = startValue || ''
+
+  remarkEditStyle.value = {
+    position: 'absolute',
+    left: `${cellRect.left}px`,
+    top: `${cellRect.top - 1}px`,
+    minWidth: `${cellRect.width + 2}px`,
+    minHeight: `${cellRect.height + 2}px`
+  }
+
+  nextTick(() => {
+    const ta = remarkInputRef.value
+    if (ta) {
+      ta.focus()
+      ta.style.height = 'auto'
+      ta.style.height = `${Math.max(cellRect.height, ta.scrollHeight)}px`
+    }
+  })
+}
+
+function autoResizeRemark() {
+  const ta = remarkInputRef.value
+  if (!ta) return
+  ta.style.height = 'auto'
+  ta.style.height = `${Math.max(30, ta.scrollHeight)}px`
+}
+
+function cancelRemarkEdit() {
+  editingRemarkId.value = null
+  remarkText.value = ''
+  remarkInitialValue.value = ''
+  remarkEditStyle.value = {}
+}
+
+async function saveRemarkEdit() {
+  const id = editingRemarkId.value
+  const finalValue = remarkText.value ?? ''
+  const changed = finalValue !== remarkInitialValue.value
+
+  editingRemarkId.value = null
+  remarkText.value = ''
+  remarkInitialValue.value = ''
+  remarkEditStyle.value = {}
+
+  if (id === null || !changed) return
+
+  const isGroupView = attachmentContentRef.value?.groupBy !== 'merged'
+  const queryInfo = {
+    ...allQueryInfo.value,
+    ...(isGroupView ? { page: 1, pageSize: 10000 } : {}),
+    role_name: loginStore.userInfo.role.name || '',
+    user_id: loginStore.userInfo.id
+  }
+
+  try {
+    await editAttachmentRemark(id, { remark: finalValue })
+    ElMessage.success('备注已更新')
+    systemStore.postPageListAction('cus_attachments', queryInfo, 'attalist')
+  } catch (e) {
+    ElMessage.error('备注更新失败')
+    systemStore.postPageListAction('cus_attachments', queryInfo, 'attalist')
+  }
+}
+
+
 function handleConfirm(scope, type) {
 
   const isGroupView = attachmentContentRef.value?.groupBy !== 'merged'
@@ -617,6 +731,12 @@ function handleTableScroll() {
     editingRowId.value = null
     editText.value = 0
     amountInitialValue.value = 0
+  }
+  if (editingRemarkId.value !== null) {
+    editingRemarkId.value = null
+    remarkText.value = ''
+    remarkInitialValue.value = ''
+    remarkEditStyle.value = {}
   }
 }
 
@@ -670,6 +790,72 @@ onUnmounted(() => {
     border-color: #1a73e8;
     background-color: #f0f5ff;
   }
+}
+
+
+.remark-display {
+  cursor: text;
+  width: 100%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s, background-color 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+
+  &:hover {
+    border-color: #1a73e8;
+    background-color: #f0f5ff;
+  }
+}
+
+.remark-empty {
+  color: #bdc1c6;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.remark-input-wrapper {
+  .edit-input-number {
+    width: 240px;
+  }
+}
+
+
+/* 备注行内编辑（与付款追踪同风格：全屏遮罩 + 定位 wrapper + 原生 textarea） */
+.inline-edit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+}
+
+.inline-edit-wrapper {
+  box-sizing: border-box;
+  background: #fff !important;
+  border: 2px solid #1a73e8;
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(26, 115, 232, 0.15);
+  overflow: visible;
+  padding: 0;
+}
+
+.inline-edit-textarea {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: none;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  color: #202124;
+  word-break: break-all;
+  background: #fff !important;
+  box-sizing: border-box;
 }
 
 
@@ -943,5 +1129,14 @@ onUnmounted(() => {
 
 :deep(.el-autocomplete-suggestion__wrap) {
   max-height: 264px !important;
+}
+</style>
+
+<style lang="less">
+/* 备注悬浮提示：保留换行（tooltip 传送到 body，需放全局） */
+.remark-tooltip {
+  white-space: pre-wrap !important;
+  max-width: 320px !important;
+  line-height: 1.6;
 }
 </style>

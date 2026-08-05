@@ -18,6 +18,14 @@ const contentConfig = {
     },
 
     {
+      type: 'custom',
+      slotName: 'remark',
+      label: '备注',
+      prop: 'remark',
+      width: '200'
+    },
+
+    {
       label: 'ID',
       prop: 'id',
       width: '60',

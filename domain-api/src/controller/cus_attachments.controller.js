@@ -388,6 +388,29 @@ class CusAttachmentsController {
     }
   }
 
+  // 独立接口：更新备注（双击单元格编辑）
+  async updateRemark(ctx, next) {
+    const { cusAttachmentId } = ctx.params
+    const { remark } = ctx.request.body
+
+    await customerService.updateRemark(cusAttachmentId, remark)
+
+    operationLogService.log(
+      ctx.user.id,
+      ctx.user.name,
+      'invoice',
+      'update',
+      `修改发票备注 attachmentId: ${cusAttachmentId}`,
+      null,
+      { remark }
+    )
+
+    ctx.body = {
+      code: 0,
+      message: '备注已更新'
+    }
+  }
+
 
 }
 
