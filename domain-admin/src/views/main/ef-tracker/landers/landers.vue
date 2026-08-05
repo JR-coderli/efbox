@@ -43,7 +43,10 @@
           </div>
         </div>
         <div class="toolbar-actions">
-          <el-button class="icon-btn" :icon="Refresh" circle title="刷新" :disabled="loading" @click="loadData" />
+          <el-button class="icon-btn" circle :title="refreshCountdown > 0 ? `${refreshCountdown}s 后可刷新` : '刷新'" :disabled="loading || refreshCountdown > 0" @click="handleRefresh">
+            <span v-if="refreshCountdown > 0">{{ refreshCountdown }}</span>
+            <el-icon v-else><Refresh /></el-icon>
+          </el-button>
           <!-- 列设置 -->
           <el-dropdown trigger="click" :hide-on-click="false">
             <el-button class="icon-btn" :icon="Setting" circle title="列设置" />
@@ -184,7 +187,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Setting } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
@@ -430,6 +433,29 @@ function handleCurrentChange(page) {
 
 onMounted(() => {
   loadData()
+})
+
+// 刷新按钮 5 秒倒计时（点击后禁用，防止频繁刷新）
+const refreshCountdown = ref(0)
+let refreshTimer = null
+
+function handleRefresh() {
+  if (refreshCountdown.value > 0) return
+  loadData()
+  refreshCountdown.value = 5
+  clearInterval(refreshTimer)
+  refreshTimer = setInterval(() => {
+    refreshCountdown.value--
+    if (refreshCountdown.value <= 0) {
+      clearInterval(refreshTimer)
+      refreshTimer = null
+    }
+  }, 1000)
+}
+
+onUnmounted(() => {
+  clearInterval(refreshTimer)
+  refreshTimer = null
 })
 </script>
 
