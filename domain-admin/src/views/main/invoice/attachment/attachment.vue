@@ -25,24 +25,30 @@
         {{ reverse_index !== undefined ? reverse_index : (pageAllCount - (allQueryInfo.page - 1) * allQueryInfo.pageSize - $index) }}
       </template>
 
-      <!-- 备注（双击编辑；悬浮提示「双击编辑」；编辑框在组件根 teleport，风格对齐付款追踪） -->
+      <!-- 备注（双击编辑） -->
       <template #remark="scope">
+        <!-- 有备注：悬浮弹出面板显示完整备注（支持换行） -->
         <el-tooltip
-          v-if="editingRemarkId !== scope.id"
-          content="双击编辑"
+          v-if="editingRemarkId !== scope.id && scope.remark"
+          :content="scope.remark"
           placement="top"
           effect="dark"
           :show-after="200"
+          popper-class="remark-tooltip"
         >
-          <div
-            class="remark-display"
-            :class="{ 'remark-empty': !scope.remark }"
-            @dblclick="startRemarkEdit($event, scope.id, scope.remark || '')"
-          >
-            <span v-if="scope.remark">{{ scope.remark }}</span>
-            <span v-else>+ 添加备注</span>
+          <div class="remark-display" @dblclick="startRemarkEdit($event, scope.id, scope.remark)">
+            {{ scope.remark }}
           </div>
         </el-tooltip>
+        <!-- 无备注：不弹面板，悬浮时单元格内文字由「+ 添加备注」变为「双击编辑」 -->
+        <div
+          v-else-if="editingRemarkId !== scope.id"
+          class="remark-display remark-empty"
+          @dblclick="startRemarkEdit($event, scope.id, '')"
+        >
+          <span class="ph-default">+ 添加备注</span>
+          <span class="ph-hover">双击编辑</span>
+        </div>
       </template>
 
       <!-- 1. 周期 -->
@@ -815,6 +821,14 @@ onUnmounted(() => {
   color: #bdc1c6;
   font-size: 12px;
   font-style: italic;
+
+  .ph-default { display: inline; }
+  .ph-hover { display: none; }
+
+  &:hover {
+    .ph-default { display: none; }
+    .ph-hover { display: inline; color: #1a73e8; }
+  }
 }
 
 .remark-input-wrapper {
