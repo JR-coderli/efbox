@@ -7,6 +7,14 @@
         <p class="page-subtitle">system_clicks · 媒体/系统点击流水</p>
       </div>
       <div class="header-actions">
+        <button
+          class="google-btn"
+          :class="uniqueOnly ? 'google-btn-primary' : 'google-btn-secondary'"
+          @click="toggleUnique"
+          title="按 media_click_id 去重，仅保留最新一条"
+        >
+          <span>{{ uniqueOnly ? '已去重' : '去重' }}</span>
+        </button>
         <button class="google-btn google-btn-secondary" @click="handleRefresh" :disabled="loading || refreshCountdown > 0">
           <svg class="btn-icon" :class="{ 'is-loading': loading }" viewBox="0 0 24 24">
             <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
@@ -207,6 +215,7 @@ function buildParams() {
   if (filters.lid) p.lid = filters.lid
   if (filters.path_code) p.path_code = filters.path_code
   p.with_names = true // 返回 mid/tid/oid/lid 对应的名称（names 字段）
+  if (uniqueOnly.value) p.unique = true // 去重：按 media_click_id 只保留最新一条
   Object.assign(p, rangeToParams(dateRange.value))
   return p
 }
@@ -279,6 +288,15 @@ onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
 })
+
+// 去重开关：按 media_click_id 只保留最新一条（unique=true）。分页时保留选中状态
+const uniqueOnly = ref(false)
+
+function toggleUnique() {
+  uniqueOnly.value = !uniqueOnly.value
+  pagination.page = 1
+  loadData()
+}
 </script>
 
 <style lang="less" scoped>
