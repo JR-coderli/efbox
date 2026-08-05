@@ -25,7 +25,7 @@
     <!-- 归因流程图 -->
     <div class="chart-card" v-loading="loading">
       <div class="chart-scroll">
-        <div class="chart-wrap">
+        <div class="chart-wrap" :class="{ compact: isCompact }">
           <div ref="chartRef" class="chart"></div>
           <!-- HTML 节点卡片层（覆盖在 echarts 流线上） -->
           <div class="cards-overlay">
@@ -46,12 +46,12 @@
           </div>
         </div>
       </div>
-      <div class="legend">
+      <!-- <div class="legend">
         <span class="legend-item"><i class="dot blue"></i>点击 / 访问 / 进 Offer</span>
         <span class="legend-item"><i class="dot green"></i>转化</span>
         <span class="legend-item"><i class="dot orange"></i>回传媒体</span>
         <span class="legend-tip">流动光点表示数据流向，点击节点可查看明细</span>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>
@@ -96,22 +96,45 @@ const counts = reactive({
   postback: '-'
 })
 
+const isCompact = ref(false) // 窄屏（移动端 / 小窗口）→ 圆环布局
+
+function detectMode() {
+  const scroll = chartRef.value?.parentElement?.parentElement
+  if (!scroll) return
+  isCompact.value = scroll.clientWidth > 0 && scroll.clientWidth < 720
+}
+
 const Y = 50 // 节点所在 y（与 echarts 连线一致）
 
 // 节点（HTML 卡片）：图标统一谷歌蓝，数字按阶段色
-const nodes = computed(() => [
-  { name: '媒体点击',      icon: 'Pointer',      color: '#1a73e8', value: counts.clicks,     hint: '广告点击进站', coord: [9, Y],  route: '/main/ef-tracker/clicks' },
-  { name: 'LP访问',        icon: 'Monitor',      color: '#1a73e8', value: counts.lpVisit,    hint: '落地页访问',   coord: [29, Y], route: '/main/ef-tracker/lp-visit-logs' },
-  { name: 'LP点击进Offer', icon: 'Sell',         color: '#1a73e8', value: counts.lpClick,    hint: '点击进 Offer', coord: [50, Y], route: '/main/ef-tracker/lp-clicks' },
-  { name: '转化',          icon: 'ShoppingCart', color: '#1e8e3e', value: counts.conversion, hint: '购买 / 转化',  coord: [71, Y], route: '/main/ef-tracker/conversions' },
-  { name: '媒体回传',      icon: 'Promotion',    color: '#e8710a', value: counts.postback,   hint: '回传媒体',     coord: [91, Y], route: '/main/ef-tracker/conversions' }
-])
+// 宽屏横向排；窄屏排成圆环
+const nodes = computed(() => {
+  const defs = [
+    { name: '媒体点击', icon: 'Pointer', color: '#1a73e8', value: counts.clicks, hint: '广告点击进站', route: '/main/ef-tracker/clicks' },
+    { name: 'LP访问', icon: 'Monitor', color: '#1a73e8', value: counts.lpVisit, hint: '落地页访问', route: '/main/ef-tracker/lp-visit-logs' },
+    { name: 'LP点击进Offer', icon: 'Sell', color: '#1a73e8', value: counts.lpClick, hint: '点击进 Offer', route: '/main/ef-tracker/lp-clicks' },
+    { name: '转化', icon: 'ShoppingCart', color: '#1e8e3e', value: counts.conversion, hint: '购买 / 转化', route: '/main/ef-tracker/conversions' },
+    { name: '媒体回传', icon: 'Promotion', color: '#e8710a', value: counts.postback, hint: '回传媒体', route: '/main/ef-tracker/conversions' }
+  ]
+  if (isCompact.value) {
+    // 圆环：72° 等分，顶部起始顺时针
+    const R = 35, cx = 50, cy = 50
+    return defs.map((d, i) => {
+      const a = (-90 + i * 72) * Math.PI / 180
+      return { ...d, coord: [cx + R * Math.cos(a), cy + R * Math.sin(a)] }
+    })
+  }
+  // 横向
+  const xs = [9, 29, 50, 71, 91]
+  return defs.map((d, i) => ({ ...d, coord: [xs[i], Y] }))
+})
 
 // 节点像素坐标（由 echarts convertToPixel 计算，resize 时重算）
 const nodePos = ref([])
 
 function layoutNodes() {
   if (!chart) return
+  chart.resize() // 先同步 echarts 画布到当前容器实际尺寸，再算像素坐标
   nodePos.value = nodes.value.map((n) => {
     const p = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [n.coord[0], n.coord[1]])
     return { left: p[0], top: p[1] }
@@ -176,6 +199,36 @@ async function fetchCounts() {
 
 function renderChart() {
   if (!chart) return
+
+  // 窄屏：圆环布局（5 卡片围圈，流动光点沿圆环绕）
+  if (isCompact.value) {
+    const R = 35, cx = 50, cy = 50
+    const ring = []
+    for (let i = 0; i <= 60; i++) {
+      const a = (i / 60) * 2 * Math.PI - Math.PI / 2
+      ring.push([cx + R * Math.cos(a), cy + R * Math.sin(a)])
+    }
+    chart.setOption({
+      grid: { top: 10, bottom: 10, left: 10, right: 10, containLabel: false },
+      xAxis: { type: 'value', min: 0, max: 100, show: false },
+      yAxis: { type: 'value', min: 0, max: 100, show: false },
+      series: [{
+        name: 'ring',
+        type: 'lines',
+        coordinateSystem: 'cartesian2d',
+        polyline: true,
+        symbol: ['none', 'none'],
+        data: [{ coords: ring }],
+        lineStyle: { color: '#1a73e8', width: 3, opacity: 0.4, cap: 'round' },
+        effect: { show: true, period: 6, trailLength: 0.4, symbol: 'circle', symbolSize: 12, color: '#1a73e8' },
+        zlevel: 1
+      }]
+    }, true)
+    layoutNodes()
+    return
+  }
+
+  // 宽屏：横向布局
   const BLUE = '#1a73e8'
   const GREEN = '#1e8e3e'
   const ORANGE = '#e8710a'
@@ -220,13 +273,21 @@ function renderChart() {
 
 function onResize() {
   if (!chart) return
-  chart.resize()
-  layoutNodes()
+  const was = isCompact.value
+  detectMode()
+  if (isCompact.value !== was) {
+    nextTick(() => renderChart()) // 等 CSS 切换生效后再重绘
+  } else {
+    chart.resize()
+    layoutNodes()
+  }
 }
 
 onMounted(async () => {
   await nextTick()
   chart = echarts.init(chartRef.value)
+  detectMode()
+  await nextTick() // 等 .compact CSS 生效、chart-wrap 完成重排后再初始化
   window.addEventListener('resize', onResize)
   fetchCounts()
 })
@@ -309,6 +370,14 @@ onBeforeUnmount(() => {
   min-height: 360px;
 }
 
+/* 窄屏（移动端 / 小窗口）：圆环布局，正方形 */
+.chart-wrap.compact {
+  min-width: 0;
+  aspect-ratio: 1;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
 .chart {
   position: absolute;
   inset: 0;
@@ -342,6 +411,33 @@ onBeforeUnmount(() => {
     border-color: #dadce0;
     transform: translate(-50%, -50%) scale(1.05);
   }
+}
+
+/* 圆环模式下卡片缩小 */
+.chart-wrap.compact .node-card {
+  width: 108px;
+  padding: 8px 6px;
+}
+
+.chart-wrap.compact .nc-chip {
+  width: 28px;
+  height: 28px;
+
+  .el-icon {
+    font-size: 16px;
+  }
+}
+
+.chart-wrap.compact .nc-value {
+  font-size: 19px;
+}
+
+.chart-wrap.compact .nc-name {
+  font-size: 12px;
+}
+
+.chart-wrap.compact .nc-hint {
+  font-size: 10px;
 }
 
 .nc-head {
@@ -389,7 +485,8 @@ onBeforeUnmount(() => {
 .legend {
   display: flex;
   align-items: center;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   padding-top: 8px;
   border-top: 1px solid #e8eaed;
   font-size: 12px;
@@ -414,7 +511,8 @@ onBeforeUnmount(() => {
 .dot.orange { background: #e8710a; }
 
 .legend-tip {
-  margin-left: auto;
+  flex-basis: 100%;
+  margin-top: 2px;
   color: #9aa0a6;
 }
 </style>
