@@ -16,7 +16,6 @@
           :data-id="item.id"
           :data-level="1"
           class="menu-item-wrapper"
-          :class="{ 'sortable': isSortMode }"
           @mouseenter="handleMouseEnter(item)"
           @mouseleave="handleMouseLeave"
         >
@@ -27,11 +26,6 @@
             @click="handleParentClick(item)"
           >
             <div class="menu-item-content">
-              <span v-if="isSortMode" class="drag-handle">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0-6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-                </svg>
-              </span>
               <span class="menu-icon">
                 <component :is="item.icon" />
               </span>
@@ -55,14 +49,9 @@
               :data-level="2"
               :data-parent-id="item.id"
               class="submenu-item"
-              :class="{ 'sortable': isSortMode, 'is-active': currentRouteId === subitem.id }"
+              :class="{ 'is-active': currentRouteId === subitem.id }"
               @click="handleItemClick(subitem)"
             >
-              <span v-if="isSortMode" class="drag-handle">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                  <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0-6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-                </svg>
-              </span>
               <span class="submenu-label">{{ subitem.name }}</span>
             </div>
           </div>
@@ -102,28 +91,17 @@
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
           </svg>
         </div>
-        <!-- 排序模式切换按钮 -->
-        <div class="action-btn" @click="toggleSortMode" :title="isSortMode ? '切换到浏览模式' : '切换到排序模式'">
-          <svg v-if="!isSortMode" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-            <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0-6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-            <path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/>
-          </svg>
-        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import useLoginStore from '@/stores/login/login'
 import useMainStore from '@/stores/main/main'
 import { useRoute, useRouter } from 'vue-router'
 import { mapPathToMenu } from '@/utils/map-menus'
-import { ElMessage } from 'element-plus'
-import Sortable from 'sortablejs'
 
 
 const mainStore = useMainStore()
@@ -158,13 +136,6 @@ const props = defineProps({
 const emit = defineEmits(['menuItemClick'])
 
 
-const isSortMode = ref(false)
-
-
-let parentSortable = null
-let submenuSortables = []
-
-
 const expandedMenus = ref([])
 
 
@@ -173,119 +144,11 @@ let hideTimer = null
 
 
 
-function toggleSortMode() {
-  isSortMode.value = !isSortMode.value
-  handleSortModeChange(isSortMode.value)
-}
-
-function handleSortModeChange(enabled) {
-  if (enabled) {
-
-    userMenus.value.forEach(item => {
-      if (item.children && item.children.length > 0) {
-        if (!expandedMenus.value.includes(item.id)) {
-          expandedMenus.value.push(item.id)
-        }
-      }
-    })
-    nextTick(() => {
-      initSortable()
-    })
-  } else {
-    destroySortable()
-  }
-}
-
-
-function initSortable() {
-  destroySortable()
-
-  const menuListEl = document.querySelector('.menu-list')
-  if (!menuListEl) return
-
-
-  parentSortable = Sortable.create(menuListEl, {
-    animation: 150,
-    handle: '.menu-item',
-    delay: 100,
-    delayOnTouchOnly: true,
-    ghostClass: 'sortable-ghost',
-    chosenClass: 'sortable-chosen',
-    dragClass: 'sortable-drag',
-    filter: '.submenu-item',
-    preventOnFilter: false,
-    onEnd: (evt) => {
-      const { oldIndex, newIndex } = evt
-      if (oldIndex !== undefined && newIndex !== undefined && oldIndex !== newIndex) {
-        const [removed] = userMenus.value.splice(oldIndex, 1)
-        userMenus.value.splice(newIndex, 0, removed)
-        saveMenuOrder()
-      }
-    }
-  })
-
-
-  const submenus = document.querySelectorAll('.submenu')
-  submenus.forEach((submenu, index) => {
-    const sortable = Sortable.create(submenu, {
-      animation: 150,
-      handle: '.submenu-item',
-      delay: 100,
-      delayOnTouchOnly: true,
-      ghostClass: 'sortable-ghost',
-      chosenClass: 'sortable-chosen',
-      dragClass: 'sortable-drag',
-
-      onEnd: (evt) => {
-        const { oldIndex, newIndex } = evt
-        const parentId = parseInt(submenu.dataset.parentId)
-        const parentMenu = userMenus.value.find(m => m.id === parentId)
-
-        if (parentMenu && parentMenu.children && oldIndex !== undefined && newIndex !== undefined && oldIndex !== newIndex) {
-          const [removed] = parentMenu.children.splice(oldIndex, 1)
-          parentMenu.children.splice(newIndex, 0, removed)
-          saveMenuOrder()
-        }
-      }
-    })
-    submenuSortables.push(sortable)
-  })
-}
-
-
-function destroySortable() {
-  if (parentSortable) {
-    parentSortable.destroy()
-    parentSortable = null
-  }
-  submenuSortables.forEach(s => s.destroy())
-  submenuSortables = []
-}
-
-
-function saveMenuOrder() {
-  const roleId = loginStore.userInfo.role?.id
-  if (!roleId) return
-
-  const order = userMenus.value.map(menu => {
-    const item = { id: menu.id, children: [] }
-    if (menu.children && menu.children.length > 0) {
-      item.children = menu.children.map(child => child.id)
-    }
-    return item
-  })
-
-  const key = `menu-order-${roleId}`
-  localStorage.setItem(key, JSON.stringify(order))
-
-  ElMessage.success('菜单顺序已保存')
-}
+// 菜单排序功能已移除：统一按数据库返回的顺序显示
 
 
 
 function handleMouseEnter(item) {
-  if (isSortMode.value) return
-
   if (hideTimer) {
     clearTimeout(hideTimer)
     hideTimer = null
@@ -297,8 +160,6 @@ function handleMouseEnter(item) {
 
 
 function handleMouseLeave() {
-  if (isSortMode.value) return
-
   hideTimer = setTimeout(() => {
     hoveredMenuId.value = null
   }, 150)
@@ -320,8 +181,6 @@ function handlePopupLeave() {
 
 const router = useRouter()
 function handleItemClick(item) {
-  if (isSortMode.value) return
-
   router.push(item.url)
   emit('menuItemClick')
 }
@@ -347,9 +206,6 @@ function isParentActive(item) {
 
 
 function handleParentClick(item) {
-  if (isSortMode.value) return
-
-
   if (item.directLink === 1) {
     router.push(item.url)
     emit('menuItemClick')
@@ -369,13 +225,6 @@ function handleParentClick(item) {
     } else {
       expandedMenus.value.push(item.id)
     }
-
-
-    if (isSortMode.value && index === -1) {
-      nextTick(() => {
-        initSortable()
-      })
-    }
   }
 }
 
@@ -390,7 +239,7 @@ if (currentRouteId.value) {
 
 
 watch(currentRouteId, (newVal) => {
-  if (newVal && !isSortMode.value) {
+  if (newVal) {
     userMenus.value.forEach(item => {
       if (item.children && item.children.some(child => child.id === newVal)) {
         if (!expandedMenus.value.includes(item.id)) {
@@ -399,11 +248,6 @@ watch(currentRouteId, (newVal) => {
       }
     })
   }
-})
-
-
-onBeforeUnmount(() => {
-  destroySortable()
 })
 </script>
 

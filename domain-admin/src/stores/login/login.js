@@ -24,53 +24,8 @@ function sortMenusBySort(menus) {
 
 
 function applyCustomMenuOrder(menus, roleId) {
-  const orderKey = `menu-order-${roleId}`
-  const savedOrder = localStorage.getItem(orderKey)
-
-  if (!savedOrder) {
-    return sortMenusBySort(menus)
-  }
-
-  try {
-    const order = JSON.parse(savedOrder)
-    const menuMap = {}
-    const childrenMap = {}
-
-    menus.forEach(menu => {
-      menuMap[menu.id] = menu
-      if (menu.children && menu.children.length > 0) {
-        childrenMap[menu.id] = [...menu.children]
-      }
-    })
-
-    const sortedMenus = order
-      .filter(item => menuMap[item.id])
-      .map(item => {
-        const menu = menuMap[item.id]
-        if (childrenMap[item.id] && item.children && item.children.length > 0) {
-          const children = childrenMap[item.id]
-          const childMap = {}
-          children.forEach(child => childMap[child.id] = child)
-
-          menu.children = item.children
-            .filter(childId => childMap[childId])
-            .map(childId => childMap[childId])
-        }
-        return { ...menu }
-      })
-
-
-    menus.forEach(menu => {
-      if (!order.find(item => item.id === menu.id)) {
-        sortedMenus.push(menu)
-      }
-    })
-
-    return sortedMenus
-  } catch (e) {
-    console.error('应用自定义排序失败:', e)
-    return sortMenusBySort(menus)
-  }
+  // 默认按数据库返回的顺序（sort 字段）排序，不再读取本地自定义顺序
+  return sortMenusBySort(menus)
 }
 
 const useLoginStore = defineStore('login', {
