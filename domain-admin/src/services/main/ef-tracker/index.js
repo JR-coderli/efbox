@@ -22,6 +22,8 @@ function query(path, params = {}) {
 // conversions 表的字段名是 Go 结构体字段名（首字母大写驼峰），与其它表不一致。
 // 这里映射成小写蛇形，保持页面渲染逻辑统一。
 function normalizeConversion(item) {
+  // with_names=true 时返回的名称映射；此表字段是大写驼峰，key 兼容大小写
+  const rawNames = item.Names || item.names
   return {
     id: item.ID,
     system_click_id: item.SystemClickID,
@@ -34,7 +36,13 @@ function normalizeConversion(item) {
     http_status_code: item.HTTPStatusCode,
     response_body: item.ResponseBody,
     created_at: item.CreatedAt,
-    posted_at: item.PostedAt
+    posted_at: item.PostedAt,
+    names: rawNames
+      ? {
+          media: rawNames.media ?? rawNames.Media ?? '',
+          tracker: rawNames.tracker ?? rawNames.Tracker ?? ''
+        }
+      : null
   }
 }
 

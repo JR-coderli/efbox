@@ -84,6 +84,16 @@
           <el-table-column label="media_click_id" prop="media_click_id" min-width="160" show-overflow-tooltip />
           <el-table-column label="mid" prop="mid" width="70" align="center" />
           <el-table-column label="tid" prop="tid" width="80" align="center" />
+          <el-table-column label="媒体" prop="names.media" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.names?.media || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Tracker" prop="names.tracker" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.names?.tracker || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="payout" prop="payout" width="80" align="right" />
           <el-table-column label="应回传" prop="should_postback" width="80" align="center">
             <template #default="{ row }">
@@ -184,6 +194,7 @@ function buildParams() {
   if (filters.tid) p.tid = filters.tid
   if (filters.http_status_code) p.http_status_code = filters.http_status_code
   if (filters.should_postback) p.should_postback = filters.should_postback
+  p.with_names = true // 返回 mid/tid 对应的名称（names 字段）
   Object.assign(p, rangeToParams(dateRange.value))
   return p
 }

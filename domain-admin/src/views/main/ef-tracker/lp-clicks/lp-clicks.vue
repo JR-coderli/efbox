@@ -86,6 +86,26 @@
           <el-table-column label="tid" prop="tid" width="80" align="center" />
           <el-table-column label="lid" prop="lid" width="80" align="center" />
           <el-table-column label="oid" prop="oid" width="80" align="center" />
+          <el-table-column label="媒体" prop="names.media" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.names?.media || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Tracker" prop="names.tracker" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.names?.tracker || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="落地页" prop="names.lander" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.names?.lander || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Offer" prop="names.offer" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.names?.offer || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="path_code" prop="path_code" width="100" show-overflow-tooltip />
           <el-table-column label="ip" prop="ip_address" width="120" show-overflow-tooltip />
           <el-table-column label="referer" prop="referer" min-width="180" show-overflow-tooltip />
@@ -178,6 +198,7 @@ function buildParams() {
   if (filters.lid) p.lid = filters.lid
   if (filters.oid) p.oid = filters.oid
   if (filters.path_code) p.path_code = filters.path_code
+  p.with_names = true // 返回 mid/tid/lid/oid 对应的名称（names 字段）
   Object.assign(p, rangeToParams(dateRange.value))
   return p
 }

@@ -76,6 +76,16 @@
           <el-table-column label="visitor_id" prop="visitor_id" min-width="160" show-overflow-tooltip />
           <el-table-column label="tid" prop="tid" width="90" align="center" />
           <el-table-column label="lid" prop="lid" width="90" align="center" />
+          <el-table-column label="落地页" prop="names.lander" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.names?.lander || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Tracker" prop="names.tracker" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.names?.tracker || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="ip" prop="ip_address" width="120" show-overflow-tooltip />
           <el-table-column label="user_agent" prop="user_agent" min-width="220" show-overflow-tooltip />
           <template #empty>
@@ -160,6 +170,7 @@ function buildParams() {
   if (filters.keyword) p.keyword = filters.keyword
   if (filters.tid) p.tid = filters.tid
   if (filters.lid) p.lid = filters.lid
+  p.with_names = true // 返回 tid/lid 对应的名称（names 字段）
   Object.assign(p, rangeToParams(dateRange.value))
   return p
 }
