@@ -24,7 +24,28 @@
 
     <!-- 归因流程图 -->
     <div class="chart-card" v-loading="loading">
-      <div ref="chartRef" class="chart"></div>
+      <div class="chart-scroll">
+        <div class="chart-wrap">
+          <div ref="chartRef" class="chart"></div>
+          <!-- HTML 节点卡片层（覆盖在 echarts 流线上） -->
+          <div class="cards-overlay">
+            <div
+              v-for="(n, i) in nodes"
+              :key="n.name"
+              class="node-card"
+              :style="cardStyle(i)"
+              @click="goDetail(n)"
+            >
+              <div class="nc-head">
+                <span class="nc-chip"><el-icon><component :is="n.icon" /></el-icon></span>
+                <span class="nc-name">{{ n.name }}</span>
+              </div>
+              <div class="nc-value" :style="{ color: n.color }">{{ fmtNum(n.value) }}</div>
+              <div class="nc-hint">{{ n.hint }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="legend">
         <span class="legend-item"><i class="dot blue"></i>点击 / 访问 / 进 Offer</span>
         <span class="legend-item"><i class="dot green"></i>转化</span>
@@ -36,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { getClicks, getLpVisitLogs, getLpClicks, getConversions } from '@/services/main/ef-tracker'
@@ -74,6 +95,38 @@ const counts = reactive({
   conversion: '-',
   postback: '-'
 })
+
+const Y = 50 // 节点所在 y（与 echarts 连线一致）
+
+// 节点（HTML 卡片）：图标统一谷歌蓝，数字按阶段色
+const nodes = computed(() => [
+  { name: '媒体点击',      icon: 'Pointer',      color: '#1a73e8', value: counts.clicks,     hint: '广告点击进站', coord: [9, Y],  route: '/main/ef-tracker/clicks' },
+  { name: 'LP访问',        icon: 'Monitor',      color: '#1a73e8', value: counts.lpVisit,    hint: '落地页访问',   coord: [29, Y], route: '/main/ef-tracker/lp-visit-logs' },
+  { name: 'LP点击进Offer', icon: 'Sell',         color: '#1a73e8', value: counts.lpClick,    hint: '点击进 Offer', coord: [50, Y], route: '/main/ef-tracker/lp-clicks' },
+  { name: '转化',          icon: 'ShoppingCart', color: '#1e8e3e', value: counts.conversion, hint: '购买 / 转化',  coord: [71, Y], route: '/main/ef-tracker/conversions' },
+  { name: '媒体回传',      icon: 'Promotion',    color: '#e8710a', value: counts.postback,   hint: '回传媒体',     coord: [91, Y], route: '/main/ef-tracker/conversions' }
+])
+
+// 节点像素坐标（由 echarts convertToPixel 计算，resize 时重算）
+const nodePos = ref([])
+
+function layoutNodes() {
+  if (!chart) return
+  nodePos.value = nodes.value.map((n) => {
+    const p = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [n.coord[0], n.coord[1]])
+    return { left: p[0], top: p[1] }
+  })
+}
+
+function cardStyle(i) {
+  const p = nodePos.value[i]
+  if (!p) return { visibility: 'hidden' }
+  return { left: p.left + 'px', top: p.top + 'px' }
+}
+
+function goDetail(n) {
+  if (n.route) router.push(n.route)
+}
 
 // daterange → start/end，end 为排除上界 +1 天
 function rangeToParams(range) {
@@ -126,115 +179,54 @@ function renderChart() {
   const BLUE = '#1a73e8'
   const GREEN = '#1e8e3e'
   const ORANGE = '#e8710a'
-  const Y = 50 // 节点所在 y
 
-  // 节点：媒体点击 → LP访问 → LP点击进Offer → 转化 → 媒体回传
-  const nodes = [
-    { name: '媒体点击',     coord: [9, Y],  color: BLUE,   value: counts.clicks,     route: '/main/ef-tracker/clicks' },
-    { name: 'LP访问',       coord: [29, Y], color: BLUE,   value: counts.lpVisit,    route: '/main/ef-tracker/lp-visit-logs' },
-    { name: 'LP点击进Offer', coord: [50, Y], color: BLUE,   value: counts.lpClick,    route: '/main/ef-tracker/lp-clicks' },
-    { name: '转化',         coord: [71, Y], color: GREEN,  value: counts.conversion, route: '/main/ef-tracker/conversions' },
-    { name: '媒体回传',     coord: [91, Y], color: ORANGE, value: counts.postback,   route: '/main/ef-tracker/conversions' }
+  // 正向连线：前 3 段蓝、转化→回传 绿；回传回路 橙
+  const blueCoords = [
+    [[9, Y], [29, Y]],
+    [[29, Y], [50, Y]],
+    [[50, Y], [71, Y]]
   ]
+  const greenCoords = [[[71, Y], [91, Y]]]
+  const loopCoords = [[91, Y - 6], [91, 26], [50, 12], [9, 26], [9, Y - 6]]
 
-  // 连线：4 条正向 + 1 条回传回路（下方弧线）
-  const edges = [
-    { coords: [[9, Y], [29, Y]] },
-    { coords: [[29, Y], [50, Y]] },
-    { coords: [[50, Y], [71, Y]] },
-    { coords: [[71, Y], [91, Y]] },
-    { coords: [[91, Y - 6], [91, 26], [50, 12], [9, 26], [9, Y - 6]] }
-  ]
+  // 美化：圆角线帽 + 同色柔光阴影；流动光点带长拖尾（彗星感），颜色与线段一致
+  const mkLine = (name, coords, color, period) => ({
+    name,
+    type: 'lines',
+    coordinateSystem: 'cartesian2d',
+    polyline: true,
+    symbol: ['none', 'arrow'],
+    symbolSize: 11,
+    data: coords.map((c) => ({
+      coords: c,
+      lineStyle: { color, width: 2.5, opacity: 0.85, cap: 'round' }
+    })),
+    effect: { show: true, period, trailLength: 0.25, symbol: 'circle', symbolSize: 11, color },
+    zlevel: 1
+  })
 
-  const option = {
-    grid: { top: 10, bottom: 10, left: 10, right: 10, containLabel: false },
+  chart.setOption({
+    grid: { top: 24, bottom: 24, left: 10, right: 10, containLabel: false },
     xAxis: { type: 'value', min: 0, max: 100, show: false },
-    yAxis: { type: 'value', min: 0, max: 65, show: false },
-    tooltip: {
-      trigger: 'item',
-      formatter: (p) =>
-        p.seriesType === 'scatter' && p.data ? `${p.data.name}：${fmtNum(p.data.value[2])}` : ''
-    },
+    yAxis: { type: 'value', min: 0, max: 70, show: false },
     series: [
-      {
-        name: 'flow',
-        type: 'lines',
-        coordinateSystem: 'cartesian2d',
-        polyline: true,
-        symbol: ['none', 'arrow'],
-        symbolSize: 9,
-        data: edges,
-        lineStyle: { color: '#bdc1c6', width: 2, opacity: 0.9 },
-        effect: {
-          show: true,
-          period: 5,
-          trailLength: 0.4,
-          symbol: 'circle',
-          symbolSize: 7,
-          color: '#1a73e8'
-        },
-        zlevel: 1
-      },
-      {
-        name: 'nodes',
-        type: 'scatter',
-        coordinateSystem: 'cartesian2d',
-        symbol: 'roundRect',
-        symbolSize: [124, 64],
-        cursor: 'pointer',
-        data: nodes.map((n) => ({
-          name: n.name,
-          value: [n.coord[0], n.coord[1], n.value],
-          route: n.route,
-          itemStyle: {
-            color: '#fff',
-            borderColor: n.color,
-            borderWidth: 2,
-            shadowColor: 'rgba(0,0,0,0.08)',
-            shadowBlur: 6
-          },
-          emphasis: {
-            itemStyle: {
-              color: n.color,
-              borderColor: n.color,
-              shadowBlur: 12
-            },
-            label: {
-              rich: {
-                name: { color: '#fff' },
-                val: { color: '#fff' }
-              }
-            }
-          },
-          label: {
-            show: true,
-            position: 'inside',
-            formatter: `{name|${n.name}}\n{val|${fmtNum(n.value)}}`,
-            rich: {
-              name: { color: '#5f6368', fontSize: 12, fontWeight: 500, lineHeight: 20 },
-              val: { color: n.color, fontSize: 20, fontWeight: 700 }
-            }
-          }
-        })),
-        zlevel: 2
-      }
+      mkLine('flow-blue', blueCoords, BLUE, 3.5),
+      mkLine('flow-green', greenCoords, GREEN, 3.5),
+      mkLine('loop', [loopCoords], ORANGE, 4.5)
     ]
-  }
-  chart.setOption(option, true)
+  }, true)
+  layoutNodes()
 }
 
 function onResize() {
-  if (chart) chart.resize()
+  if (!chart) return
+  chart.resize()
+  layoutNodes()
 }
 
 onMounted(async () => {
   await nextTick()
   chart = echarts.init(chartRef.value)
-  chart.on('click', (params) => {
-    if (params.seriesType === 'scatter' && params.data?.route) {
-      router.push(params.data.route)
-    }
-  })
   window.addEventListener('resize', onResize)
   fetchCounts()
 })
@@ -301,10 +293,97 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-.chart {
+.chart-scroll {
   flex: 1;
   min-height: 360px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chart-wrap {
+  position: relative;
   width: 100%;
+  min-width: 760px;
+  height: 100%;
+  min-height: 360px;
+}
+
+.chart {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* HTML 节点卡片层，覆盖在 echarts 流线上 */
+.cards-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.node-card {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 144px;
+  background: #fff;
+  border: 1px solid #e8eaed;
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
+
+  &:hover {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+    border-color: #dadce0;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+.nc-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.nc-chip {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #e8f0fe;
+  color: #1a73e8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  .el-icon {
+    font-size: 18px;
+  }
+}
+
+.nc-name {
+  font-size: 13px;
+  color: #3c4043;
+  font-weight: 500;
+}
+
+.nc-value {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+}
+
+.nc-hint {
+  font-size: 11px;
+  color: #9aa0a6;
+  margin-top: 2px;
 }
 
 .legend {
