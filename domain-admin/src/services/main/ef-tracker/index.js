@@ -72,6 +72,15 @@ export function getLanders(params = {}) {
   return query('/query/landers', params)
 }
 
+// 批量替换 LP url 子串（域名迁移/路径改写）。POST 到外部系统（与 /query 同 host）。
+// payload: { old(必填), new(可选,默认删除), ids(可选,默认全表), dry_run(可选,预演不写库) }
+// 预演返回 { dry_run, count, list:[{id,before,after}] }；正式执行返回 { dry_run:false, affected }
+export function replaceLanderUrl(payload) {
+  return queryRequest
+    .post('/landers/replace-url', payload)
+    .then((res) => res.data)
+}
+
 // ============================================================
 // 以下走本地 domain-admin 后端（hyRequest），用于 ef-归因系统 落地页截图（方案 B）
 // 与上面的 /query 外部接口无关，互不影响。

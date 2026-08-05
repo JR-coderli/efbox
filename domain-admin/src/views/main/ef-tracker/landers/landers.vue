@@ -43,6 +43,7 @@
           </div>
         </div>
         <div class="toolbar-actions">
+          <el-button class="icon-btn" :icon="Edit" circle title="批量替换域名" @click="openReplaceDialog" />
           <el-button class="icon-btn" circle :title="refreshCountdown > 0 ? `${refreshCountdown}s 后可刷新` : '刷新'" :disabled="loading || refreshCountdown > 0" @click="handleRefresh">
             <span v-if="refreshCountdown > 0">{{ refreshCountdown }}</span>
             <el-icon v-else><Refresh /></el-icon>
@@ -183,15 +184,55 @@
         />
       </div>
     </div>
+
+    <!-- 批量替换域名弹窗 -->
+    <el-dialog
+      v-model="replaceDialogVisible"
+      title="批量替换落地页域名"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="110px">
+        <el-form-item label="要替换的域名">
+          <el-input v-model="replaceForm.old" placeholder="例如：old.com" clearable />
+        </el-form-item>
+        <el-form-item label="替换后的域名">
+          <el-input v-model="replaceForm.new" placeholder="例如：new.com（留空 = 删除该子串）" clearable />
+        </el-form-item>
+      </el-form>
+
+      <!-- 预览结果 -->
+      <div v-if="previewList !== null" class="preview-area">
+        <div class="preview-summary">
+          将影响 <b>{{ previewCount }}</b> 条落地页
+          <span v-if="previewCount === 0" class="preview-none">（没有匹配的 url）</span>
+        </div>
+        <div v-if="previewList.length" class="preview-list">
+          <div v-for="item in previewList" :key="item.id" class="preview-item">
+            <div class="preview-id">#{{ item.id }}</div>
+            <div class="preview-url">
+              <div class="before">{{ item.before }}</div>
+              <div class="after">→ {{ item.after }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="replaceDialogVisible = false">取消</el-button>
+        <el-button @click="handlePreview" :loading="previewLoading">预览影响</el-button>
+        <el-button type="primary" @click="handleReplace" :loading="replaceLoading" :disabled="!replaceForm.old.trim()">替换</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, Setting } from '@element-plus/icons-vue'
+import { Search, Refresh, Setting, Edit } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
-import { getLanders, getEfLanderScreenshots, triggerEfLanderScreenshot, uploadEfLanderScreenshot } from '@/services/main/ef-tracker'
+import { getLanders, getEfLanderScreenshots, triggerEfLanderScreenshot, uploadEfLanderScreenshot, replaceLanderUrl } from '@/services/main/ef-tracker'
 import { BASE_URL } from '@/services/request/config'
 
 const loading = ref(false)
@@ -457,6 +498,67 @@ onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
 })
+
+// ===== 批量替换域名（POST /landers/replace-url） =====
+const replaceDialogVisible = ref(false)
+const replaceForm = reactive({ old: '', new: '' })
+const previewLoading = ref(false)
+const replaceLoading = ref(false)
+const previewList = ref(null) // null = 未预览
+const previewCount = ref(0)
+
+function openReplaceDialog() {
+  replaceForm.old = ''
+  replaceForm.new = ''
+  previewList.value = null
+  previewCount.value = 0
+  replaceDialogVisible.value = true
+}
+
+async function handlePreview() {
+  if (!replaceForm.old.trim()) {
+    ElMessage.warning('请输入要替换的域名')
+    return
+  }
+  previewLoading.value = true
+  try {
+    const res = await replaceLanderUrl({ old: replaceForm.old.trim(), new: replaceForm.new.trim(), dry_run: true })
+    previewList.value = res?.list || []
+    previewCount.value = res?.count ?? 0
+    if (previewCount.value === 0) ElMessage.info('没有匹配的落地页 url')
+  } catch (e) {
+    ElMessage.error('预览失败: ' + (e?.response?.data?.error || e?.message || '网络错误'))
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+async function handleReplace() {
+  if (!replaceForm.old.trim()) {
+    ElMessage.warning('请输入要替换的域名')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定把所有包含「${replaceForm.old.trim()}」的落地页 url 替换为「${replaceForm.new.trim() || '(空，删除该子串)'}」吗？此操作不可撤销，建议先点「预览影响」核对。`,
+      '确认替换',
+      { confirmButtonText: '确定替换', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  replaceLoading.value = true
+  try {
+    const res = await replaceLanderUrl({ old: replaceForm.old.trim(), new: replaceForm.new.trim() })
+    ElMessage.success(`已替换 ${res?.affected ?? 0} 条落地页`)
+    replaceDialogVisible.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error('替换失败: ' + (e?.response?.data?.error || e?.message || '网络错误'))
+  } finally {
+    replaceLoading.value = false
+  }
+}
 </script>
 
 <style lang="less" scoped>
@@ -751,6 +853,71 @@ onUnmounted(() => {
 
 .shot-spin {
   animation: btn-spin 0.8s linear infinite;
+}
+
+/* 批量替换域名弹窗 */
+.preview-area {
+  margin-top: 4px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e8eaed;
+}
+
+.preview-summary {
+  font-size: 13px;
+  color: #3c4043;
+  margin-bottom: 8px;
+
+  b {
+    color: #1a73e8;
+  }
+}
+
+.preview-none {
+  color: #9aa0a6;
+}
+
+.preview-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.preview-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e8eaed;
+  border-radius: 6px;
+}
+
+.preview-id {
+  color: #9aa0a6;
+  font-size: 12px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.preview-url {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+
+  .before {
+    color: #9aa0a6;
+    text-decoration: line-through;
+    word-break: break-all;
+  }
+
+  .after {
+    color: #1e8e3e;
+    word-break: break-all;
+  }
 }
 
 :deep(.el-loading-mask) {
