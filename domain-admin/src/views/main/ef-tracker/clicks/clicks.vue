@@ -160,7 +160,7 @@ const dateRange = ref([])
 // 时间显示：接口已按 tz 返回带偏移的 ISO 串，这里只把 T 换成空格方便阅读
 function fmtTime(s) {
   if (!s) return '-'
-  return String(s).replace('T', ' ')
+  return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, (_m, sign, h, min) => ' ' + sign + parseInt(h, 10) + (parseInt(min, 10) ? ':' + parseInt(min, 10) : '')).replace(/Z$/, ' +0')
 }
 
 // daterange → start/end。end 为排除上界（<），因此 +1 天以包含结束日整天

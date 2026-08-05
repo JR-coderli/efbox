@@ -366,7 +366,7 @@ async function uploadScreenshot(row, file) {
 
 function fmtTime(s) {
   if (!s) return '-'
-  return String(s).replace('T', ' ')
+  return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, (_m, sign, h, min) => ' ' + sign + parseInt(h, 10) + (parseInt(min, 10) ? ':' + parseInt(min, 10) : '')).replace(/Z$/, ' +0')
 }
 
 function rangeToParams(range) {

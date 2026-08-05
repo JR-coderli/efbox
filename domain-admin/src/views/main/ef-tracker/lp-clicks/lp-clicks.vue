@@ -75,6 +75,11 @@
       <div class="table-wrapper">
         <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :tooltip-options="{ popperClass: 'lp-clicks-overflow-tooltip' }">
           <el-table-column label="ID" prop="id" width="80" align="center" />
+          <el-table-column label="创建时间" prop="created_at" width="200">
+            <template #default="{ row }">
+              <span class="date-text">{{ fmtTime(row.created_at) }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="system_click_id" prop="system_click_id" min-width="200" show-overflow-tooltip />
           <el-table-column label="media_click_id" prop="media_click_id" min-width="160" show-overflow-tooltip />
           <el-table-column label="mid" prop="mid" width="70" align="center" />
@@ -85,11 +90,6 @@
           <el-table-column label="ip" prop="ip_address" width="120" show-overflow-tooltip />
           <el-table-column label="referer" prop="referer" min-width="180" show-overflow-tooltip />
           <el-table-column label="offer_url" prop="offer_url" min-width="220" show-overflow-tooltip />
-          <el-table-column label="创建时间" prop="created_at" width="200">
-            <template #default="{ row }">
-              <span class="date-text">{{ fmtTime(row.created_at) }}</span>
-            </template>
-          </el-table-column>
           <template #empty>
             <el-empty description="暂无数据" />
           </template>
@@ -153,7 +153,7 @@ const dateRange = ref([])
 
 function fmtTime(s) {
   if (!s) return '-'
-  return String(s).replace('T', ' ')
+  return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, (_m, sign, h, min) => ' ' + sign + parseInt(h, 10) + (parseInt(min, 10) ? ':' + parseInt(min, 10) : '')).replace(/Z$/, ' +0')
 }
 
 function rangeToParams(range) {
