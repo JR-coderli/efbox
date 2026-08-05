@@ -3,7 +3,7 @@
     <!-- 页面头部 -->
     <div class="page-header" v-show="!isFullscreen">
       <div class="header-left">
-        <h1>落地页管理</h1>
+        <!-- <h1>落地页管理</h1> -->
         <span class="page-subtitle">管理网站的落地页和爬虫任务</span>
       </div>
       <div class="header-actions">
