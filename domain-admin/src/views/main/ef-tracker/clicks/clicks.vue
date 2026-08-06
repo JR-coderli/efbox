@@ -134,21 +134,51 @@
                     <span class="funnel-arrow">›</span>
                     <span class="funnel-step fs-ok" data-tip="Offer：是 · 直连路径（未经 LP）">Offer</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :data-tip="stepBoolTitle('转化', row.funnel.converted, row.funnel.converted_at)">转化</span>
+                    <span
+                      class="funnel-step"
+                      :class="[stepBoolClass(row.funnel.converted), { 'funnel-clickable': hasDetail('conversion', row.funnel) }]"
+                      :data-tip="stepBoolTitle('转化', row.funnel.converted, row.funnel.converted_at)"
+                      @click="hasDetail('conversion', row.funnel) && openDetail('conversion', row)"
+                    >转化</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)">下发</span>
+                    <span
+                      class="funnel-step"
+                      :class="[postbackClass(row.funnel.media_postback), { 'funnel-clickable': hasDetail('postback', row.funnel) }]"
+                      :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)"
+                      @click="hasDetail('postback', row.funnel) && openDetail('conversion', row)"
+                    >下发</span>
                   </template>
                   <template v-else>
                     <!-- 路径1：媒体点击 › LP展示 › LP点击 › 转化 › 下发 -->
                     <span class="funnel-step fs-ok" :data-tip="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="stepBoolClass(row.funnel.reached_lp)" :data-tip="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)">LP展示</span>
+                    <span
+                      class="funnel-step"
+                      :class="[stepBoolClass(row.funnel.reached_lp), { 'funnel-clickable': hasDetail('lp_visit', row.funnel) }]"
+                      :data-tip="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)"
+                      @click="hasDetail('lp_visit', row.funnel) && openDetail('lp_visit', row)"
+                    >LP展示</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="stepBoolClass(row.funnel.lp_click)" :data-tip="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)">LP点击</span>
+                    <span
+                      class="funnel-step"
+                      :class="[stepBoolClass(row.funnel.lp_click), { 'funnel-clickable': hasDetail('lp_click', row.funnel) }]"
+                      :data-tip="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)"
+                      @click="hasDetail('lp_click', row.funnel) && openDetail('lp_click', row)"
+                    >LP点击</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :data-tip="stepBoolTitle('转化', row.funnel.converted, row.funnel.converted_at)">转化</span>
+                    <span
+                      class="funnel-step"
+                      :class="[stepBoolClass(row.funnel.converted), { 'funnel-clickable': hasDetail('conversion', row.funnel) }]"
+                      :data-tip="stepBoolTitle('转化', row.funnel.converted, row.funnel.converted_at)"
+                      @click="hasDetail('conversion', row.funnel) && openDetail('conversion', row)"
+                    >转化</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)">下发</span>
+                    <span
+                      class="funnel-step"
+                      :class="[postbackClass(row.funnel.media_postback), { 'funnel-clickable': hasDetail('postback', row.funnel) }]"
+                      :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)"
+                      @click="hasDetail('postback', row.funnel) && openDetail('conversion', row)"
+                    >下发</span>
                   </template>
                 </div>
                 <span v-else>-</span>
@@ -222,6 +252,32 @@
     </div>
     <!-- 漏斗徽章悬浮提示（跟随鼠标的自定义浮层）-->
     <div v-if="tip.visible" class="funnel-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
+
+    <!-- 漏斗步骤详情弹窗 -->
+    <el-dialog
+      v-model="detailDialog.visible"
+      :title="detailDialog.title + (detailDialog.systemClickId ? ' · ' + detailDialog.systemClickId : '')"
+      class="funnel-detail-dialog"
+      append-to-body
+      destroy-on-close
+      align-center
+    >
+      <el-table :data="detailDialog.list" v-loading="detailDialog.loading" size="small" :height="detailTableMaxHeight" class="detail-table" border>
+        <el-table-column
+          v-for="col in detailDialog.columns"
+          :key="col.label"
+          :label="col.label"
+          :width="col.width"
+          :min-width="col.minWidth"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">{{ col.get(row) }}</template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无数据" />
+        </template>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -229,7 +285,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import Sortable from 'sortablejs'
-import { getClicks } from '@/services/main/ef-tracker'
+import { getClicks, getLpVisitLogs, getLpClicks, getConversions } from '@/services/main/ef-tracker'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -281,7 +337,7 @@ function lastStepAt(f) {
 }
 function fmtDuration(ms) {
   if (ms == null || ms < 0 || Number.isNaN(ms)) return '-'
-  if (ms < 1000) return (ms / 1000).toFixed(1) + 's' // 不足 1 秒保留 1 位小数，避免四舍五入成 0s
+  if (ms < 1000) return parseFloat((ms / 1000).toFixed(2)) + 's' // 不足 1 秒：两位小数四舍五入并去末尾 0（0.43s / 0.99s / 0.5s / 1s）
   const s = Math.round(ms / 1000)
   if (s < 60) return s + 's'
   const m = Math.floor(s / 60)
@@ -362,6 +418,99 @@ function onStepOut(e) {
   const to = e.relatedTarget
   if (!to || !to.closest || !to.closest('.funnel-step')) {
     tip.visible = false
+  }
+}
+
+// 漏斗徽章点击 → 弹窗查该步骤详情（用 system_click_id 跨表查）
+// 可点击判定按"有数据"：前三个看布尔；下发看 media_postback !== 'none'
+function hasDetail(step, f) {
+  if (!f) return false
+  if (step === 'lp_visit') return !!f.reached_lp
+  if (step === 'lp_click') return !!f.lp_click
+  if (step === 'conversion') return !!f.converted
+  if (step === 'postback') return !!f.media_postback && f.media_postback !== 'none'
+  return false
+}
+
+// 各步骤：标题 + 查询函数 + 弹窗表格列（get 取值，兼容嵌套 names）。转化/下发共用 conversion 配置
+const STEP_CONFIG = {
+  lp_visit: {
+    title: 'LP 展示详情',
+    fetch: (id) => getLpVisitLogs({ keyword: id, size: 100, with_names: true, tz: tz.value }),
+    columns: [
+      { label: 'ID', width: 80, get: (r) => r.id },
+      { label: '时间', width: 180, get: (r) => fmtTime(r.created_at) },
+      { label: 'visitor_id', minWidth: 160, get: (r) => r.visitor_id || '-' },
+      { label: 'Lander', minWidth: 110, get: (r) => r.names?.lander || '-' },
+      { label: 'Tracker', minWidth: 110, get: (r) => r.names?.tracker || '-' },
+      { label: 'IP', width: 140, get: (r) => r.ip_address || '-' },
+      { label: 'User-Agent', minWidth: 220, get: (r) => r.user_agent || '-' }
+    ]
+  },
+  lp_click: {
+    title: 'LP 点击详情',
+    fetch: (id) => getLpClicks({ keyword: id, size: 100, with_names: true, tz: tz.value }),
+    columns: [
+      { label: 'ID', width: 80, get: (r) => r.id },
+      { label: '时间', width: 180, get: (r) => fmtTime(r.created_at) },
+      { label: '媒体', minWidth: 100, get: (r) => r.names?.media || '-' },
+      { label: 'Tracker', minWidth: 100, get: (r) => r.names?.tracker || '-' },
+      { label: 'Lander', minWidth: 100, get: (r) => r.names?.lander || '-' },
+      { label: 'Offer', minWidth: 100, get: (r) => r.names?.offer || '-' },
+      { label: 'path_code', width: 110, get: (r) => r.path_code || '-' },
+      { label: 'IP', width: 140, get: (r) => r.ip_address || '-' },
+      { label: 'referer', minWidth: 200, get: (r) => r.referer || '-' },
+      { label: 'offer_url', minWidth: 220, get: (r) => r.offer_url || '-' }
+    ]
+  },
+  conversion: {
+    title: '转化 / 回传详情',
+    fetch: (id) => getConversions({ keyword: id, size: 100, with_names: true, tz: tz.value }),
+    columns: [
+      { label: 'ID', width: 80, get: (r) => r.id },
+      { label: '转化时间', width: 180, get: (r) => fmtTime(r.created_at) },
+      { label: '回传时间', width: 180, get: (r) => fmtTime(r.posted_at) },
+      { label: 'payout', width: 90, get: (r) => r.payout ?? '-' },
+      { label: 'should_postback', width: 130, get: (r) => String(r.should_postback ?? '-') },
+      { label: 'HTTP', width: 80, get: (r) => r.http_status_code ?? '-' },
+      { label: '媒体', minWidth: 100, get: (r) => r.names?.media || '-' },
+      { label: '回传URL', minWidth: 220, get: (r) => r.media_postback_url || '-' },
+      { label: '响应', minWidth: 220, get: (r) => r.response_body || '-' }
+    ]
+  }
+}
+
+const detailDialog = reactive({
+  visible: false,
+  loading: false,
+  title: '',
+  systemClickId: '',
+  list: [],
+  columns: []
+})
+
+// 详情弹窗表格最大高度：按视口 62%，适配移动端（resize 时重算）
+const detailTableMaxHeight = ref(460)
+function calcDetailHeight() {
+  detailTableMaxHeight.value = Math.max(220, Math.floor(window.innerHeight * 0.62))
+}
+
+async function openDetail(step, row) {
+  const cfg = STEP_CONFIG[step]
+  if (!cfg) return
+  detailDialog.title = cfg.title
+  detailDialog.systemClickId = row.system_click_id
+  detailDialog.columns = cfg.columns
+  detailDialog.list = []
+  detailDialog.visible = true
+  detailDialog.loading = true
+  try {
+    const res = await cfg.fetch(row.system_click_id)
+    detailDialog.list = res?.list || []
+  } catch (error) {
+    ElMessage.error('详情加载失败: ' + (error?.response?.data?.error || error?.message || '网络错误'))
+  } finally {
+    detailDialog.loading = false
   }
 }
 
@@ -511,6 +660,8 @@ function handleCurrentChange(page) {
 
 onMounted(() => {
   loadData()
+  calcDetailHeight()
+  window.addEventListener('resize', calcDetailHeight)
 })
 
 // 刷新按钮 5 秒倒计时（点击后禁用，防止频繁刷新）
@@ -534,6 +685,7 @@ function handleRefresh() {
 onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
+  window.removeEventListener('resize', calcDetailHeight)
 })
 
 // 去重开关：按 media_click_id 只保留最新一条（unique=true）。分页时保留选中状态
@@ -815,6 +967,16 @@ function toggleUnique() {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
+.funnel-clickable {
+  cursor: pointer;
+  transition: opacity 0.15s, box-shadow 0.15s;
+
+  &:hover {
+    opacity: 0.85;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+}
+
 .pagination-wrapper {
   padding: 12px 16px;
   border-top: 1px solid #e8eaed;
@@ -966,5 +1128,56 @@ function toggleUnique() {
 .col-sortable-chosen {
   background: #e8f0fe;
   border-radius: 6px;
+}
+
+/* 漏斗详情弹窗（el-dialog teleported 到 body，写在全局）*/
+.funnel-detail-dialog.el-dialog {
+  width: min(94vw, 1100px);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.funnel-detail-dialog .el-dialog__header {
+  padding: 18px 24px 14px;
+  margin-right: 0;
+  border-bottom: 1px solid #e8eaed;
+}
+
+.funnel-detail-dialog .el-dialog__title {
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.funnel-detail-dialog .el-dialog__headerbtn {
+  top: 16px;
+  right: 16px;
+  font-size: 20px;
+}
+
+.funnel-detail-dialog .el-dialog__body {
+  padding: 14px 16px 18px;
+}
+
+/* 详情弹窗内的表格（Google 风格）*/
+.detail-table.el-table {
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 13px;
+}
+
+.detail-table .el-table__header-wrapper th {
+  background-color: #f1f3f4;
+  color: #3c4043;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.detail-table .el-table__row:hover > td {
+  background-color: #f8f9fa !important;
+}
+
+.detail-table .el-table__row td {
+  color: #202124;
 }
 </style>

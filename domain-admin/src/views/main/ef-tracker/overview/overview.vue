@@ -18,6 +18,9 @@
         />
       </div>
       <div class="ctrl-right">
+        <el-button :type="uniqueOnly ? 'primary' : ''" @click="toggleUnique" title="按 media_click_id 去重媒体点击 / LP访问 / LP点击，仅保留最新一条">
+          {{ uniqueOnly ? '已去重' : '去重' }}
+        </el-button>
         <el-button @click="fetchCounts" :loading="loading">查询</el-button>
       </div>
     </div>
@@ -172,15 +175,23 @@ function val(r) {
   return r.status === 'fulfilled' ? (r.value?.total ?? 0) : '-'
 }
 
+// 去重开关：开启后媒体点击 / LP访问 / LP点击 三个按 media_click_id 去重（unique=true，保留最新一条）；转化/回传不去重
+const uniqueOnly = ref(false)
+function toggleUnique() {
+  uniqueOnly.value = !uniqueOnly.value
+  fetchCounts()
+}
+
 // 并发取各环节 total（只读 total，size=1 减少传输）
 async function fetchCounts() {
   loading.value = true
   try {
     const base = { size: 1, tz: tz.value, ...rangeToParams(dateRange.value) }
+    const u = uniqueOnly.value ? { unique: true } : {}
     const results = await Promise.allSettled([
-      getClicks(base),
-      getLpVisitLogs(base),
-      getLpClicks(base),
+      getClicks({ ...base, ...u }),
+      getLpVisitLogs({ ...base, ...u }),
+      getLpClicks({ ...base, ...u }),
       getConversions(base),
       getConversions({ ...base, should_postback: 'true' })
     ])
