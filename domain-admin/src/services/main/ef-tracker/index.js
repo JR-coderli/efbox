@@ -56,6 +56,12 @@ export function getErrorLogs(params = {}) {
   return query('/query/error-logs', params)
 }
 
+// 批量硬删除错误日志（POST /error-logs/delete，删了不可恢复）
+// ids: number[]  →  返回 { deleted: number }（实际删除行数；不存在的 id 不影响计数）
+export function deleteErrorLogs(ids = []) {
+  return queryRequest.post('/error-logs/delete', { ids }).then((res) => res.data)
+}
+
 // 3. LP → Offer 点击 —— system_lp_clicks
 export function getLpClicks(params = {}) {
   return query('/query/lp-clicks', params)

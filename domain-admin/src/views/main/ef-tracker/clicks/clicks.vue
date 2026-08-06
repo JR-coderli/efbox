@@ -4,7 +4,7 @@
     <div class="page-header">
       <div class="header-left">
         <h1 class="page-title">媒体点击</h1>
-        <p class="page-subtitle">system_clicks · 媒体/系统点击流水</p>
+        <!-- <p class="page-subtitle">system_clicks · 媒体/系统点击流水</p> -->
       </div>
       <div class="header-actions">
         <el-popover
@@ -121,28 +121,34 @@
               :align="col.align"
             >
               <template #default="{ row }">
-                <div v-if="row.funnel" class="funnel-chain">
+                <div
+                  v-if="row.funnel"
+                  class="funnel-chain"
+                  @mouseover="onStepOver"
+                  @mousemove="onStepMove"
+                  @mouseout="onStepOut"
+                >
                   <template v-if="isDirectPath(row.funnel)">
                     <!-- 路径2：媒体点击 › Offer › 转化 › 下发（直连，未经 LP）-->
-                    <span class="funnel-step fs-ok" :title="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
+                    <span class="funnel-step fs-ok" :data-tip="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step fs-ok" title="Offer：是 · 直连路径（未经 LP）">Offer</span>
+                    <span class="funnel-step fs-ok" data-tip="Offer：是 · 直连路径（未经 LP）">Offer</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :title="stepBoolTitle('转化', row.funnel.converted)">转化</span>
+                    <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :data-tip="stepBoolTitle('转化', row.funnel.converted, row.funnel.converted_at)">转化</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :title="postbackTitle(row.funnel.media_postback)">下发</span>
+                    <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)">下发</span>
                   </template>
                   <template v-else>
                     <!-- 路径1：媒体点击 › LP展示 › LP点击 › 转化 › 下发 -->
-                    <span class="funnel-step fs-ok" :title="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
+                    <span class="funnel-step fs-ok" :data-tip="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="stepBoolClass(row.funnel.reached_lp)" :title="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)">LP展示</span>
+                    <span class="funnel-step" :class="stepBoolClass(row.funnel.reached_lp)" :data-tip="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)">LP展示</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="stepBoolClass(row.funnel.lp_click)" :title="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)">LP点击</span>
+                    <span class="funnel-step" :class="stepBoolClass(row.funnel.lp_click)" :data-tip="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)">LP点击</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :title="stepBoolTitle('转化', row.funnel.converted)">转化</span>
+                    <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :data-tip="stepBoolTitle('转化', row.funnel.converted, row.funnel.converted_at)">转化</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :title="postbackTitle(row.funnel.media_postback)">下发</span>
+                    <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)">下发</span>
                   </template>
                 </div>
                 <span v-else>-</span>
@@ -203,6 +209,8 @@
         />
       </div>
     </div>
+    <!-- 漏斗徽章悬浮提示（跟随鼠标的自定义浮层）-->
+    <div v-if="tip.visible" class="funnel-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
   </div>
 </template>
 
@@ -282,8 +290,8 @@ function stepBoolTitle(label, ok, at) {
 function postbackClass(v) {
   return PB_CLASS[v] || 'fs-no'
 }
-function postbackTitle(v) {
-  return `媒体下发：${PB_LABEL[v] || v || '-'}`
+function postbackTitle(v, at) {
+  return `媒体下发：${PB_LABEL[v] || v || '-'}${at ? ' · ' + fmtTime(at) : ''}`
 }
 
 // 直连路径判定：已转化但完全没碰 LP（reached_lp / lp_click 都为 false）
@@ -291,6 +299,35 @@ function postbackTitle(v) {
 // 其余（含尚未转化、判断不出路径）一律按路径1（媒体点击 › LP展示 › LP点击 › 转化 › 下发）渲染
 function isDirectPath(f) {
   return !!(f && f.converted && !f.reached_lp && !f.lp_click)
+}
+
+// 漏斗徽章悬浮提示：事件委托在 funnel-chain 上，单浮层跟随鼠标（比原生 title 醒目，不限行数）
+const tip = reactive({ visible: false, text: '', x: 0, y: 0 })
+function positionTip(e) {
+  const pad = 14
+  const w = 240
+  // 靠近视口右边缘时改到鼠标左侧，避免浮层超出屏幕
+  tip.x = e.clientX + pad + w > window.innerWidth ? e.clientX - pad - w : e.clientX + pad
+  tip.y = e.clientY + pad
+}
+function onStepOver(e) {
+  const step = e.target.closest('.funnel-step')
+  if (!step) return
+  const text = step.dataset.tip
+  if (!text) return
+  tip.text = text
+  tip.visible = true
+  positionTip(e)
+}
+function onStepMove(e) {
+  if (tip.visible) positionTip(e)
+}
+function onStepOut(e) {
+  // 移向的目标仍是某个徽章（徽章间切换）则不隐藏
+  const to = e.relatedTarget
+  if (!to || !to.closest || !to.closest('.funnel-step')) {
+    tip.visible = false
+  }
 }
 
 // ===== 列配置（数据驱动，配合齿轮面板做显隐 / 拖拽排序）=====
@@ -725,6 +762,21 @@ function toggleUnique() {
 .fs-bad {
   background: #fce8e6;
   color: #c5221f;
+}
+
+.funnel-tip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 320px;
+  padding: 6px 10px;
+  background: #2c2c2c;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-line;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
 .pagination-wrapper {
