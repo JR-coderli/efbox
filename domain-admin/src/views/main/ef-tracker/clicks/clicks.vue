@@ -88,7 +88,23 @@
               <span class="date-text">{{ fmtTime(row.created_at) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="system_click_id" prop="system_click_id" min-width="200" show-overflow-tooltip />
+          <el-table-column label="漏斗" min-width="350" align="center">
+            <template #default="{ row }">
+              <div v-if="row.funnel" class="funnel-chain">
+                <span class="funnel-step fs-ok" :title="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
+                <span class="funnel-arrow">›</span>
+                <span class="funnel-step" :class="stepBoolClass(row.funnel.reached_lp)" :title="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)">LP展示</span>
+                <span class="funnel-arrow">›</span>
+                <span class="funnel-step" :class="stepBoolClass(row.funnel.lp_click)" :title="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)">LP点击</span>
+                <span class="funnel-arrow">›</span>
+                <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :title="stepBoolTitle('转化', row.funnel.converted)">转化</span>
+                <span class="funnel-arrow">›</span>
+                <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :title="postbackTitle(row.funnel.media_postback)">下发</span>
+              </div>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="system_click_id" prop="system_click_id" min-width="270" show-overflow-tooltip />
           <el-table-column label="media_click_id" prop="media_click_id" min-width="160" show-overflow-tooltip />
           <el-table-column label="mid" prop="mid" width="70" align="center" />
           <el-table-column label="tid" prop="tid" width="80" align="center" />
@@ -121,6 +137,7 @@
           <el-table-column label="creative" prop="creative_name" min-width="100" show-overflow-tooltip />
           <el-table-column label="ip" prop="ip_address" width="120" show-overflow-tooltip />
           <el-table-column label="lander_url" prop="lander_url" min-width="220" show-overflow-tooltip />
+
           <template #empty>
             <el-empty description="暂无数据" />
           </template>
@@ -191,6 +208,38 @@ function fmtTime(s) {
   return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, (_m, sign, h, min) => ' ' + sign + parseInt(h, 10) + (parseInt(min, 10) ? ':' + parseInt(min, 10) : '')).replace(/Z$/, ' +0')
 }
 
+// ===== 归因漏斗（funnel）徽章渲染 =====
+// funnel 由外部接口 with_funnel=true 返回：reached_lp / lp_click / converted（布尔）+ media_postback（枚举）
+// 布尔阶段用 绿(完成)/灰(未完成) 两态；media_postback 用查表 + 默认灰，兼容未知枚举值
+const PB_LABEL = {
+  none: '未下发',
+  pending: '处理中',
+  sent: '已发送',
+  success: '成功',
+  failed: '失败',
+  error: '错误'
+}
+const PB_CLASS = {
+  none: 'fs-no',
+  pending: 'fs-wait',
+  sent: 'fs-wait',
+  success: 'fs-ok',
+  failed: 'fs-bad',
+  error: 'fs-bad'
+}
+function stepBoolClass(ok) {
+  return ok ? 'fs-ok' : 'fs-no'
+}
+function stepBoolTitle(label, ok, at) {
+  return `${label}：${ok ? '是' : '否'}${at ? ' · ' + fmtTime(at) : ''}`
+}
+function postbackClass(v) {
+  return PB_CLASS[v] || 'fs-no'
+}
+function postbackTitle(v) {
+  return `媒体下发：${PB_LABEL[v] || v || '-'}`
+}
+
 // daterange → start/end。end 为排除上界（<），因此 +1 天以包含结束日整天
 function rangeToParams(range) {
   if (!range || range.length !== 2) return {}
@@ -215,6 +264,7 @@ function buildParams() {
   if (filters.lid) p.lid = filters.lid
   if (filters.path_code) p.path_code = filters.path_code
   p.with_names = true // 返回 mid/tid/oid/lid 对应的名称（names 字段）
+  p.with_funnel = true // 返回归因漏斗（funnel：到达LP / 点击Offer / 转化 / 媒体下发）
   if (uniqueOnly.value) p.unique = true // 去重：按 media_click_id 只保留最新一条
   Object.assign(p, rangeToParams(dateRange.value))
   return p
@@ -502,6 +552,54 @@ function toggleUnique() {
 .date-text {
   color: #5f6368;
   font-size: 13px;
+}
+
+// 归因漏斗：LP › 点击 › 转化 › 回传，每段一个状态徽章，hover 显示时间/状态
+.funnel-chain {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.funnel-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.funnel-arrow {
+  color: #bdc1c6;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.fs-ok {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.fs-no {
+  background: #f1f3f4;
+  color: #80868b;
+}
+
+.fs-wait {
+  background: #fef7e0;
+  color: #b06000;
+}
+
+.fs-bad {
+  background: #fce8e6;
+  color: #c5221f;
 }
 
 .pagination-wrapper {
