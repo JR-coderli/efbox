@@ -218,6 +218,18 @@
                 <span>{{ row.names?.[col.nameKey] || '-' }}</span>
               </template>
             </el-table-column>
+            <!-- preview_url：lander_url 去查询串 + eflp 签名（点击实时生成、新窗口打开）-->
+            <el-table-column
+              v-else-if="col.type === 'preview'"
+              :label="col.label"
+              :min-width="col.minWidth"
+              :show-overflow-tooltip="col.overflow"
+            >
+              <template #default="{ row }">
+                <a v-if="row.lander_url" class="preview-link" href="#" :title="`点击预览：${row.lander_url}`" @click.prevent="openPreview(row.lander_url)">{{ landerPath(row.lander_url) }}</a>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
             <!-- 普通字段列 -->
             <el-table-column
               v-else
@@ -226,6 +238,7 @@
               :width="col.width"
               :min-width="col.minWidth"
               :align="col.align"
+              :class-name="col.cellClass"
               :show-overflow-tooltip="col.overflow"
             />
           </template>
@@ -286,6 +299,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import Sortable from 'sortablejs'
 import { getClicks, getLpVisitLogs, getLpClicks, getConversions } from '@/services/main/ef-tracker'
+import SparkMD5 from 'spark-md5'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -351,6 +365,24 @@ function totalDuration(row) {
   const last = lastStepAt(row.funnel)
   if (!last || !row.created_at) return '-'
   return fmtDuration(new Date(last) - new Date(row.created_at))
+}
+
+// preview_url：lander_url 去掉原查询串（只留域名+路径）+ eflp 访问签名
+// 签名点击时实时生成（t/n 最新，保证门禁放行），逻辑复制自 落地页列表 handleOpenUrl
+function buildEflpQuery() {
+  const t = Math.floor(Date.now() / 10000)
+  const n = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  const s = SparkMD5.hash(`eflp${t}${n}`).substring(0, 10)
+  return `go=1&t=${t}&n=${n}&s=${s}&w=1`
+}
+function landerPath(url) {
+  return url ? String(url).split('?')[0] : '-'
+}
+function openPreview(url) {
+  if (!url) return
+  window.open(`${url.split('?')[0]}?${buildEflpQuery()}`, '_blank')
 }
 
 // ===== 归因漏斗（funnel）徽章渲染 =====
@@ -529,7 +561,7 @@ const DEFAULT_COLUMNS = [
   { key: 'tid', label: 'tid', type: 'plain', prop: 'tid', width: 80, align: 'center', defaultHidden: true },
   { key: 'oid', label: 'oid', type: 'plain', prop: 'oid', width: 80, align: 'center', defaultHidden: true },
   { key: 'lid', label: 'lid', type: 'plain', prop: 'lid', width: 80, align: 'center', defaultHidden: true },
-  { key: 'cost', label: 'cost', type: 'plain', prop: 'cost', width: 100, align: 'right' },
+  { key: 'cost', label: 'cost', type: 'plain', prop: 'cost', width: 100, align: 'right', cellClass: 'col-money' },
   { key: 'names.media', label: 'Media_name', type: 'names', nameKey: 'media', prop: 'names.media', minWidth: 110, overflow: true },
   { key: 'names.tracker', label: 'Tracker_name', type: 'names', nameKey: 'tracker', prop: 'names.tracker', minWidth: 210, overflow: true },
   { key: 'names.lander', label: 'Lander_name', type: 'names', nameKey: 'lander', prop: 'names.lander', minWidth: 210, overflow: true },
@@ -540,6 +572,7 @@ const DEFAULT_COLUMNS = [
   { key: 'creative', label: 'creative', type: 'plain', prop: 'creative_name', minWidth: 100, overflow: true, defaultHidden: true },
   { key: 'ip', label: 'ip', type: 'plain', prop: 'ip_address', width: 120, overflow: true, defaultHidden: true },
   { key: 'lander_url', label: 'lander_url', type: 'plain', prop: 'lander_url', minWidth: 220, overflow: true },
+  { key: 'preview_url', label: 'preview_url', type: 'preview', minWidth: 220, overflow: true },
   { key: 'referer', label: 'referer', type: 'plain', prop: 'referer', minWidth: 220, overflow: true, defaultHidden: true }
 ]
 
@@ -902,6 +935,22 @@ function toggleUnique() {
 .date-text {
   color: #5f6368;
   font-size: 13px;
+}
+
+// 金额列用等宽数字字体（tabular figures），数字对齐、便于比较金额
+:deep(.google-table td.col-money .cell) {
+  font-family: 'Roboto Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-link {
+  color: #1a73e8;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 // 归因漏斗：LP › 点击 › 转化 › 回传，每段一个状态徽章，hover 显示时间/状态
