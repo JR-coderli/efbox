@@ -7,6 +7,36 @@
         <p class="page-subtitle">system_clicks · 媒体/系统点击流水</p>
       </div>
       <div class="header-actions">
+        <el-popover
+          trigger="click"
+          placement="bottom-end"
+          :width="260"
+          popper-class="clicks-col-popover"
+          @after-enter="onPanelShown"
+          @hide="onPanelHidden"
+        >
+          <template #reference>
+            <button class="google-btn google-btn-secondary" title="配置列（显示 / 排序）">
+              <svg class="btn-icon" viewBox="0 0 24 24">
+                <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+              </svg>
+            </button>
+          </template>
+          <div class="col-config-panel">
+            <div class="col-config-header">
+              <span>列配置</span>
+              <button class="col-reset-btn" @click="resetColumns">重置</button>
+            </div>
+            <ul ref="colListRef" class="col-config-list">
+              <li v-for="col in columns" :key="col.key" class="col-config-item" :class="{ 'is-hidden': !col.visible }">
+                <span class="col-drag-handle" title="拖拽排序">
+                  <svg class="grip-icon" viewBox="0 0 10 16"><circle cx="2.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></svg>
+                </span>
+                <el-checkbox v-model="col.visible">{{ col.label }}</el-checkbox>
+              </li>
+            </ul>
+          </div>
+        </el-popover>
         <button
           class="google-btn"
           :class="uniqueOnly ? 'google-btn-primary' : 'google-btn-secondary'"
@@ -82,61 +112,63 @@
       <!-- 表格 -->
       <div class="table-wrapper">
         <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :tooltip-options="{ popperClass: 'clicks-overflow-tooltip' }">
-          <el-table-column label="ID" prop="id" width="80" align="center" />
-          <el-table-column label="创建时间" prop="created_at" width="200">
-            <template #default="{ row }">
-              <span class="date-text">{{ fmtTime(row.created_at) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="漏斗" min-width="350" align="center">
-            <template #default="{ row }">
-              <div v-if="row.funnel" class="funnel-chain">
-                <span class="funnel-step fs-ok" :title="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
-                <span class="funnel-arrow">›</span>
-                <span class="funnel-step" :class="stepBoolClass(row.funnel.reached_lp)" :title="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)">LP展示</span>
-                <span class="funnel-arrow">›</span>
-                <span class="funnel-step" :class="stepBoolClass(row.funnel.lp_click)" :title="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)">LP点击</span>
-                <span class="funnel-arrow">›</span>
-                <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :title="stepBoolTitle('转化', row.funnel.converted)">转化</span>
-                <span class="funnel-arrow">›</span>
-                <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :title="postbackTitle(row.funnel.media_postback)">下发</span>
-              </div>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="system_click_id" prop="system_click_id" min-width="270" show-overflow-tooltip />
-          <el-table-column label="media_click_id" prop="media_click_id" min-width="160" show-overflow-tooltip />
-          <el-table-column label="mid" prop="mid" width="70" align="center" />
-          <el-table-column label="tid" prop="tid" width="80" align="center" />
-          <el-table-column label="oid" prop="oid" width="80" align="center" />
-          <el-table-column label="lid" prop="lid" width="80" align="center" />
-          <el-table-column label="媒体" prop="names.media" min-width="110" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span>{{ row.names?.media || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="Tracker" prop="names.tracker" min-width="110" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span>{{ row.names?.tracker || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="Offer" prop="names.offer" min-width="110" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span>{{ row.names?.offer || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="落地页" prop="names.lander" min-width="110" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span>{{ row.names?.lander || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="path_code" prop="path_code" width="100" show-overflow-tooltip />
-          <el-table-column label="cost" prop="cost" width="80" align="right" />
-          <el-table-column label="campaign" prop="campaign_name" min-width="120" show-overflow-tooltip />
-          <el-table-column label="adset" prop="adset_name" min-width="100" show-overflow-tooltip />
-          <el-table-column label="creative" prop="creative_name" min-width="100" show-overflow-tooltip />
-          <el-table-column label="ip" prop="ip_address" width="120" show-overflow-tooltip />
-          <el-table-column label="lander_url" prop="lander_url" min-width="220" show-overflow-tooltip />
+          <template v-for="col in visibleColumns" :key="col.key">
+            <!-- 漏斗列 -->
+            <el-table-column
+              v-if="col.type === 'funnel'"
+              :label="col.label"
+              :min-width="col.minWidth"
+              :align="col.align"
+            >
+              <template #default="{ row }">
+                <div v-if="row.funnel" class="funnel-chain">
+                  <span class="funnel-step fs-ok" :title="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
+                  <span class="funnel-arrow">›</span>
+                  <span class="funnel-step" :class="stepBoolClass(row.funnel.reached_lp)" :title="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)">LP展示</span>
+                  <span class="funnel-arrow">›</span>
+                  <span class="funnel-step" :class="stepBoolClass(row.funnel.lp_click)" :title="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)">LP点击</span>
+                  <span class="funnel-arrow">›</span>
+                  <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :title="stepBoolTitle('转化', row.funnel.converted)">转化</span>
+                  <span class="funnel-arrow">›</span>
+                  <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :title="postbackTitle(row.funnel.media_postback)">下发</span>
+                </div>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <!-- 创建时间（格式化） -->
+            <el-table-column
+              v-else-if="col.type === 'time'"
+              :label="col.label"
+              :prop="col.prop"
+              :width="col.width"
+            >
+              <template #default="{ row }">
+                <span class="date-text">{{ fmtTime(row.created_at) }}</span>
+              </template>
+            </el-table-column>
+            <!-- names 名称映射列（row.names[nameKey]） -->
+            <el-table-column
+              v-else-if="col.type === 'names'"
+              :label="col.label"
+              :prop="col.prop"
+              :min-width="col.minWidth"
+              :show-overflow-tooltip="col.overflow"
+            >
+              <template #default="{ row }">
+                <span>{{ row.names?.[col.nameKey] || '-' }}</span>
+              </template>
+            </el-table-column>
+            <!-- 普通字段列 -->
+            <el-table-column
+              v-else
+              :label="col.label"
+              :prop="col.prop"
+              :width="col.width"
+              :min-width="col.minWidth"
+              :align="col.align"
+              :show-overflow-tooltip="col.overflow"
+            />
+          </template>
 
           <template #empty>
             <el-empty description="暂无数据" />
@@ -162,8 +194,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import Sortable from 'sortablejs'
 import { getClicks } from '@/services/main/ef-tracker'
 
 const loading = ref(false)
@@ -238,6 +271,77 @@ function postbackClass(v) {
 }
 function postbackTitle(v) {
   return `媒体下发：${PB_LABEL[v] || v || '-'}`
+}
+
+// ===== 列配置（数据驱动，配合齿轮面板做显隐 / 拖拽排序）=====
+// type：plain 纯字段 / time 时间格式化 / names 名称映射(row.names[nameKey]) / funnel 漏斗
+// 不做持久化：组件每次重建（路由切换 / 刷新）都回到 DEFAULT_COLUMNS 的默认顺序与可见性
+// defaultHidden: true → 该列默认隐藏（可在齿轮面板里手动勾开）
+const DEFAULT_COLUMNS = [
+  { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
+  { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
+  { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 350, align: 'center' },
+  { key: 'system_click_id', label: 'system_click_id', type: 'plain', prop: 'system_click_id', minWidth: 270, overflow: true },
+  { key: 'media_click_id', label: 'media_click_id', type: 'plain', prop: 'media_click_id', minWidth: 160, overflow: true },
+  { key: 'mid', label: 'mid', type: 'plain', prop: 'mid', width: 70, align: 'center', defaultHidden: true },
+  { key: 'tid', label: 'tid', type: 'plain', prop: 'tid', width: 80, align: 'center', defaultHidden: true },
+  { key: 'oid', label: 'oid', type: 'plain', prop: 'oid', width: 80, align: 'center', defaultHidden: true },
+  { key: 'lid', label: 'lid', type: 'plain', prop: 'lid', width: 80, align: 'center', defaultHidden: true },
+  { key: 'cost', label: 'cost', type: 'plain', prop: 'cost', width: 100, align: 'right' },
+  { key: 'names.media', label: 'Media_name', type: 'names', nameKey: 'media', prop: 'names.media', minWidth: 110, overflow: true },
+  { key: 'names.tracker', label: 'Tracker_name', type: 'names', nameKey: 'tracker', prop: 'names.tracker', minWidth: 210, overflow: true },
+  { key: 'names.lander', label: 'Lander_name', type: 'names', nameKey: 'lander', prop: 'names.lander', minWidth: 210, overflow: true },
+  { key: 'names.offer', label: 'Offer_name', type: 'names', nameKey: 'offer', prop: 'names.offer', minWidth: 210, overflow: true },
+  { key: 'path_code', label: 'path_code', type: 'plain', prop: 'path_code', width: 100, overflow: true, defaultHidden: true },
+  { key: 'campaign', label: 'campaign', type: 'plain', prop: 'campaign_name', minWidth: 120, overflow: true, defaultHidden: true },
+  { key: 'adset', label: 'adset', type: 'plain', prop: 'adset_name', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 'creative', label: 'creative', type: 'plain', prop: 'creative_name', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 'ip', label: 'ip', type: 'plain', prop: 'ip_address', width: 120, overflow: true, defaultHidden: true },
+  { key: 'lander_url', label: 'lander_url', type: 'plain', prop: 'lander_url', minWidth: 220, overflow: true },
+  { key: 'referer', label: 'referer', type: 'plain', prop: 'referer', minWidth: 220, overflow: true, defaultHidden: true }
+]
+
+// 工作副本：齿轮面板只改它（visible / 顺序），不影响 DEFAULT_COLUMNS
+const columns = ref(DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden })))
+const visibleColumns = computed(() => columns.value.filter((c) => c.visible))
+
+// 齿轮配置面板
+const colListRef = ref(null)
+let sortableInstance = null
+
+function resetColumns() {
+  columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden }))
+}
+
+// 面板展开后挂 Sortable（幂等）。popover 内容 teleported 且关闭即卸载，
+// 故每次 @after-enter 重新挂载、@hide 销毁，保证绑定的始终是当前 DOM。
+function ensureSortable() {
+  if (!colListRef.value) return
+  if (sortableInstance) sortableInstance.destroy()
+  sortableInstance = Sortable.create(colListRef.value, {
+    animation: 150,
+    handle: '.col-drag-handle',
+    ghostClass: 'col-sortable-ghost',
+    chosenClass: 'col-sortable-chosen',
+    onEnd: ({ oldIndex, newIndex }) => {
+      if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return
+      const arr = [...columns.value]
+      const [moved] = arr.splice(oldIndex, 1)
+      arr.splice(newIndex, 0, moved)
+      columns.value = arr // 同步回数据，Vue 按 key(col.key) 重排便表格列顺序
+    }
+  })
+}
+
+function onPanelShown() {
+  nextTick(ensureSortable)
+}
+
+function onPanelHidden() {
+  if (sortableInstance) {
+    sortableInstance.destroy()
+    sortableInstance = null
+  }
 }
 
 // daterange → start/end。end 为排除上界（<），因此 +1 天以包含结束日整天
@@ -514,6 +618,7 @@ function toggleUnique() {
 
       .cell {
         padding: 0;
+        text-align: center !important; // 表头文字统一居中（覆盖各列 align 的继承）
       }
     }
   }
@@ -657,5 +762,101 @@ function toggleUnique() {
 .clicks-overflow-tooltip {
   max-width: 400px;
   word-break: break-all;
+}
+
+/* 列配置面板（el-popover teleported 到 body，scoped 选不中，写在全局） */
+.clicks-col-popover.el-popper {
+  padding: 0 !important;
+}
+
+.col-config-panel {
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+}
+
+.col-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e8eaed;
+  font-size: 13px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.col-reset-btn {
+  border: none;
+  background: transparent;
+  color: #1a73e8;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.col-reset-btn:hover {
+  background: #f1f3f4;
+}
+
+.col-config-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.col-config-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.col-config-item:hover {
+  background: #f8f9fa;
+}
+
+.col-config-item.is-hidden {
+  opacity: 0.5;
+}
+
+.col-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  cursor: grab;
+  color: #bdc1c6;
+}
+
+.col-drag-handle:active {
+  cursor: grabbing;
+}
+
+.grip-icon {
+  width: 10px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.col-config-item .el-checkbox {
+  flex: 1;
+  height: auto;
+  margin-right: 0;
+}
+
+.col-config-item .el-checkbox__label {
+  font-size: 13px;
+  color: #202124;
+}
+
+/* sortable 拖拽视觉 */
+.col-sortable-ghost {
+  opacity: 0.4;
+}
+
+.col-sortable-chosen {
+  background: #e8f0fe;
+  border-radius: 6px;
 }
 </style>
