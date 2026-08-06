@@ -154,6 +154,17 @@
                 <span v-else>-</span>
               </template>
             </el-table-column>
+            <!-- 总用时（媒体点击 → 最远已完成步骤的时间差）-->
+            <el-table-column
+              v-else-if="col.type === 'duration'"
+              :label="col.label"
+              :width="col.width"
+              :align="col.align"
+            >
+              <template #default="{ row }">
+                <span>{{ totalDuration(row) }}</span>
+              </template>
+            </el-table-column>
             <!-- 创建时间（格式化） -->
             <el-table-column
               v-else-if="col.type === 'time'"
@@ -262,6 +273,30 @@ function fmtTime(s) {
   return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, (_m, sign, h, min) => ' ' + sign + parseInt(h, 10) + (parseInt(min, 10) ? ':' + parseInt(min, 10) : '')).replace(/Z$/, ' +0')
 }
 
+// 总用时：媒体点击(created_at) → 漏斗里最远一个已完成步骤的时间差
+// 步骤优先级：下发 > 转化 > LP点击 > LP展示（取最远那个有时间戳的）；都没有则显示 -
+function lastStepAt(f) {
+  if (!f) return null
+  return f.media_postback_at || f.converted_at || f.lp_click_at || f.reached_lp_at || null
+}
+function fmtDuration(ms) {
+  if (ms == null || ms < 0 || Number.isNaN(ms)) return '-'
+  if (ms < 1000) return (ms / 1000).toFixed(1) + 's' // 不足 1 秒保留 1 位小数，避免四舍五入成 0s
+  const s = Math.round(ms / 1000)
+  if (s < 60) return s + 's'
+  const m = Math.floor(s / 60)
+  const rest = s % 60
+  if (m < 60) return rest ? `${m}m ${rest}s` : `${m}m`
+  const h = Math.floor(m / 60)
+  const mm = m % 60
+  return mm ? `${h}h ${mm}m` : `${h}h`
+}
+function totalDuration(row) {
+  const last = lastStepAt(row.funnel)
+  if (!last || !row.created_at) return '-'
+  return fmtDuration(new Date(last) - new Date(row.created_at))
+}
+
 // ===== 归因漏斗（funnel）徽章渲染 =====
 // funnel 由外部接口 with_funnel=true 返回：reached_lp / lp_click / converted（布尔）+ media_postback（枚举）
 // 布尔阶段用 绿(完成)/灰(未完成) 两态；media_postback 用查表 + 默认灰，兼容未知枚举值
@@ -338,6 +373,7 @@ const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
   { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 350, align: 'center' },
+  { key: 'total_time', label: '总用时', type: 'duration', width: 90, align: 'center' },
   { key: 'system_click_id', label: 'system_click_id', type: 'plain', prop: 'system_click_id', minWidth: 270, overflow: true },
   { key: 'media_click_id', label: 'media_click_id', type: 'plain', prop: 'media_click_id', minWidth: 160, overflow: true },
   { key: 'mid', label: 'mid', type: 'plain', prop: 'mid', width: 70, align: 'center', defaultHidden: true },
