@@ -122,15 +122,28 @@
             >
               <template #default="{ row }">
                 <div v-if="row.funnel" class="funnel-chain">
-                  <span class="funnel-step fs-ok" :title="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
-                  <span class="funnel-arrow">›</span>
-                  <span class="funnel-step" :class="stepBoolClass(row.funnel.reached_lp)" :title="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)">LP展示</span>
-                  <span class="funnel-arrow">›</span>
-                  <span class="funnel-step" :class="stepBoolClass(row.funnel.lp_click)" :title="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)">LP点击</span>
-                  <span class="funnel-arrow">›</span>
-                  <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :title="stepBoolTitle('转化', row.funnel.converted)">转化</span>
-                  <span class="funnel-arrow">›</span>
-                  <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :title="postbackTitle(row.funnel.media_postback)">下发</span>
+                  <template v-if="isDirectPath(row.funnel)">
+                    <!-- 路径2：媒体点击 › Offer › 转化 › 下发（直连，未经 LP）-->
+                    <span class="funnel-step fs-ok" :title="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
+                    <span class="funnel-arrow">›</span>
+                    <span class="funnel-step fs-ok" title="Offer：是 · 直连路径（未经 LP）">Offer</span>
+                    <span class="funnel-arrow">›</span>
+                    <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :title="stepBoolTitle('转化', row.funnel.converted)">转化</span>
+                    <span class="funnel-arrow">›</span>
+                    <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :title="postbackTitle(row.funnel.media_postback)">下发</span>
+                  </template>
+                  <template v-else>
+                    <!-- 路径1：媒体点击 › LP展示 › LP点击 › 转化 › 下发 -->
+                    <span class="funnel-step fs-ok" :title="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
+                    <span class="funnel-arrow">›</span>
+                    <span class="funnel-step" :class="stepBoolClass(row.funnel.reached_lp)" :title="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)">LP展示</span>
+                    <span class="funnel-arrow">›</span>
+                    <span class="funnel-step" :class="stepBoolClass(row.funnel.lp_click)" :title="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)">LP点击</span>
+                    <span class="funnel-arrow">›</span>
+                    <span class="funnel-step" :class="stepBoolClass(row.funnel.converted)" :title="stepBoolTitle('转化', row.funnel.converted)">转化</span>
+                    <span class="funnel-arrow">›</span>
+                    <span class="funnel-step" :class="postbackClass(row.funnel.media_postback)" :title="postbackTitle(row.funnel.media_postback)">下发</span>
+                  </template>
                 </div>
                 <span v-else>-</span>
               </template>
@@ -271,6 +284,13 @@ function postbackClass(v) {
 }
 function postbackTitle(v) {
   return `媒体下发：${PB_LABEL[v] || v || '-'}`
+}
+
+// 直连路径判定：已转化但完全没碰 LP（reached_lp / lp_click 都为 false）
+// → 媒体点击直接进 Offer 转化、不经 LP，漏斗按路径2（媒体点击 › Offer › 转化 › 下发）渲染
+// 其余（含尚未转化、判断不出路径）一律按路径1（媒体点击 › LP展示 › LP点击 › 转化 › 下发）渲染
+function isDirectPath(f) {
+  return !!(f && f.converted && !f.reached_lp && !f.lp_click)
 }
 
 // ===== 列配置（数据驱动，配合齿轮面板做显隐 / 拖拽排序）=====
