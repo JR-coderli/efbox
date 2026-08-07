@@ -230,6 +230,27 @@
                 <span v-else>-</span>
               </template>
             </el-table-column>
+            <!-- 预览图：仅「有 LP展示(reached_lp)」的行显示该 lander 的缓存截图；点击可大图预览 -->
+            <el-table-column
+              v-else-if="col.type === 'screenshot'"
+              :label="col.label"
+              :width="col.width"
+              :min-width="col.minWidth"
+              :align="col.align"
+            >
+              <template #default="{ row }">
+                <el-image
+                  v-if="row.funnel?.reached_lp && shotOf(row.lid).screenshot_url && shotOf(row.lid).screenshot_status === 'success'"
+                  class="click-shot"
+                  :src="getFullImageUrl(shotOf(row.lid).screenshot_url)"
+                  :preview-src-list="[getFullImageUrl(shotOf(row.lid).screenshot_url)]"
+                  :preview-teleported="true"
+                  :hide-on-click-modal="true"
+                  fit="cover"
+                />
+                <span v-else class="shot-empty">-</span>
+              </template>
+            </el-table-column>
             <!-- 普通字段列 -->
             <el-table-column
               v-else
@@ -298,12 +319,18 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import Sortable from 'sortablejs'
-import { getClicks, getLpVisitLogs, getLpClicks, getConversions } from '@/services/main/ef-tracker'
+import { getClicks, getLpVisitLogs, getLpClicks, getConversions, getEfLanderScreenshots } from '@/services/main/ef-tracker'
+import { BASE_URL } from '@/services/request/config'
 import SparkMD5 from 'spark-md5'
 
 const loading = ref(false)
 const tableData = ref([])
 const total = ref(0)
+
+// 预览图：按 lander id(lid) 缓存的截图（来源 ef_lander_screenshots，与落地页列表同源）
+// 仅「有 LP展示(reached_lp)」的行才取；同一 lander 共用一张图。每次列表加载重建——
+// 在落地页列表手动上传更新后，这里下次加载即生效；对方改域名不会自动重截（沿用旧图）
+const screenshotMap = reactive({})
 
 // 服务端分页：page 从 1 开始，size 上限 100
 const pagination = reactive({
@@ -383,6 +410,40 @@ function landerPath(url) {
 function openPreview(url) {
   if (!url) return
   window.open(`${url.split('?')[0]}?${buildEflpQuery()}`, '_blank')
+}
+
+// 截图存本地 domain-api 的 /uploads 下（相对路径），拼 BASE_URL 得到完整地址
+function getFullImageUrl(url) {
+  if (!url) return ''
+  return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
+}
+// 取某 lid 的缓存截图信息（无则空对象；模板按 reached_lp + success 判定是否渲染）
+function shotOf(lid) {
+  return screenshotMap[lid] || {}
+}
+
+// 列表加载后，对「有 LP展示(reached_lp)」的行按 lid 去重批量取缓存截图，填充 screenshotMap
+async function fetchScreenshots() {
+  const lids = []
+  const seen = new Set()
+  for (const row of tableData.value) {
+    if (row?.funnel?.reached_lp && row.lid != null && !seen.has(row.lid)) {
+      seen.add(row.lid)
+      lids.push(row.lid)
+    }
+  }
+  // 清空旧映射，避免上一页残留
+  Object.keys(screenshotMap).forEach((k) => delete screenshotMap[k])
+  if (lids.length === 0) return
+  try {
+    const res = await getEfLanderScreenshots(lids)
+    const map = res?.data || {}
+    for (const [lid, info] of Object.entries(map)) {
+      if (info) screenshotMap[lid] = info
+    }
+  } catch (e) {
+    // 取图失败不阻塞列表展示
+  }
 }
 
 // ===== 归因漏斗（funnel）徽章渲染 =====
@@ -555,6 +616,7 @@ const DEFAULT_COLUMNS = [
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
   { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 350, align: 'center' },
   { key: 'total_time', label: '总用时', type: 'duration', width: 90, align: 'center' },
+  { key: 'preview_img', label: '预览图', type: 'screenshot', width: 120, align: 'center' },
   { key: 'system_click_id', label: 'system_click_id', type: 'plain', prop: 'system_click_id', minWidth: 270, overflow: true },
   { key: 'media_click_id', label: 'media_click_id', type: 'plain', prop: 'media_click_id', minWidth: 160, overflow: true },
   { key: 'mid', label: 'mid', type: 'plain', prop: 'mid', width: 70, align: 'center', defaultHidden: true },
@@ -655,6 +717,7 @@ async function loadData() {
     const result = await getClicks(buildParams())
     tableData.value = result?.list || []
     total.value = result?.total ?? 0
+    fetchScreenshots() // 异步取 reached_lp 行的 LP 预览图，不阻塞表格渲染
   } catch (error) {
     ElMessage.error('加载失败: ' + (error?.response?.data?.error || error?.message || '网络错误'))
   } finally {
@@ -1074,9 +1137,32 @@ function toggleUnique() {
     }
   }
 }
+
+/* 预览图缩略图（LP 缓存截图）：高度压到行高(48px)以内，避免该行被撑高，使有/无缩略图的行等高；
+   display:block + margin 居中，并消除 inline-block 的行下缝隙。点击 el-image 自带大图预览 */
+.click-shot {
+  width: 66px;
+  height: 44px;
+  border-radius: 4px;
+  border: 1px solid #e8eaed;
+  display: block;
+  margin: 0 auto;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.click-shot :deep(.el-image__inner) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.shot-empty {
+  color: #9aa0a6;
+}
 </style>
 
-<style>
+<style lang="less">
 /* el-table 溢出 tooltip（已传送到 body，scoped 选不中）：限制最大宽度，避免 lander_url 等长文本超出屏幕 */
 .clicks-overflow-tooltip {
   max-width: 400px;
@@ -1228,5 +1314,16 @@ function toggleUnique() {
 
 .detail-table .el-table__row td {
   color: #202124;
+}
+
+/* el-image 预览大图：viewer 被 preview-teleported 送到 body，须用全局选择器；
+   非 scoped 块里写 :deep() 不会被编译、整条选择器失效，故直接用后代选择器 */
+.el-image-viewer__wrapper {
+  .el-image-viewer__canvas {
+    .el-image-viewer__img {
+      max-width: 64% !important;
+      max-height: 80% !important;
+    }
+  }
 }
 </style>
