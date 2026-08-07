@@ -1322,7 +1322,7 @@ function toggleUnique() {
   .el-image-viewer__canvas {
     .el-image-viewer__img {
       max-width: 64% !important;
-      max-height: 80% !important;
+      max-height: 75% !important;
     }
   }
 }
