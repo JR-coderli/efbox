@@ -94,10 +94,10 @@
               <span>{{ row.names?.tracker || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="payout" prop="payout" width="80" align="right" />
+          <el-table-column label="payout" prop="payout" width="80" align="right" class-name="col-money" />
           <el-table-column label="应回传" prop="should_postback" width="80" align="center">
             <template #default="{ row }">
-              <span :class="row.should_postback ? 'tag-yes' : 'tag-no'">{{ row.should_postback ? '是' : '否' }}</span>
+              <el-tag :type="row.should_postback ? 'success' : 'danger'" size="small">{{ row.should_postback ? '是' : '否' }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="回传状态" prop="http_status_code" width="90" align="center" />
@@ -473,13 +473,10 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-.tag-yes {
-  color: #1e8e3e;
-  font-weight: 500;
-}
-
-.tag-no {
-  color: #d93025;
+/* payout 金额列：等宽数字字体 + 表格数字对齐（与媒体点击 cost 列一致） */
+:deep(.google-table td.col-money .cell) {
+  font-family: 'Roboto Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .pagination-wrapper {
