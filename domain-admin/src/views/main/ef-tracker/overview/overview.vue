@@ -176,7 +176,8 @@ function val(r) {
 }
 
 // 去重开关：开启后媒体点击 / LP访问 / LP点击 三个按 media_click_id 去重（unique=true，保留最新一条）；转化/回传不去重
-const uniqueOnly = ref(false)
+// 默认开启：页面打开即按 media_click_id 去重
+const uniqueOnly = ref(true)
 function toggleUnique() {
   uniqueOnly.value = !uniqueOnly.value
   fetchCounts()
