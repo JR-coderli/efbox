@@ -1,5 +1,15 @@
 <template>
   <div class="domains-page">
+    <!-- 搜索区域 (同时搜索重要域名和黑名单域名) -->
+    <div class="domains-search">
+      <page-search
+        :search-config="searchConfig"
+        instant
+        @query-click="handleQueryClick"
+        @reset-click="handleResetClick"
+      />
+    </div>
+
     <!-- 表格1内容区域 (重要域名) -->
     <domains-content
       :content-config="contentConfigImport"
@@ -605,6 +615,45 @@ onMounted(() => {
   padding: 10px;
   // max-width: 1600px;
   margin: 0 auto;
+}
+
+
+/* 搜索栏 - 紧凑单行排版,仅覆盖本页面的 page-search 样式 */
+.domains-search {
+  margin-bottom: 12px;
+
+  :deep(.search) {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    background: #fff;
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+
+    .el-form {
+      flex: 1;
+    }
+
+    .el-row {
+      width: 100%;
+    }
+
+    .el-col {
+      flex: 0 0 100%;
+      max-width: 320px;
+    }
+
+    .el-form-item {
+      padding: 0;
+      margin-bottom: 0;
+    }
+
+    .btns {
+      padding: 0;
+      flex-shrink: 0;
+    }
+  }
 }
 
 

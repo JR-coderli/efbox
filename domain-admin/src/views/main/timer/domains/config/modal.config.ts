@@ -6,16 +6,6 @@ const modalConfig = {
     editTitle: '编辑域名',
   },
   formItems: [
-
-
-
-
-
-
-
-
-
-
     {
       type: 'input',
       label: '落地页地址',

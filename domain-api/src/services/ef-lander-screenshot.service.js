@@ -6,12 +6,15 @@
  *   下面 buildSignedUrl 的签名逻辑复制自 lander-screenshot.service.js，未做任何改动。
  * - 触发方式：前端手动点击「截图/重新截图」按钮，同步等待结果（无队列、无定时器、无变更检测）。
  * - 重新截图不会删除旧图：旧文件留在 uploads/ef_lander_screenshots/，DB 行只指向最新一张；需要清理时直接去服务器删目录。
+ * - 截图成功后除更新本地 ef_lander_screenshots 外，还会回写对方 ab_landers.preview_url
+ *   （POST /landers/update-preview，见 ef-remote.service.js）；回写失败只记日志，不阻断本地流程。
  */
 const puppeteer = require('puppeteer-core')
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 const efLanderService = require('../service/ef-lander.service')
+const { updateRemotePreviewUrl } = require('./ef-remote.service')
 const { DEV_CHROME_PATH, PROD_CHROME_PATH } = require('../config/server')
 
 const isProd = process.env.NODE_ENV === 'production'
@@ -95,8 +98,11 @@ async function captureLanderScreenshot({ landerId, landerUrl }) {
       error: null
     })
 
+    // 顺带回写对方 ab_landers.preview_url（失败不影响本地结果）
+    const remote = await updateRemotePreviewUrl({ landerId, screenshotUrl })
+
     console.log(`[ef-lander 截图] 成功: lander_id=${landerId}`)
-    return { success: true, screenshot_url: screenshotUrl }
+    return { success: true, screenshot_url: screenshotUrl, preview_url: remote.preview_url }
   } catch (error) {
     console.error(`[ef-lander 截图] 失败: lander_id=${landerId}`, error.message)
     await efLanderService.upsertScreenshot({

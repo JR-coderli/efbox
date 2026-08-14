@@ -13,7 +13,7 @@ function usePageContent() {
   function handleQueryClick(formData) {
 
 
-    if (formData.createAt.length > 0) {
+    if (formData.createAt && formData.createAt.length > 0) {
       createAt[0] = formatUTC2(formData.createAt[0])
       createAt[1] = formatUTC2(formData.createAt[1])
       formData.createAt = createAt

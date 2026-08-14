@@ -1,7 +1,7 @@
 <template>
   <div class="search" v-if="isQuery">
     <!-- 1、输入搜索关键字的表单 -->
-    <el-form :model="searchForm" ref="formRef" label-width="100px" size="large">
+    <el-form :model="searchForm" ref="formRef" label-width="50px" size="large">
       <el-row :gutter="20">
         <template v-for="item in searchConfig.formItems" :key="item.prop">
           <el-col :span="8">
@@ -11,6 +11,8 @@
                   v-model="searchForm[item.prop]"
                   :placeholder="item.placeholder"
                   clearable
+                  @keyup.enter="handleEnterKey"
+                  @input="handleInstantInput"
                 />
               </template>
               <template v-if="item.type === 'number'">
@@ -69,6 +71,10 @@ const props = defineProps({
   searchConfig: {
     type: Object,
     required: true
+  },
+  instant: { // 即时交互模式: 回车直接搜索、清空输入自动重置
+    type: Boolean,
+    default: false
   }
 })
 
@@ -102,6 +108,22 @@ function handleQueryClick() {
 
 
   emit('closeSearch')
+}
+
+
+// instant 模式下: 回车直接触发搜索
+function handleEnterKey() {
+  if (props.instant) {
+    handleQueryClick()
+  }
+}
+
+
+// instant 模式下: 输入框被清空(点清除按钮或删光内容)时自动重置
+function handleInstantInput(value) {
+  if (props.instant && (value === '' || value === undefined)) {
+    emit('resetClick')
+  }
 }
 </script>
 

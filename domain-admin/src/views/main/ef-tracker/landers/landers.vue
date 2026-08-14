@@ -103,9 +103,9 @@
             <template v-if="col.key === 'screenshot'" #default="{ row }">
               <div class="shot-wrap">
                 <el-image
-                  v-if="row.screenshot_url && row.screenshot_status === 'success'"
-                  :src="getFullImageUrl(row.screenshot_url)"
-                  :preview-src-list="[getFullImageUrl(row.screenshot_url)]"
+                  v-if="getImageUrl(row)"
+                  :src="getImageUrl(row)"
+                  :preview-src-list="[getImageUrl(row)]"
                   fit="cover"
                   preview-teleported
                   hide-on-click-modal
@@ -123,7 +123,7 @@
                   </el-button>
                 </div>
                 <button
-                  v-if="row.screenshot_url && row.screenshot_status === 'success'"
+                  v-if="getImageUrl(row)"
                   class="shot-upload-btn"
                   :disabled="!!uploadLoading[row.id]"
                   :title="uploadLoading[row.id] ? '上传中...' : '手动上传截图'"
@@ -316,6 +316,14 @@ function getFullImageUrl(url) {
   return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
 }
 
+// 预览图取值：优先对方 ab_landers.preview_url（截图/上传成功时已由后端回写，本身即完整地址），
+// 没有再回退本地 ef_lander_screenshots 缓存的相对路径
+function getImageUrl(row) {
+  if (row.preview_url) return row.preview_url
+  if (row.screenshot_url && row.screenshot_status === 'success') return getFullImageUrl(row.screenshot_url)
+  return ''
+}
+
 // 打开落地页：前端拼 eflp 访问签名（与 clickflare 同一套门禁，逻辑复制自 网页管理>落地页列表）
 function handleOpenUrl(url) {
   if (!url) return
@@ -360,6 +368,7 @@ async function handleScreenshot(row) {
     if (res?.code === 0 && res.data?.screenshot_url) {
       row.screenshot_url = res.data.screenshot_url
       row.screenshot_status = 'success'
+      if (res.data.preview_url) row.preview_url = res.data.preview_url
       ElMessage.success('截图成功')
     } else {
       row.screenshot_status = 'failed'
@@ -397,6 +406,7 @@ async function uploadScreenshot(row, file) {
     if (res?.code === 0 && res.data?.screenshot_url) {
       row.screenshot_url = res.data.screenshot_url
       row.screenshot_status = 'success'
+      if (res.data.preview_url) row.preview_url = res.data.preview_url
       ElMessage.success('上传成功')
     } else {
       ElMessage.error(res?.message || '上传失败')
