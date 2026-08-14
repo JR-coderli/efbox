@@ -111,9 +111,14 @@ class EfLanderController {
       })
 
       // 顺带回写对方 ab_landers.preview_url（失败不影响本地结果）
-      const remote = await updateRemotePreviewUrl({ landerId: lander_id, screenshotUrl: relativePath })
+      // 注意：multipart 表单字段是字符串，对方接口要求 id 为 int64，必须转数字
+      const remote = await updateRemotePreviewUrl({ landerId: Number(lander_id), screenshotUrl: relativePath })
 
-      ctx.body = { code: 0, message: '上传成功', data: { screenshot_url: relativePath, preview_url: remote.preview_url } }
+      ctx.body = {
+        code: 0,
+        message: remote.success ? '上传成功' : `上传成功（回写对方 preview_url 失败：${remote.error}）`,
+        data: { screenshot_url: relativePath, preview_url: remote.preview_url }
+      }
     } catch (error) {
       ctx.body = { code: 1, message: '上传失败: ' + error.message }
     }
