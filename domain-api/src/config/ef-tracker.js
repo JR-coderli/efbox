@@ -5,6 +5,7 @@
 module.exports = {
   baseURL: 'https://s3.rapidsupplys.com',
   endpoints: {
-    updatePreview: '/landers/update-preview'  // POST { id, preview_url } → 回写 ab_landers.preview_url
+    updatePreview: '/landers/update-preview',  // POST { id, preview_url } → 回写 ab_landers.preview_url
+    replaceUrl: '/landers/replace-url'         // POST { old, new, dry_run? } → 批量替换 ab_landers.url 子串
   }
 }

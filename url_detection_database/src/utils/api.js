@@ -63,7 +63,9 @@ async function updateDomainStatus(id, isAccessible, isSafe, url) {
       try {
         const domain = extractDomain(url)
         if (domain) {
+          // 两边独立替换、互不影响：Clickflare 没在用不影响 ef-tracker 侧替换，反之亦然
           await replaceDangerousDomain(domain)
+          await replaceEfTrackerDomain(domain)
         }
       } catch (err) {
         console.log(`❌ 替换危险域名失败: ${err.message}`)
@@ -168,6 +170,31 @@ async function replaceDangerousDomain(domain) {
 }
 
 
+// 替换 ef-tracker 系统(ab_landers)中的危险域名。
+// 后端会先预演判断对方是否在用该域名: 没在用不产生替换记录, 在用则批量替换并记录(target_system='eftracker')。
+// 与 Clickflare 侧的 replaceDangerousDomain 相互独立, 各自判断各自记录。
+async function replaceEfTrackerDomain(domain) {
+  try {
+    const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
+    const res = await axios.post(`${baseUrl}/lander-replacement/ef-replace`, {
+      domain: domain
+    })
+
+    if (res?.data?.code === 0) {
+      console.log(`域名 ${domain} ef-tracker 替换完成: 影响 ${res.data.data?.affectedCount ?? 0} 条 Lander`)
+      return res.data.data
+    } else {
+      // code!==0 多数是"未使用该域名, 跳过替换"的正常情况, 打印 message 即可
+      console.log(`ℹ️  ef-tracker 侧: ${res?.data?.message || '跳过替换'}`)
+      return null
+    }
+  } catch (err) {
+    console.log(`❌ ef-tracker 替换接口调用失败: ${err.message}`)
+    return null
+  }
+}
+
+
 function extractDomain(url) {
   try {
     const urlObj = new URL(url)
@@ -207,5 +234,6 @@ module.exports = {
   updateDomainStatus,
   setDomainNotImportant,
   triggerUrgentPhoneCall,
-  replaceDangerousDomain
+  replaceDangerousDomain,
+  replaceEfTrackerDomain
 }

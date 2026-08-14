@@ -4,8 +4,8 @@
       <!-- 页面标题和操作栏（谷歌风格） -->
       <div class="page-header">
         <div class="header-left">
-          <h1 class="page-title">Clickflare 域名替换</h1>
-          <span class="page-subtitle">危险域名自动检测与 Lander 批量替换记录</span>
+          <h1 class="page-title">域名替换</h1>
+          <span class="page-subtitle">危险域名自动检测与 Lander 批量替换记录（Clickflare / ef-tracker）</span>
         </div>
         <div class="header-actions">
           <el-button
@@ -48,6 +48,14 @@
               </template>
               <span class="domain-text replacement">{{ row.replacement_domain }}</span>
             </el-tooltip>
+          </template>
+        </el-table-column>
+
+        <!-- 目标系统：clickflare / eftracker -->
+        <el-table-column label="目标系统" width="130" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.target_system === 'eftracker'" type="warning" size="small" effect="plain">eftracker</el-tag>
+            <el-tag v-else type="primary" size="small" effect="plain">clickflare</el-tag>
           </template>
         </el-table-column>
 
@@ -136,6 +144,13 @@
           <div class="info-row">
             <span class="label">替换域名：</span>
             <span class="value replacement">{{ currentRecord.replacement_domain }}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">目标系统：</span>
+            <span class="value">
+              <el-tag v-if="currentRecord.target_system === 'eftracker'" type="warning" size="small" effect="plain">eftracker</el-tag>
+              <el-tag v-else type="primary" size="small" effect="plain">clickflare</el-tag>
+            </span>
           </div>
           <div class="info-row">
             <span class="label">影响数量：</span>

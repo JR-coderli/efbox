@@ -1,7 +1,67 @@
 const landerReplacementService = require('../service/lander-replacement.service')
 const landerService = require('../service/lander.service')
+const efLanderReplacementService = require('../service/ef-lander-replacement.service')
+const domainsService = require('../service/domains.service')
 
 class LanderReplacementController {
+  /**
+   * 替换危险域名（ef-tracker 侧）
+   * 检测脚本检测到危险域名后调用：先预演判断对方是否在用，
+   * 在用则按 domains 表的备用域名规则选替换域名，调对方 /landers/replace-url 批量替换并记录
+   * body: { domain }
+   */
+  async replaceEfTrackerDomain(ctx, next) {
+    const { domain } = ctx.request.body
+
+    if (!domain) {
+      ctx.body = {
+        code: 1,
+        message: '危险域名参数不能为空',
+        data: null
+      }
+      return
+    }
+
+    try {
+      // 先判断对方是否在用该域名（不在用直接返回，不产生记录）
+      const check = await efLanderReplacementService.checkDomainUsed(domain)
+      if (!check.exists) {
+        ctx.body = {
+          code: 1,
+          message: `ef-tracker 未使用域名 ${domain}，跳过替换`,
+          data: null
+        }
+        return
+      }
+
+      // 与 Clickflare 侧同一套备用域名选择规则
+      const replacement = await domainsService.getReplacementDomain(domain)
+      if (!replacement.success) {
+        ctx.body = {
+          code: 1,
+          message: replacement.message,
+          data: null
+        }
+        return
+      }
+
+      const result = await efLanderReplacementService.replaceDangerousDomain(domain, replacement.replacementDomain)
+
+      ctx.body = {
+        code: result.success ? 0 : 1,
+        message: result.message,
+        data: result.data || null
+      }
+    } catch (error) {
+      console.error('ef-tracker 批量替换失败:', error)
+      ctx.body = {
+        code: 1,
+        message: 'ef-tracker 批量替换失败: ' + error.message,
+        data: null
+      }
+    }
+  }
+
   /**
    * 替换危险域名
    */

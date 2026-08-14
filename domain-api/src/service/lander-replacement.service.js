@@ -128,7 +128,7 @@ class LanderReplacementService {
 
 
     const [recordResult] = await connection.execute(
-      `INSERT INTO cf_lander_url_replacements (dangerous_domain, replacement_domain, affected_count, status, error_message) VALUES (?, ?, ?, 'queued', ?)`,
+      `INSERT INTO cf_lander_url_replacements (dangerous_domain, replacement_domain, target_system, affected_count, status, error_message) VALUES (?, ?, 'clickflare', ?, 'queued', ?)`,
       [dangerousDomain, replacementDomain, landers.length, JSON.stringify({
         phase: 'queued',
         round: 0,
@@ -552,7 +552,7 @@ class LanderReplacementService {
    */
   async getProgress(recordId) {
     const [records] = await connection.execute(
-      `SELECT id, dangerous_domain, replacement_domain, affected_count, success_count, failed_count, status,
+      `SELECT id, dangerous_domain, replacement_domain, target_system, affected_count, success_count, failed_count, status,
               error_message, synced_at, created_at
        FROM cf_lander_url_replacements WHERE id = ?`,
       [recordId]
@@ -608,6 +608,7 @@ class LanderReplacementService {
       id: record.id,
       dangerous_domain: record.dangerous_domain,
       replacement_domain: record.replacement_domain,
+      target_system: record.target_system,
       affected_count: record.affected_count,
       success_count: record.success_count || 0,
       failed_count: record.failed_count || 0,
@@ -735,7 +736,7 @@ class LanderReplacementService {
 
 
     const [list] = await connection.execute(
-      `SELECT id, dangerous_domain, replacement_domain, affected_count, success_count, failed_count, status,
+      `SELECT id, dangerous_domain, replacement_domain, target_system, affected_count, success_count, failed_count, status,
               error_message, synced_at, created_at, updated_at
        FROM cf_lander_url_replacements
        ORDER BY created_at DESC
