@@ -962,7 +962,7 @@
         <!-- 域名信息 -->
         <div class="progress-info">
           <div class="info-item">
-            <span class="label">危险域名：</span>
+            <span class="label">被替换域名：</span>
             <span class="value danger">{{ progressData.dangerousDomain }}</span>
           </div>
           <div class="info-item">

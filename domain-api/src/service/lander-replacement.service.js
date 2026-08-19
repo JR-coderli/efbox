@@ -725,6 +725,10 @@ class LanderReplacementService {
 
   /**
    * 获取替换记录列表（带分页）
+   * 额外返回每个域名的使用统计：
+   *  - usage_stats[domain].up   = 上场次数（作为 replacement_domain 被启用）
+   *  - usage_stats[domain].down = 下线次数（作为 dangerous_domain 被替换下）
+   * 覆盖本页出现的所有域名（危险域名 + 替换域名），一次 GROUP BY 查出，避免逐行查询
    */
   async getList(offset = 0, size = 20) {
     const limit = parseInt(size)
@@ -743,7 +747,40 @@ class LanderReplacementService {
        LIMIT ${limit} OFFSET ${offsetVal}`
     )
 
-    return [list, total]
+    // 本页涉及到的所有域名 → 一次查出全表两个方向的计数
+    const domainSet = new Set()
+    for (const row of list) {
+      if (row.dangerous_domain) domainSet.add(row.dangerous_domain)
+      if (row.replacement_domain) domainSet.add(row.replacement_domain)
+    }
+
+    const usage_stats = {}
+    if (domainSet.size > 0) {
+      const [upRows] = await connection.execute(
+        `SELECT replacement_domain AS domain, COUNT(*) AS cnt
+         FROM cf_lander_url_replacements
+         WHERE replacement_domain IN (${domainSet.size ? '?,'.repeat(domainSet.size).slice(0, -1) : ''})
+         GROUP BY replacement_domain`,
+        [...domainSet]
+      )
+      const [downRows] = await connection.execute(
+        `SELECT dangerous_domain AS domain, COUNT(*) AS cnt
+         FROM cf_lander_url_replacements
+         WHERE dangerous_domain IN (${domainSet.size ? '?,'.repeat(domainSet.size).slice(0, -1) : ''})
+         GROUP BY dangerous_domain`,
+        [...domainSet]
+      )
+      for (const r of upRows) {
+        usage_stats[r.domain] = usage_stats[r.domain] || { up: 0, down: 0 }
+        usage_stats[r.domain].up = r.cnt
+      }
+      for (const r of downRows) {
+        usage_stats[r.domain] = usage_stats[r.domain] || { up: 0, down: 0 }
+        usage_stats[r.domain].down = r.cnt
+      }
+    }
+
+    return [list, total, usage_stats]
   }
 
   /**

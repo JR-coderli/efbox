@@ -5,7 +5,7 @@
       <div class="page-header">
         <div class="header-left">
           <h1 class="page-title">域名替换</h1>
-          <span class="page-subtitle">危险域名自动检测与 Lander 批量替换记录（Clickflare / ef-tracker）</span>
+          <span class="page-subtitle">域名自动检测与 Lander 批量替换记录（Clickflare / ef-tracker）</span>
         </div>
         <div class="header-actions">
           <el-button
@@ -29,7 +29,7 @@
       >
         <el-table-column type="index" label="序号" width="80" align="center" />
 
-        <el-table-column prop="dangerous_domain" label="危险域名" min-width="190">
+        <el-table-column prop="dangerous_domain" label="被替换域名" min-width="190">
           <template #default="{ row }">
             <el-tooltip placement="top" :show-after="200">
               <template #content>
@@ -138,7 +138,7 @@
       <div v-if="currentRecord" class="detail-content">
         <div class="detail-info">
           <div class="info-row">
-            <span class="label">危险域名：</span>
+            <span class="label">被替换域名：</span>
             <span class="value danger">{{ currentRecord.dangerous_domain }}</span>
           </div>
           <div class="info-row">
@@ -345,7 +345,7 @@
         <!-- 域名信息 -->
         <div class="progress-info">
           <div class="info-item">
-            <span class="label">危险域名：</span>
+            <span class="label">被替换域名：</span>
             <span class="value danger">{{ progressData.dangerousDomain }}</span>
           </div>
           <div class="info-item">

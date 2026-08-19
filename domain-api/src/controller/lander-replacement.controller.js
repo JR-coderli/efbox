@@ -212,19 +212,21 @@ class LanderReplacementController {
 
   /**
    * 获取替换记录列表
+   * data.usage_stats: { [domain]: { up: 上场次数, down: 下线次数 } }
    */
   async getList(ctx, next) {
     const { offset = 0, size = 20 } = ctx.request.body
 
     try {
-      const [list, total] = await landerReplacementService.getList(offset, size)
+      const [list, total, usageStats] = await landerReplacementService.getList(offset, size)
 
       ctx.body = {
         code: 0,
         message: '获取成功',
         data: {
           list,
-          total
+          total,
+          usage_stats: usageStats || {}
         }
       }
     } catch (error) {
