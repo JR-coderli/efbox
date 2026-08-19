@@ -31,22 +31,59 @@
           <div class="filter-items">
             <el-form :inline="true" class="filter-form" @submit.prevent>
               <el-form-item label="时间范围">
-                <el-select v-model="range" style="width: 110px" @change="handleSearch">
-                  <el-option v-for="o in rangeOptions" :key="o.value" :label="o.label" :value="o.value" />
-                </el-select>
-              </el-form-item>
-              <el-form-item v-if="range === 'custom'" label="自定义">
-                <el-date-picker
-                  v-model="dateRange"
-                  type="daterange"
-                  start-placeholder="开始日期"
-                  end-placeholder="结束日期"
-                  clearable
-                  style="width: 240px"
-                />
+                <!-- 快捷+日历一体的时间面板：左侧快捷选项,右侧 daterange 日历(teleport 到 body 不被裁剪) -->
+                <el-popover
+                  :visible="showRangePanel"
+                  placement="bottom-start"
+                  :width="800"
+                  :show-arrow="false"
+                  popper-class="datapanel-range-popover"
+                >
+                  <template #reference>
+                    <button
+                      class="range-trigger-btn"
+                      :class="{ 'is-open': showRangePanel }"
+                      @click="toggleRangePanel"
+                    >
+                      <svg viewBox="0 0 24 24" class="rt-icon">
+                        <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+                      </svg>
+                      <span class="rt-text">{{ rangeLabel }}</span>
+                      <svg viewBox="0 0 24 24" class="rt-arrow" :class="{ 'is-open': showRangePanel }">
+                        <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                      </svg>
+                    </button>
+                  </template>
+
+                  <div class="range-panel">
+                    <!-- 左侧：快捷时间 -->
+                    <div class="range-shortcuts">
+                      <button
+                        v-for="o in rangeOptions"
+                        :key="o.value"
+                        class="range-shortcut-item"
+                        :class="{ active: range === o.value && !customActive }"
+                        @click="pickShortcut(o.value)"
+                      >
+                        {{ o.label }}
+                      </button>
+                    </div>
+                    <!-- 右侧：日历直选自定义范围(teleported=false 让日历渲染在面板内,单月+左右箭头防溢出) -->
+                    <div class="range-calendar" @mousedown.stop>
+                      <el-date-picker
+                        ref="calendarPickerRef"
+                        v-model="calendarRange"
+                        type="daterange"
+                        :teleported="false"
+                        :clearable="false"
+                        popper-class="datapanel-range-inner-popper"
+                      />
+                    </div>
+                  </div>
+                </el-popover>
               </el-form-item>
               <el-form-item label="时区">
-                <el-select v-model="tz" style="width: 130px" @change="handleSearch">
+                <el-select v-model="tz" style="width: 100px" @change="handleSearch">
                   <el-option v-for="o in tzOptions" :key="o.value" :label="o.label" :value="o.value" />
                 </el-select>
               </el-form-item>
@@ -144,12 +181,65 @@
           <thead>
             <tr>
               <th class="nt-dim">维度</th>
-              <th class="nt-num">Clicks</th>
-              <th class="nt-num">Cost</th>
-              <th class="nt-num">Conversions</th>
-              <th class="nt-num">Revenue</th>
-              <th class="nt-num">
-                CVR
+              <th class="nt-num nt-sortable" @click="toggleSort('clicks')">
+                <span class="nt-th-text">Clicks</span>
+                <span class="nt-sort-icon" :class="sortClass('clicks')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M4 18l4-4h12v4H4zm0-8l4-4h12v4H4z" opacity="0" />
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
+              </th>
+              <th class="nt-num nt-sortable" @click="toggleSort('cost')">
+                <span class="nt-th-text">Cost</span>
+                <span class="nt-sort-icon" :class="sortClass('cost')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
+              </th>
+              <th class="nt-num nt-sortable" @click="toggleSort('conversions')">
+                <span class="nt-th-text">Conversions</span>
+                <span class="nt-sort-icon" :class="sortClass('conversions')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
+              </th>
+              <th class="nt-num nt-sortable" @click="toggleSort('revenue')">
+                <span class="nt-th-text">Revenue</span>
+                <span class="nt-sort-icon" :class="sortClass('revenue')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
+              </th>
+              <th class="nt-num nt-sortable" @click="toggleSort('profit')">
+                <span class="nt-th-text">Profit</span>
+                <span class="nt-sort-icon" :class="sortClass('profit')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
+                <el-tooltip
+                  content="Profit = Revenue − Cost(正数为盈利,负数为亏损)"
+                  placement="top"
+                  :show-after="200"
+                >
+                  <span class="nt-help-icon" title="">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+                    </svg>
+                  </span>
+                </el-tooltip>
+              </th>
+              <th class="nt-num nt-sortable" @click="toggleSort('cvr')">
+                <span class="nt-th-text">CVR</span>
+                <span class="nt-sort-icon" :class="sortClass('cvr')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
                 <el-tooltip
                   content="CVR = Conversions ÷ Clicks × 100%"
                   placement="top"
@@ -162,8 +252,13 @@
                   </span>
                 </el-tooltip>
               </th>
-              <th class="nt-num">
-                ROI
+              <th class="nt-num nt-sortable" @click="toggleSort('roi')">
+                <span class="nt-th-text">ROI</span>
+                <span class="nt-sort-icon" :class="sortClass('roi')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
                 <el-tooltip
                   content="ROI = Revenue ÷ Cost (Cost 为 0 时显示 -)"
                   placement="top"
@@ -184,17 +279,34 @@
               :key="row.path"
               :class="{ 'nt-expanded-row': isRowExpanded(row) }"
             >
-              <td class="nt-dim nt-clickable" @click="toggleRow(row)">
+              <td class="nt-dim">
                 <span
                   class="nt-indent"
                   :style="{ width: row.level * 20 + 'px' }"
                 ></span>
-                <span v-if="hasChildLevel(row.level)" class="nt-expand-icon" :class="{ 'is-open': isRowExpanded(row) }">
+                <!-- 只有箭头可点击展开(整行不再触发) -->
+                <span
+                  v-if="hasChildLevel(row.level)"
+                  class="nt-expand-icon nt-expand-handle"
+                  :class="{ 'is-open': isRowExpanded(row), 'is-disabled': row.key === '' || row.key == null }"
+                  :title="row.key === '' || row.key == null ? '空值组无法展开' : '展开下一维度'"
+                  @click.stop="toggleRow(row)"
+                >
                   <svg viewBox="0 0 24 24">
                     <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
                   </svg>
                 </span>
                 <span v-else class="nt-expand-placeholder"></span>
+                <!-- lander 维度：名称前显示预览图缩略图(点击放大) -->
+                <el-image
+                  v-if="row.dim === 'lander' && row.key && landerImages[row.key]"
+                  class="nt-preview-img"
+                  :src="landerImages[row.key]"
+                  :preview-src-list="[landerImages[row.key]]"
+                  preview-teleported
+                  fit="cover"
+                  hide-on-click-modal
+                />
                 <span class="nt-name" :title="row.key ? `key: ${row.key}` : '空值组'">{{ row.name }}</span>
                 <!-- lander 维度：名称旁小图标,点击新窗口打开落地页(拼 eflp 签名,同落地页列表页) -->
                 <a
@@ -208,15 +320,19 @@
                   </svg>
                 </a>
               </td>
-              <td class="nt-num nt-clickable" @click="toggleRow(row)">{{ fmtNum(row.clicks) }}</td>
-              <td class="nt-num nt-clickable" @click="toggleRow(row)">{{ fmtMoney(row.cost) }}</td>
-              <td class="nt-num nt-clickable" @click="toggleRow(row)">{{ fmtNum(row.conversions) }}</td>
-              <td class="nt-num nt-clickable" @click="toggleRow(row)">{{ fmtMoney(row.revenue) }}</td>
-              <td class="nt-num nt-clickable" @click="toggleRow(row)">{{ fmtPct(row.cvr) }}</td>
-              <td class="nt-num nt-clickable" @click="toggleRow(row)">{{ fmtRoi(row.roi) }}</td>
+              <td class="nt-num">{{ fmtNum(row.clicks) }}</td>
+              <td class="nt-num">{{ fmtMoney(row.cost) }}</td>
+              <td class="nt-num">{{ fmtNum(row.conversions) }}</td>
+              <td class="nt-num nt-revenue">{{ fmtMoney(row.revenue) }}</td>
+              <td
+                class="nt-num nt-profit"
+                :class="row.profit > 0 ? 'profit-pos' : row.profit < 0 ? 'profit-neg' : ''"
+              >{{ fmtMoney(row.profit) }}</td>
+              <td class="nt-num">{{ fmtPct(row.cvr) }}</td>
+              <td class="nt-num">{{ fmtRoi(row.roi) }}</td>
             </tr>
             <tr v-if="!loading && tableRows.length === 0">
-              <td colspan="7" class="nt-empty">暂无数据</td>
+              <td colspan="8" class="nt-empty">暂无数据</td>
             </tr>
           </tbody>
         </table>
@@ -228,7 +344,8 @@
         <span class="totals-item">点击 <b>{{ fmtNum(totals.clicks) }}</b></span>
         <span class="totals-item">花费 <b>{{ fmtMoney(totals.cost) }}</b></span>
         <span class="totals-item">转化 <b>{{ fmtNum(totals.conversions) }}</b></span>
-        <span class="totals-item">收入 <b>{{ fmtMoney(totals.revenue) }}</b></span>
+        <span class="totals-item ti-revenue">收入 <b>{{ fmtMoney(totals.revenue) }}</b></span>
+        <span class="totals-item" :class="totalProfit > 0 ? 'ti-profit-pos' : totalProfit < 0 ? 'ti-profit-neg' : ''">利润 <b>{{ fmtMoney(totalProfit) }}</b></span>
       </div>
 
       <!-- 分页：作用于第一层分组结果;展开的子层各自独立分页(记忆在行上) -->
@@ -249,10 +366,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import SparkMD5 from 'spark-md5'
-import { getStatsBreakdown, getLanders } from '@/services/main/ef-tracker'
+import { getStatsBreakdown, getLanders, getEfLanderScreenshots } from '@/services/main/ef-tracker'
+import { BASE_URL } from '@/services/request/config'
 
 // ===== 维度定义(与 QUERY_API.md 第12节一致) =====
 // id 类维度带 name；string/date/hour 维度 key 即名
@@ -280,35 +398,79 @@ const tableRows = computed(() => rows.value)
 // 服务端分页(作用于第一层)：page 从 1 开始，size 上限 100
 const pagination = reactive({ page: 1, pageSize: 20 })
 
-// 时区：默认 +8(与其它 ef-tracker 页面一致)
-
-// 时区：默认 +8(与其它 ef-tracker 页面一致)
-const tz = ref(8)
+// 时区：默认 +8,只保留 +8/+0/+5/+6 四档
+const tz = ref(-5) // 默认 UTC-5
 const tzOptions = [
   { label: 'UTC+8', value: 8 },
-  { label: 'UTC+7', value: 7 },
-  { label: 'UTC+5:30', value: 5.5 },
-  { label: 'UTC+0', value: 0 },
-  { label: 'UTC-3', value: -3 },
-  { label: 'UTC-4', value: -4 },
+  { label: 'UTC-6', value: -6 },
   { label: 'UTC-5', value: -5 },
-  { label: 'UTC-8', value: -8 }
+  { label: 'UTC+0', value: 0 }
 ]
 
-// 时间范围：预设(range) 或 自定义(start/end)
+// 时间范围：预设(range) 或 自定义(start/end);面板=左侧快捷+右侧日历
 const rangeOptions = [
   { label: '今天', value: 'today' },
   { label: '昨天', value: 'yesterday' },
   { label: '近7天', value: '7d' },
   { label: '近14天', value: '14d' },
-  { label: '本月', value: 'this_month' },
-  { label: '自定义', value: 'custom' }
+  { label: '本月', value: 'this_month' }
 ]
 const range = ref('today')
 const dateRange = ref([])
+const showRangePanel = ref(false)
+const calendarRange = ref(null) // 日历选择(选完即应用为自定义范围)
+const calendarPickerRef = ref(null)
+
+// 开/关面板;打开时把内嵌日历展开(输入框被隐藏,日历需程序化打开)
+function toggleRangePanel() {
+  showRangePanel.value = !showRangePanel.value
+  if (showRangePanel.value) {
+    nextTick(() => {
+      calendarPickerRef.value?.handleOpen?.()
+    })
+  }
+}
+
+// 当前生效的时间范围文案(按钮上显示)
+const customActive = computed(() => range.value === 'custom')
+const rangeLabel = computed(() => {
+  if (range.value !== 'custom') {
+    return rangeOptions.find((o) => o.value === range.value)?.label || '今天'
+  }
+  if (dateRange.value?.length === 2) {
+    const fmt = (d) => {
+      const pad = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    }
+    return `${fmt(dateRange.value[0])} ~ ${fmt(dateRange.value[1])}`
+  }
+  return '自定义'
+})
+
+// 选快捷项：直接生效并关面板
+function pickShortcut(value) {
+  range.value = value
+  calendarRange.value = null
+  showRangePanel.value = false
+  pagination.page = 1
+  loadData()
+}
+
+// 日历选完(daterange 一次选出两个日期)→ 应用为自定义范围
+watch(calendarRange, (val) => {
+  if (val && val.length === 2) {
+    range.value = 'custom'
+    dateRange.value = val
+    showRangePanel.value = false
+    pagination.page = 1
+    loadData()
+  }
+})
 
 // ===== 维度选择(顺序=下钻顺序,样式与 report 数据报表页一致) =====
-const selectedDims = ref([DIM_OPTIONS[0], DIM_OPTIONS[1]]) // 默认 [日期, Lander]
+// 默认三个维度：Media → Offer → Lander(下钻顺序)
+const DEFAULT_DIMS = ['media', 'offer', 'lander']
+const selectedDims = ref(DEFAULT_DIMS.map((v) => DIM_OPTIONS.find((d) => d.value === v)).filter(Boolean))
 const showDimensionPicker = ref(false)
 
 const availableDims = computed(() => DIM_OPTIONS.filter((d) => !selectedDims.value.some((s) => s.value === d.value)))
@@ -405,16 +567,35 @@ function onPickerHide() {
 }
 
 function handleDocMousedown(event) {
-  if (!showDimensionPicker.value) return
   const t = event.target
-  // 点在添加按钮或弹层内 → 不处理(按钮自己 toggle)
-  if (t.closest('.dimension-add-btn') || t.closest('.datapanel-dim-popover')) return
-  showDimensionPicker.value = false
+  // 维度菜单：点在添加按钮或弹层外 → 关闭
+  if (
+    showDimensionPicker.value &&
+    !t.closest('.dimension-add-btn') &&
+    !t.closest('.datapanel-dim-popover')
+  ) {
+    showDimensionPicker.value = false
+  }
+  // 时间范围面板：点在触发按钮、弹层或内部日历弹层外 → 关闭
+  if (
+    showRangePanel.value &&
+    !t.closest('.range-trigger-btn') &&
+    !t.closest('.datapanel-range-popover') &&
+    !t.closest('.datapanel-range-inner-popper')
+  ) {
+    showRangePanel.value = false
+  }
 }
 
 // ===== 嵌套展开逻辑 =====
 // rows(上方已声明): 扁平化嵌套行。子行分页状态记在行上(page/pageSize/total),展开过滤由行链(filtersOf)生成
 const dimValues = computed(() => selectedDims.value.map((d) => d.value))
+
+// 合计条利润 = 第一层全部分组的 Revenue - Cost(totals 不含 profit,前端算)
+const totalProfit = computed(() => {
+  if (!totals.value) return 0
+  return Number(totals.value.revenue) - Number(totals.value.cost)
+})
 
 function hasChildLevel(level) {
   return level < dimValues.value.length - 1
@@ -424,19 +605,79 @@ function isRowExpanded(row) {
   return !!row.expanded
 }
 
-// 派生指标：CVR = 转化/点击；ROI = 收入/花费(cost 为 0 时显示 -)
+// 派生指标：CVR = 转化/点击；ROI = 收入/花费(cost 为 0 时显示 -)；Profit = 收入-花费
 function decorate(list) {
   for (const row of list) {
     row.cvr = row.clicks > 0 ? (Number(row.conversions) / Number(row.clicks)) * 100 : 0
     row.roi = Number(row.cost) > 0 ? (Number(row.revenue) / Number(row.cost)) * 100 : null
+    row.profit = Number(row.revenue) - Number(row.cost)
   }
   return list
+}
+
+// ===== 列排序(前端本地排序;接口不支持排序参数) =====
+// 对同级兄弟行排序,保持嵌套结构(父子相对位置不变,同层内部重排)
+const sortState = ref({ field: null, order: null }) // order: 'desc' | 'asc'
+
+function toggleSort(field) {
+  if (sortState.value.field !== field) {
+    sortState.value = { field, order: 'desc' } // 首次点击默认倒序(从大到小)
+  } else if (sortState.value.order === 'desc') {
+    sortState.value = { field, order: 'asc' }
+  } else {
+    sortState.value = { field: null, order: null } // 第三次点击取消排序
+  }
+  applySort()
+}
+
+function sortClass(field) {
+  const { field: f, order } = sortState.value
+  if (f !== field) return ''
+  return order === 'desc' ? 'sort-desc' : 'sort-asc'
+}
+
+// 对 rows 做分层排序:提取每行直接子行的序列,按 sortState 排序后重组。
+// 同层排序只影响该层兄弟顺序,展开的子行始终跟在父行后
+function applySort() {
+  const { field, order } = sortState.value
+  if (!field || !order) {
+    // 恢复原始顺序(按 path 的数值链排序)
+    const natural = (a, b) => {
+      const pa = a.path.split('-').map(Number)
+      const pb = b.path.split('-').map(Number)
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const d = (pa[i] ?? -1) - (pb[i] ?? -1)
+        if (d !== 0) return d
+      }
+      return 0
+    }
+    rows.value = [...rows.value].sort(natural)
+    return
+  }
+
+  const val = (r) => Number(r[field] ?? 0) || 0
+  const cmp = order === 'desc' ? (a, b) => val(b) - val(a) : (a, b) => val(a) - val(b)
+
+  // 递归:对每棵子树,同层子行按 cmp 排序,再按顺序串起(子行跟父行)
+  const sortLevel = (siblings) => {
+    const sorted = [...siblings].sort(cmp)
+    const out = []
+    for (const r of sorted) {
+      out.push(r)
+      const children = rows.value.filter((x) => x.parent === r)
+      if (children.length) out.push(...sortLevel(children))
+    }
+    return out
+  }
+  rows.value = sortLevel(rows.value.filter((r) => r.level === 0))
 }
 
 // ===== Lander 打开(维度含 lander 时,名称旁小图标) =====
 // url 不在 breakdown 返回里;按 lander name 精确匹配 /query/landers(keyword 同时搜 name/url,
 // 返回后本地精确比对 name,避免模糊误配),缓存 { id: url }
 const landerUrls = reactive({})
+// 预览图 { id: 图url }:优先对方 ab_landers.preview_url,回退本地 ef_lander_screenshots 截图缓存
+const landerImages = reactive({})
 const landerUrlPending = new Set() // 防并发重复请求
 
 async function ensureLanderUrl(row) {
@@ -447,6 +688,8 @@ async function ensureLanderUrl(row) {
     const res = await getLanders({ keyword: row.name, page: 1, size: 50 })
     const hit = (res?.list || []).find((l) => l.name === row.name) || (res?.list || [])[0]
     landerUrls[id] = hit?.url || ''
+    // 对方接口本身带 preview_url(截图成功后由我们后端回写),直接可用
+    if (hit?.preview_url) landerImages[id] = hit.preview_url
   } catch (e) {
     landerUrls[id] = '' // 失败也写入空串,避免反复重试
   } finally {
@@ -454,11 +697,33 @@ async function ensureLanderUrl(row) {
   }
 }
 
-// 行渲染时预取 lander url(不阻塞表格)
+// 没有 preview_url 的 lander:批量取本地 ef_lander_screenshots 缓存截图(与落地页列表同源)
+async function prefetchLanderScreenshots() {
+  const ids = rows.value
+    .filter((r) => r.dim === 'lander' && r.key && !landerImages[r.key])
+    .map((r) => Number(r.key))
+    .filter((n) => !isNaN(n))
+  if (ids.length === 0) return
+  try {
+    const res = await getEfLanderScreenshots(ids)
+    const map = res?.data || {}
+    for (const [id, s] of Object.entries(map)) {
+      if (s?.screenshot_url && s.screenshot_status === 'success' && !landerImages[id]) {
+        const u = s.screenshot_url
+        landerImages[id] = u.startsWith('http') ? u : `${BASE_URL}${u.startsWith('/') ? '' : '/'}${u}`
+      }
+    }
+  } catch (e) {
+    // 截图取失败不影响表格
+  }
+}
+
+// 行渲染时预取 lander url + 预览图(不阻塞表格)
 function prefetchLanderUrls() {
   for (const row of rows.value) {
     if (row.dim === 'lander' && row.key) ensureLanderUrl(row)
   }
+  prefetchLanderScreenshots()
 }
 
 // 打开落地页：前端拼 eflp 访问签名(与 clickflare 同一套门禁,逻辑复制自 ef-tracker>落地页列表)
@@ -623,17 +888,20 @@ function handleSearch() {
     ElMessage.warning('请选择自定义日期范围')
     return
   }
+  showRangePanel.value = false
   pagination.page = 1
   loadData()
 }
 
 function handleReset() {
-  selectedDims.value = [DIM_OPTIONS[0], DIM_OPTIONS[1]]
+  selectedDims.value = DEFAULT_DIMS.map((v) => DIM_OPTIONS.find((d) => d.value === v)).filter(Boolean)
   range.value = 'today'
   dateRange.value = []
-  tz.value = 8
+  calendarRange.value = null
+  tz.value = -5
   uniqueOnly.value = false
   showDimensionPicker.value = false
+  showRangePanel.value = false
   pagination.page = 1
   loadData()
 }
@@ -650,7 +918,7 @@ function handleCurrentChange(page) {
 }
 
 // ===== 去重开关 =====
-const uniqueOnly = ref(false)
+const uniqueOnly = ref(true) // 默认开启去重(按 media_click_id)
 function toggleUnique() {
   uniqueOnly.value = !uniqueOnly.value
   pagination.page = 1
@@ -664,7 +932,8 @@ function fmtNum(n) {
 }
 function fmtMoney(s) {
   const num = Number(s)
-  return isNaN(num) ? '-' : num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (isNaN(num)) return '-'
+  return '$' + num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 function fmtPct(v) {
   const num = Number(v)
@@ -785,6 +1054,106 @@ onUnmounted(() => {
     font-weight: 500;
     width: auto;
   }
+}
+
+// ===== 时间范围触发按钮 =====
+.range-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #202124;
+  cursor: pointer;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  transition: all 0.2s;
+  min-width: 150px;
+
+  &:hover,
+  &.is-open {
+    border-color: #1a73e8;
+    color: #1a73e8;
+  }
+
+  .rt-icon {
+    width: 15px;
+    height: 15px;
+    fill: #5f6368;
+    flex-shrink: 0;
+  }
+
+  .rt-text {
+    flex: 1;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rt-arrow {
+    width: 14px;
+    height: 14px;
+    fill: #5f6368;
+    flex-shrink: 0;
+    transition: transform 0.2s;
+
+    &.is-open {
+      transform: rotate(180deg);
+    }
+  }
+}
+
+// ===== 时间面板(左快捷右日历) =====
+.range-panel {
+  display: flex;
+  align-items: stretch;
+}
+
+.range-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  width: 112px;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+.range-shortcut-item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #3c4043;
+  cursor: pointer;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  transition: all 0.15s;
+
+  &:hover {
+    background: rgba(26, 115, 232, 0.08);
+  }
+
+  &.active {
+    background: rgba(26, 115, 232, 0.14);
+    color: #1a73e8;
+    font-weight: 500;
+  }
+}
+
+.range-calendar {
+  position: relative; /* 隐藏输入框绝对定位的锚点 */
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px 8px 12px 14px;
 }
 
 .google-btn {
@@ -1026,14 +1395,27 @@ onUnmounted(() => {
     th {
       background: #f1f3f4;
       color: #3c4043;
-      font-weight: 500;
+      font-weight: 700; /* 表头加粗 */
       font-size: 12px;
-      text-align: left;
+      text-align: center; /* 表头统一居中 */
       padding: 12px 14px;
       position: sticky;
       top: 0;
       z-index: 10;
       white-space: nowrap;
+
+      &.nt-dim {
+        text-align: left; /* 维度列左对齐(展开时名称不跳位) */
+      }
+    }
+
+    th.nt-sortable {
+      cursor: pointer;
+      user-select: none;
+
+      &:hover {
+        color: #1a73e8;
+      }
     }
   }
 
@@ -1058,37 +1440,93 @@ onUnmounted(() => {
   }
 
   .nt-num {
-    text-align: right;
+    text-align: center; /* 数值列居中 */
     font-variant-numeric: tabular-nums;
   }
 
+  td.nt-dim {
+    text-align: left; /* 维度列数据左对齐:层级缩进+名称从左展开,收起/展开不跳位 */
+  }
+
   thead th.nt-num {
-    text-align: right;
+    text-align: center; /* 表头居中(含排序/问号图标一起) */
   }
 
-  .nt-clickable {
-    cursor: pointer;
+  thead th.nt-sortable {
+    .nt-th-text,
+    .nt-sort-icon,
+    .nt-help-icon {
+      vertical-align: middle;
+    }
   }
 
-  .nt-expanded-row > .nt-clickable {
+  // Revenue 列绿色(收益)
+  td.nt-revenue {
+    color: #1e8e3e;
+    font-weight: 500;
+  }
+
+  // Profit 列:正数绿 / 负数红 / 零默认色
+  td.nt-profit.profit-pos {
+    color: #1e8e3e;
+    font-weight: 500;
+  }
+
+  td.nt-profit.profit-neg {
+    color: #d93025;
+    font-weight: 500;
+  }
+
+  .nt-expanded-row > td:first-child .nt-name {
     font-weight: 500;
   }
 }
 
-// 展开箭头(右向,展开后旋转 90° 朝下)
+// 展开箭头(右向,展开后旋转 90° 朝下)——唯一可点击展开的区域
+.nt-expand-icon.nt-expand-handle {
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+
+  &:hover {
+    background: rgba(26, 115, 232, 0.1);
+
+    svg {
+      fill: #1a73e8;
+    }
+  }
+
+  // 空值组不可展开
+  &.is-disabled {
+    cursor: not-allowed;
+
+    svg {
+      fill: #c4c7cc;
+    }
+
+    &:hover {
+      background: transparent;
+
+      svg {
+        fill: #c4c7cc;
+      }
+    }
+  }
+}
+
 .nt-expand-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 26px;
+  height: 26px;
   margin-right: 4px;
   vertical-align: middle;
   flex-shrink: 0;
 
   svg {
-    width: 16px;
-    height: 16px;
+    width: 22px;
+    height: 22px;
     fill: #5f6368;
     transition: transform 0.2s;
   }
@@ -1099,15 +1537,34 @@ onUnmounted(() => {
   }
 }
 
-// 最深一层没有箭头,占位保持对齐
+// 最深一层没有箭头,占位保持对齐(与箭头同宽:26 + 4 margin)
 .nt-expand-placeholder {
   display: inline-block;
-  width: 24px;
+  width: 30px;
   flex-shrink: 0;
 }
 
 .nt-name {
   color: #202124;
+}
+
+// lander 维度行首预览图缩略图(点击放大)
+.nt-preview-img {
+  width: 44px;
+  height: 30px;
+  border-radius: 4px;
+  border: 1px solid #e8eaed;
+  margin-right: 6px;
+  vertical-align: middle;
+  cursor: zoom-in;
+  flex-shrink: 0;
+  background: #f1f3f4;
+
+  :deep(.el-image__inner) {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
 }
 
 // lander 名称旁「打开落地页」小图标(样式与 ef-tracker>落地页列表页一致)
@@ -1136,9 +1593,41 @@ onUnmounted(() => {
   }
 }
 
-// 表头公式提示图标(? 圆圈)
-.nt-help-icon {
+// 表头排序图标(上下双箭头,激活后单侧高亮)
+.nt-sort-icon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  margin-left: 3px;
+  opacity: 0.45;
+  transition: opacity 0.15s;
+
+  svg {
+    width: 13px;
+    height: 13px;
+    fill: #5f6368;
+  }
+
+  &.sort-desc,
+  &.sort-asc {
+    opacity: 1;
+
+    svg {
+      fill: #1a73e8;
+    }
+  }
+
+  // 倒序:只亮上箭头(大的在前);正序:只亮下箭头 —— 用半掩效果近似
+  &.sort-desc svg path:nth-child(1) { fill: #1a73e8; }
+  &.sort-desc svg path:nth-child(2) { fill: #c4c7cc; }
+
+  &.sort-asc svg path:nth-child(1) { fill: #c4c7cc; }
+  &.sort-asc svg path:nth-child(2) { fill: #1a73e8; }
+}
+
+// 表头公式提示图标(? 圆圈)
+.nt-help-icon {  display: inline-flex;
   align-items: center;
   justify-content: center;
   vertical-align: middle;
@@ -1184,6 +1673,20 @@ onUnmounted(() => {
 .totals-item b {
   color: #202124;
   font-variant-numeric: tabular-nums;
+}
+
+// 合计条里的收入同样绿色
+.totals-item.ti-revenue b {
+  color: #1e8e3e;
+}
+
+// 合计条利润:正绿负红
+.totals-item.ti-profit-pos b {
+  color: #1e8e3e;
+}
+
+.totals-item.ti-profit-neg b {
+  color: #d93025;
 }
 
 .pagination-wrapper {
@@ -1319,6 +1822,70 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ===== 时间范围面板(el-popover teleported 到 body) ===== */
+.datapanel-range-popover.el-popper {
+  padding: 0 !important;
+  border-radius: 12px;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  background: #ffffff; /* 白底 */
+  overflow: visible; /* 弹层自身不裁剪日历 */
+}
+
+/* 隐藏 picker 的输入框(保留组件挂载以承载日历;零尺寸可能影响弹层定位计算,
+   这里改用 1px + opacity 0,保证组件内部 offsetParent/宽度测量正常) */
+.datapanel-range-popover .range-calendar .el-date-editor--daterange {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* teleported=false 时日历渲染在 .range-calendar 里:
+   只去掉定位/边框,不动宽度和内部布局(宽度由 element-plus 自身默认值决定,避免 header/body 错位) */
+.datapanel-range-popover .el-picker__popper {
+  position: static !important;
+  box-shadow: none !important;
+  border: none;
+  background: transparent;
+  transform: none !important;
+  margin: 0 !important;
+
+  .el-picker-panel {
+    background: #ffffff;
+    border: none;
+    box-shadow: none;
+  }
+
+  .el-popper__arrow {
+    display: none;
+  }
+}
+
+/* daterange 面板是 element 默认的 646px 双月布局(body min-width 513px,两个月份块 float 50%×2)。
+   之前把外壳压到 322px 导致第二个月历溢出外壳、超出部分无背景(透明)。
+   现在不再压宽度:时间面板整体放宽到容纳双月日历,按默认布局完整显示 */
+.datapanel-range-popover .el-date-range-picker {
+  width: auto;
+  max-width: none;
+}
+
+.datapanel-range-popover .el-date-range-picker .el-picker-panel__body {
+  min-width: 513px; /* element 默认值,显式声明防止被其它规则覆盖 */
+}
+
+/* 预览查看器图片尺寸(preview-teleported 把 viewer 挂到 body 下,须全局;
+   限制与 落地页列表页 一致:65vw / 75vh) */
+.el-image-viewer__canvas {
+  .el-image-viewer__img {
+    max-width: 65vw !important;
+    max-height: 75vh !important;
+  }
 }
 </style>
 
