@@ -286,9 +286,11 @@
                 :title="hasChildLevel(row.level) && (row.key === '' || row.key == null) ? '空值组无法展开' : ''"
                 @click="toggleRow(row)"
               >
+                <!-- 层级缩进:每层一条竖虚线引导,直观呈现父子层级 -->
                 <span
-                  class="nt-indent"
-                  :style="{ width: row.level * 20 + 'px' }"
+                  v-for="lv in row.level"
+                  :key="lv"
+                  class="nt-indent-line"
                 ></span>
                 <span
                   v-if="hasChildLevel(row.level)"
@@ -343,7 +345,7 @@
 
       <!-- 合计行：第一层全部分组合计(不受分页影响) -->
       <div v-if="totals" class="totals-bar">
-        <span class="totals-label">合计</span>
+        <span class="totals-label">合计: </span>
         <span class="totals-item">点击 <b>{{ fmtNum(totals.clicks) }}</b></span>
         <span class="totals-item">花费 <b>{{ fmtMoney(totals.cost) }}</b></span>
         <span class="totals-item">转化 <b>{{ fmtNum(totals.conversions) }}</b></span>
@@ -378,16 +380,16 @@ import { BASE_URL } from '@/services/request/config'
 // ===== 维度定义(与 QUERY_API.md 第12节一致) =====
 // id 类维度带 name；string/date/hour 维度 key 即名
 const DIM_OPTIONS = [
-  { value: 'date', label: '日期', hint: '按 tz 的日期' },
+  { value: 'date', label: 'Date', hint: '按 tz 的日期' },
   { value: 'lander', label: 'Lander', hint: '落地页 id→名称' },
-  { value: 'media', label: '媒体', hint: '媒体 id→名称' },
+  { value: 'media', label: 'Media', hint: '媒体 id→名称' },
   { value: 'offer', label: 'Offer', hint: 'Offer id→名称' },
   { value: 'tracker', label: 'Tracker', hint: 'Tracker id→名称' },
-  { value: 'advertiser', label: '广告主', hint: '广告主 id→名称' },
+  { value: 'advertiser', label: 'Advertiser', hint: '广告主 id→名称' },
   { value: 'campaign', label: 'Campaign', hint: '广告活动名' },
   { value: 'adset', label: 'AdSet', hint: '广告组名' },
   { value: 'creative', label: 'Creative', hint: '素材名' },
-  { value: 'hour', label: '小时', hint: '0~23 档' }
+  { value: 'hour', label: 'Hour', hint: '0~23 档' }
 ]
 const MAX_DIMS = 5 // 接口硬校验上限
 
@@ -472,7 +474,7 @@ watch(calendarRange, (val) => {
 
 // ===== 维度选择(顺序=下钻顺序,样式与 report 数据报表页一致) =====
 // 默认三个维度：Media → Offer → Lander(下钻顺序)
-const DEFAULT_DIMS = ['media', 'offer', 'lander']
+const DEFAULT_DIMS = ['media', 'campaign', 'lander']
 const selectedDims = ref(DEFAULT_DIMS.map((v) => DIM_OPTIONS.find((d) => d.value === v)).filter(Boolean))
 const showDimensionPicker = ref(false)
 
@@ -1488,6 +1490,17 @@ onUnmounted(() => {
 // 维度列整格可点展开(hover 底色提示;空值组/最深层不响应)
 td.nt-dim.nt-dim-clickable {
   cursor: pointer;
+}
+
+// 层级缩进引导线:每层一条 20px 宽的竖虚线(画在格子中间),层级关系一目了然
+.nt-indent-line {
+  display: inline-block;
+  width: 20px;
+  height: 22px; // 与行高协调,上下留空
+  vertical-align: middle;
+  flex-shrink: 0;
+  border-left: 1px dashed #c4c7cc;
+  margin-right: 0;
 }
 
 .nt-expand-icon {
