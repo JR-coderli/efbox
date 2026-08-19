@@ -32,8 +32,7 @@ async function getUrlsFromApi() {
 
 // 将域名降级为非重要域名 (is_important = 0)
 // 供检测脚本在域名连续多轮异常后调用, 降级后该域名会移出 import_list 监控范围
-async function setDomainNotImportant(id) {
-  try {
+async function setDomainNotImportant(id) {  try {
     const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
     const apiUrl = `${baseUrl}/domains/internal/is_important/${id}/0`
 
@@ -229,11 +228,30 @@ async function triggerUrgentPhoneCall(text) {
 }
 
 
+// 拉取域名清单日报数据(每日 8 点第二封邮件用)
+// 返回 { backup: [{purpose,landing_page_url,used_count}], inUse: [{purpose,landing_page_url,updateAt}] }
+async function getDailyReportList() {
+  try {
+    const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
+    const res = await axios.get(`${baseUrl}/domains/internal/daily_report_list`, { timeout: 15000 })
+    if (res?.data?.code === 0) {
+      return { ok: true, ...res.data.data }
+    }
+    console.log(`⚠️ 域名清单日报数据返回异常: ${res?.data?.message || '未知错误'}`)
+    return { ok: false, backup: [], inUse: [] }
+  } catch (err) {
+    console.log(`❌ 拉取域名清单日报数据失败: ${err.message}`)
+    return { ok: false, backup: [], inUse: [] }
+  }
+}
+
+
 module.exports = {
   getUrlsFromApi,
   updateDomainStatus,
   setDomainNotImportant,
   triggerUrgentPhoneCall,
   replaceDangerousDomain,
-  replaceEfTrackerDomain
+  replaceEfTrackerDomain,
+  getDailyReportList
 }

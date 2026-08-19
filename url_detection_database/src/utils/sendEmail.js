@@ -14,15 +14,24 @@ const transporter = nodemailer.createTransport({
 })
 
 
-async function sendMail(html, isDaily = false) {
+async function sendMail(html, mailType = 'alert') {
 
-  const senderTitle = isDaily ? '[网页监控] 报告 08:00' : `${config.mail.title} - ${getTimeStr()}`;
-  
+  // mailType: alert=异常即时告警 / daily=08:00 检测日报 / domainList=08:00 域名清单日报
+  const senderTitle =
+    mailType === 'daily' ? '[网页监控] 报告 08:00'
+    : mailType === 'domainList' ? '[网页监控] 域名清单 08:00'
+    : `${config.mail.title} - ${getTimeStr()}`;
+
+  const subject =
+    mailType === 'daily' ? '网页监控日报'
+    : mailType === 'domainList' ? '域名清单日报'
+    : '网页监控报告';
+
   const mailOptions = {
     from: `"${senderTitle}" <${process.env.MAIL_USER}>`,
     to: process.env.MAIL_TO,
     bcc: [process.env.MAIL_BCC],
-    subject: "网页监控报告",
+    subject,
     html
   };
 

@@ -127,6 +127,29 @@ class DomainsController {
   }
 
 
+  /**
+   * 域名清单日报数据(供 url_detection_database 每日 8 点第二封邮件)
+   * data: { backup: [备用域名+被替换次数], inUse: [主要使用域名+更新时间] }
+   */
+  async dailyReportList(ctx, next) {
+    try {
+      const data = await domainsService.dailyReportList()
+      ctx.body = {
+        code: 0,
+        message: '获取成功',
+        data
+      }
+    } catch (error) {
+      console.log(error)
+      ctx.body = {
+        code: 1,
+        message: '获取失败: ' + error.message,
+        data: null
+      }
+    }
+  }
+
+
   async updateIsNormal(ctx, next) {
 
     const { id } = ctx.params

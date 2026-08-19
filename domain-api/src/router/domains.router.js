@@ -1,5 +1,5 @@
 const KoaRouter = require('@koa/router')
-const { create, normal_list, import_list, remove, update, updateIsImportant, updateIsNormal, updateRemark, checkDomain, getReplacementDomain } = require('../controller/domains.controller')
+const { create, normal_list, import_list, remove, update, updateIsImportant, updateIsNormal, updateRemark, checkDomain, getReplacementDomain, dailyReportList } = require('../controller/domains.controller')
 const { verifyAuth } = require('../middleware/login.middleware')
 
 
@@ -29,6 +29,8 @@ domainsRouter.patch('/:domainId/remark', verifyAuth, updateRemark)
 domainsRouter.post('/check', checkDomain)
 
 domainsRouter.get('/replacement/:domain', getReplacementDomain)
+
+domainsRouter.get('/internal/daily_report_list', dailyReportList) // url_detection_database 每日 8 点域名清单邮件用
 
 
 

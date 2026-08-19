@@ -166,6 +166,118 @@ class DomainsService {
     await connection.execute(statement, [id])
   }
 
+  /**
+   * 域名清单日报数据(供 url_detection_database 每日 8 点第二封邮件):
+   * - backup: 备用域名(purpose 含"备用"),带每个域名被启用过的次数
+   *           (出现在 cf_lander_url_replacements.replacement_domain 的次数)
+   * - inUse:  当前实际在用的域名 = Clickflare 落地页列表(cf_landers.url 提取域名)
+   *           ∪ ef-tracker 落地页列表(/query/landers 全量 url 提取域名),
+   *           purpose 从 domains 表按域名匹配补上(没登记的显示"-"),
+   *           updateAt 取该域名最后一次被替换记录的时间(没有则"-")
+   */
+  async dailyReportList() {
+    // 备用域名 + 被替换启用次数(LEFT JOIN 聚合,没被用过计 0)
+    // 注: cf_lander_url_replacements 是 utf8mb4_0900_ai_ci、domains 是 utf8mb4_general_ci,
+    // JOIN 比较需显式统一排序规则,否则 Illegal mix of collations (本地库踩过的坑)
+    const [backup] = await connection.execute(
+      `SELECT d.id, d.purpose, d.landing_page_url,
+              IFNULL(r.used_count, 0) AS used_count
+       FROM domains d
+       LEFT JOIN (
+         SELECT replacement_domain, COUNT(*) AS used_count
+         FROM cf_lander_url_replacements
+         GROUP BY replacement_domain
+       ) r ON r.replacement_domain COLLATE utf8mb4_general_ci = d.existing_domain
+       WHERE d.purpose LIKE '%备用%'
+       ORDER BY d.id ASC`
+    )
+
+    // 1) Clickflare 侧:本地同步表 cf_landers 的全部 url
+    const [cfRows] = await connection.execute(
+      `SELECT url FROM cf_landers WHERE url <> ''`
+    )
+    const cfUrls = cfRows.map(r => r.url)
+
+    // 2) ef-tracker 侧:调对方 /query/landers 全量分页拉 url
+    const efUrls = []
+    try {
+      const efTrackerConfig = require('../config/ef-tracker')
+      const axios = require('axios')
+      const size = 100
+      let page = 1
+      let pages = 1
+      do {
+        const res = await axios.get(`${efTrackerConfig.baseURL}/query/landers`, {
+          params: { page, size },
+          timeout: 15000
+        })
+        const list = res?.data?.list || []
+        for (const item of list) {
+          if (item.url) efUrls.push(item.url)
+        }
+        pages = res?.data?.pages || Math.ceil((res?.data?.total || 0) / size) || 1
+        page++
+      } while (page <= pages)
+    } catch (err) {
+      console.log('[域名清单日报] 拉取 ef-tracker 落地页列表失败:', err.message)
+    }
+
+    // 3) 提取域名去重,合并来源标记
+    const domainMap = new Map() // domain -> { sources: Set }
+    const extractDomain = (url) => {
+      try {
+        return new URL(url).hostname
+      } catch {
+        return null
+      }
+    }
+    for (const url of cfUrls) {
+      const d = extractDomain(url)
+      if (d) {
+        if (!domainMap.has(d)) domainMap.set(d, { sources: new Set() })
+        domainMap.get(d).sources.add('clickflare')
+      }
+    }
+    for (const url of efUrls) {
+      const d = extractDomain(url)
+      if (d) {
+        if (!domainMap.has(d)) domainMap.set(d, { sources: new Set() })
+        domainMap.get(d).sources.add('eftracker')
+      }
+    }
+
+    // 4) 用 domains 表补 purpose;用替换记录表补最近更新时间
+    const domains = [...domainMap.keys()]
+    const purposeMap = new Map()
+    const updateTimeMap = new Map()
+    if (domains.length > 0) {
+      const placeholders = domains.map(() => '?').join(',')
+      const [dRows] = await connection.execute(
+        `SELECT existing_domain, purpose FROM domains WHERE existing_domain IN (${placeholders})`,
+        domains
+      )
+      for (const r of dRows) purposeMap.set(r.existing_domain, r.purpose)
+
+      const [tRows] = await connection.execute(
+        `SELECT replacement_domain AS domain, MAX(updated_at) AS last_time
+         FROM cf_lander_url_replacements
+         WHERE replacement_domain COLLATE utf8mb4_general_ci IN (${placeholders})
+         GROUP BY replacement_domain`,
+        domains
+      )
+      for (const r of tRows) updateTimeMap.set(r.domain, r.last_time)
+    }
+
+    const inUse = domains.map(d => ({
+      domain: d,
+      purpose: purposeMap.get(d) || '',
+      sources: [...domainMap.get(d).sources].join(' + '),
+      updateAt: updateTimeMap.get(d) || null
+    })).sort((a, b) => String(b.updateAt || '').localeCompare(String(a.updateAt || '')))
+
+    return { backup, inUse }
+  }
+
 
   async update(domainId, existing_domain, landing_page_url, is_important, is_normal, purpose, remark) {
 

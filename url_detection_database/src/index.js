@@ -1,9 +1,9 @@
 require('./utils/loadEnv')();
-const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall } = require('./utils/api')
+const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, getDailyReportList } = require('./utils/api')
 const writeLog = require('./utils/writeLog')
 const sendMail = require('./utils/sendEmail')
 const checkSafeBrowsing = require('./utils/checkSafeBrowsing')
-const { buildStatus, buildNormalReportHtml, buildDailyReportHtml, buildAlertText } = require('./utils/buildReportHtml')
+const { buildStatus, buildNormalReportHtml, buildDailyReportHtml, buildAlertText, buildDomainListReportHtml } = require('./utils/buildReportHtml')
 const checkAccessible = require('./utils/checkAccessibleOnce')
 
 
@@ -96,6 +96,18 @@ async function checkUrls(urlObjs, isComplete = false) {
 }
 
 
+// 第二封日报:域名清单(备用域名状态 + 主要在使用的域名),只发邮件不打电话
+// 数据拉取失败时发一封带错误说明的邮件,方便发现接口异常
+async function sendDomainListReport() {
+  const { ok, backup, inUse } = await getDailyReportList()
+  if (ok) {
+    sendMail(buildDomainListReportHtml(backup, inUse), 'domainList')
+  } else {
+    sendMail('<p style="color:#c5221f;">域名清单数据拉取失败,请检查 domain-api 服务。</p>', 'domainList')
+  }
+}
+
+
 function startTimers() {
 
   if (intervalTimer) clearInterval(intervalTimer);
@@ -115,7 +127,10 @@ function startTimers() {
     const today = now.toDateString()
 
     if (HH === 8 && mm === 0 && lastReportDate !== today) {
-      sendMail(buildDailyReportHtml(dailyReport, dailyCount), true)
+      // 第一封:检测日报(域名状态汇总)
+      sendMail(buildDailyReportHtml(dailyReport, dailyCount), 'daily')
+      // 第二封:域名清单日报(备用域名状态 + 主要在用域名,只发邮件不打电话)
+      sendDomainListReport()
       lastReportDate = today
       dailyReport = new Map()
       dailyCount = new Map()
