@@ -81,8 +81,7 @@
       </div>
 
       <!-- 底部按钮组 -->
-      <div class="bottom-actions">
-        <!-- Header 显示切换按钮 -->
+      <!-- <div class="bottom-actions">
         <div class="action-btn" @click="toggleHeaderVisible" :title="isHeaderVisible ? '隐藏顶部栏' : '显示顶部栏'">
           <svg v-if="isHeaderVisible" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
             <path d="M3 4h18v2H3V4zm0 14h18v2H3v-2zm0-5h18v2H3v-2z"/>
@@ -91,7 +90,7 @@
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
           </svg>
         </div>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>

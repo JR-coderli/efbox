@@ -171,7 +171,7 @@
         </div>
 
         <div class="dimension-hint" v-if="selectedDims.length > 0">
-          <span>点击维度展开 → {{ formatDimensionPreview() }}</span>
+          <span>{{ formatDimensionPreview() }}</span>
         </div>
       </div>
 
@@ -279,18 +279,21 @@
               :key="row.path"
               :class="{ 'nt-expanded-row': isRowExpanded(row) }"
             >
-              <td class="nt-dim">
+              <!-- 维度列整格可点击展开(点击预览图/外链图标除外,它们自带 .stop) -->
+              <td
+                class="nt-dim"
+                :class="{ 'nt-dim-clickable': hasChildLevel(row.level) && row.key !== '' && row.key != null }"
+                :title="hasChildLevel(row.level) && (row.key === '' || row.key == null) ? '空值组无法展开' : ''"
+                @click="toggleRow(row)"
+              >
                 <span
                   class="nt-indent"
                   :style="{ width: row.level * 20 + 'px' }"
                 ></span>
-                <!-- 只有箭头可点击展开(整行不再触发) -->
                 <span
                   v-if="hasChildLevel(row.level)"
-                  class="nt-expand-icon nt-expand-handle"
-                  :class="{ 'is-open': isRowExpanded(row), 'is-disabled': row.key === '' || row.key == null }"
-                  :title="row.key === '' || row.key == null ? '空值组无法展开' : '展开下一维度'"
-                  @click.stop="toggleRow(row)"
+                  class="nt-expand-icon"
+                  :class="{ 'is-open': isRowExpanded(row) }"
                 >
                   <svg viewBox="0 0 24 24">
                     <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
@@ -1482,36 +1485,9 @@ onUnmounted(() => {
   }
 }
 
-// 展开箭头(右向,展开后旋转 90° 朝下)——唯一可点击展开的区域
-.nt-expand-icon.nt-expand-handle {
+// 维度列整格可点展开(hover 底色提示;空值组/最深层不响应)
+td.nt-dim.nt-dim-clickable {
   cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.15s;
-
-  &:hover {
-    background: rgba(26, 115, 232, 0.1);
-
-    svg {
-      fill: #1a73e8;
-    }
-  }
-
-  // 空值组不可展开
-  &.is-disabled {
-    cursor: not-allowed;
-
-    svg {
-      fill: #c4c7cc;
-    }
-
-    &:hover {
-      background: transparent;
-
-      svg {
-        fill: #c4c7cc;
-      }
-    }
-  }
 }
 
 .nt-expand-icon {
