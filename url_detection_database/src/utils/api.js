@@ -228,8 +228,32 @@ async function triggerUrgentPhoneCall(text) {
 }
 
 
+// 发送飞书普通文本消息(不发邮件、不打电话)
+// 接收人 open_id 通过环境变量 FEISHU_ALERT_OPEN_ID 配置(与电话加急同一份), 支持逗号分隔多个; 未配置则跳过
+async function sendFeishuText(text) {
+  const raw = process.env.FEISHU_ALERT_OPEN_ID
+  if (!raw) {
+    console.log('⚠️ 未配置 FEISHU_ALERT_OPEN_ID, 跳过飞书文本消息')
+    return false
+  }
+
+  const openIds = raw.split(',').map(s => s.trim()).filter(Boolean)
+  if (!openIds.length) return false
+
+  const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
+  for (const receiveId of openIds) {
+    try {
+      await axios.post(`${baseUrl}/feishu/send/text`, { receiveId, text })
+    } catch (err) {
+      console.log(`❌ 飞书文本消息发送失败 (${receiveId}): ${err.message}`)
+    }
+  }
+  return true
+}
+
+
 // 拉取域名清单日报数据(每日 8 点第二封邮件用)
-// 返回 { backup: [{purpose,landing_page_url,used_count}], inUse: [{purpose,landing_page_url,updateAt}] }
+// 返回 { backup: [...], inUse: [...], mislabelBackup: [备用被启用超24h仍未改标签的域名] }
 async function getDailyReportList() {
   try {
     const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
@@ -238,10 +262,10 @@ async function getDailyReportList() {
       return { ok: true, ...res.data.data }
     }
     console.log(`⚠️ 域名清单日报数据返回异常: ${res?.data?.message || '未知错误'}`)
-    return { ok: false, backup: [], inUse: [] }
+    return { ok: false, backup: [], inUse: [], mislabelBackup: [] }
   } catch (err) {
     console.log(`❌ 拉取域名清单日报数据失败: ${err.message}`)
-    return { ok: false, backup: [], inUse: [] }
+    return { ok: false, backup: [], inUse: [], mislabelBackup: [] }
   }
 }
 
@@ -251,6 +275,7 @@ module.exports = {
   updateDomainStatus,
   setDomainNotImportant,
   triggerUrgentPhoneCall,
+  sendFeishuText,
   replaceDangerousDomain,
   replaceEfTrackerDomain,
   getDailyReportList

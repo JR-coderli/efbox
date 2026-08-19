@@ -1,5 +1,5 @@
 require('./utils/loadEnv')();
-const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, getDailyReportList } = require('./utils/api')
+const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, sendFeishuText, getDailyReportList } = require('./utils/api')
 const writeLog = require('./utils/writeLog')
 const sendMail = require('./utils/sendEmail')
 const checkSafeBrowsing = require('./utils/checkSafeBrowsing')
@@ -97,11 +97,20 @@ async function checkUrls(urlObjs, isComplete = false) {
 
 
 // 第二封日报:域名清单(备用域名状态 + 主要在使用的域名),只发邮件不打电话
+// 同时检查"备用域名被启用超过 24 小时仍未改标签"→ 发飞书普通文本提醒(不发邮件、不打电话)
+// 提醒策略:每天 8 点检查,超过 24 小时未改就发;之后每天仍没改就每天再发,直到改掉标签为止
 // 数据拉取失败时发一封带错误说明的邮件,方便发现接口异常
 async function sendDomainListReport() {
-  const { ok, backup, inUse } = await getDailyReportList()
+  const { ok, backup, inUse, mislabelBackup } = await getDailyReportList()
   if (ok) {
     sendMail(buildDomainListReportHtml(backup, inUse), 'domainList')
+
+    // 备用域名被启用超 24h 仍挂着"备用"标签 → 飞书普通消息提醒(每天提醒,直到标签被改)
+    const pending = mislabelBackup || []
+    if (pending.length > 0) {
+      const lines = pending.map(r => `- ${r.existing_domain}（标签: ${r.purpose}，${String(r.last_used_at || '').replace('T', ' ').replace(/\..*$/, '')} 被启用）`)
+      sendFeishuText(`【域名标签提醒】以下备用域名已被替换启用超过 24 小时，但标签仍是"备用"，请及时改为正式标签：\n${lines.join('\n')}`)
+    }
   } else {
     sendMail('<p style="color:#c5221f;">域名清单数据拉取失败,请检查 domain-api 服务。</p>', 'domainList')
   }

@@ -192,6 +192,19 @@ class DomainsService {
        ORDER BY d.id ASC`
     )
 
+    // 备用域名被启用后"标签迟迟未改"清单(供飞书普通消息提醒):
+    // 条件 = purpose 仍含"备用" + 最近一次被替换启用发生在 24 小时之前(留足人工改标签时间,避免刚换完就误报)
+    const [mislabelBackup] = await connection.execute(
+      `SELECT d.existing_domain, d.purpose, MAX(t.updated_at) AS last_used_at
+       FROM domains d
+       INNER JOIN cf_lander_url_replacements t
+         ON t.replacement_domain COLLATE utf8mb4_general_ci = d.existing_domain
+       WHERE d.purpose LIKE '%备用%'
+         AND t.updated_at < NOW() - INTERVAL 24 HOUR
+       GROUP BY d.existing_domain, d.purpose
+       ORDER BY last_used_at DESC`
+    )
+
     // 1) Clickflare 侧:本地同步表 cf_landers 的全部 url
     const [cfRows] = await connection.execute(
       `SELECT url FROM cf_landers WHERE url <> ''`
@@ -275,7 +288,7 @@ class DomainsService {
       updateAt: updateTimeMap.get(d) || null
     })).sort((a, b) => String(b.updateAt || '').localeCompare(String(a.updateAt || '')))
 
-    return { backup, inUse }
+    return { backup, inUse, mislabelBackup }
   }
 
 
