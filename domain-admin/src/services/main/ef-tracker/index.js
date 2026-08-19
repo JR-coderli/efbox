@@ -86,6 +86,14 @@ export function getLanders(params = {}) {
   return query('/query/landers', params)
 }
 
+// 7. 可变维度下钻聚合报表 —— /query/stats/breakdown
+// params: dims(必填,逗号分隔维度,顺序=下钻顺序,最多5个)、range|start/end、tz、page、size、unique、
+//         以及下钻过滤(已展开的上层维度传具体值,如 lander=10)
+// 返回分页信封 + { dim, filters, totals }；list[].{ key, name, clicks, cost, conversions, revenue }
+export function getStatsBreakdown(params = {}) {
+  return query('/query/stats/breakdown', params)
+}
+
 // 批量替换 LP url 子串（域名迁移/路径改写）。POST 到外部系统（与 /query 同 host）。
 // payload: { old(必填), new(可选,默认删除), ids(可选,默认全表), dry_run(可选,预演不写库) }
 // 预演返回 { dry_run, count, list:[{id,before,after}] }；正式执行返回 { dry_run:false, affected }
