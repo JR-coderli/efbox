@@ -151,7 +151,7 @@
               <th class="nt-num">
                 CVR
                 <el-tooltip
-                  content="CVR = 转化数 ÷ 点击数 × 100%"
+                  content="CVR = Conversions ÷ Clicks × 100%"
                   placement="top"
                   :show-after="200"
                 >
@@ -165,7 +165,7 @@
               <th class="nt-num">
                 ROI
                 <el-tooltip
-                  content="ROI = 收入 ÷ 花费(显示为倍数,如 2.35 = 收益 2.35 倍;花费为 0 时显示 -)"
+                  content="ROI = Revenue ÷ Cost (Cost 为 0 时显示 -)"
                   placement="top"
                   :show-after="200"
                 >
@@ -196,6 +196,17 @@
                 </span>
                 <span v-else class="nt-expand-placeholder"></span>
                 <span class="nt-name" :title="row.key ? `key: ${row.key}` : '空值组'">{{ row.name }}</span>
+                <!-- lander 维度：名称旁小图标,点击新窗口打开落地页(拼 eflp 签名,同落地页列表页) -->
+                <a
+                  v-if="row.dim === 'lander' && row.key"
+                  class="external-link-btn"
+                  title="打开落地页"
+                  @click.stop="openLander(row.key)"
+                >
+                  <svg viewBox="0 0 24 24" class="external-icon">
+                    <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+                  </svg>
+                </a>
               </td>
               <td class="nt-num nt-clickable" @click="toggleRow(row)">{{ fmtNum(row.clicks) }}</td>
               <td class="nt-num nt-clickable" @click="toggleRow(row)">{{ fmtMoney(row.cost) }}</td>
@@ -240,7 +251,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getStatsBreakdown } from '@/services/main/ef-tracker'
+import SparkMD5 from 'spark-md5'
+import { getStatsBreakdown, getLanders } from '@/services/main/ef-tracker'
 
 // ===== 维度定义(与 QUERY_API.md 第12节一致) =====
 // id 类维度带 name；string/date/hour 维度 key 即名
@@ -421,6 +433,57 @@ function decorate(list) {
   return list
 }
 
+// ===== Lander 打开(维度含 lander 时,名称旁小图标) =====
+// url 不在 breakdown 返回里;按 lander name 精确匹配 /query/landers(keyword 同时搜 name/url,
+// 返回后本地精确比对 name,避免模糊误配),缓存 { id: url }
+const landerUrls = reactive({})
+const landerUrlPending = new Set() // 防并发重复请求
+
+async function ensureLanderUrl(row) {
+  const id = String(row.key)
+  if (landerUrls[id] !== undefined || landerUrlPending.has(id)) return
+  landerUrlPending.add(id)
+  try {
+    const res = await getLanders({ keyword: row.name, page: 1, size: 50 })
+    const hit = (res?.list || []).find((l) => l.name === row.name) || (res?.list || [])[0]
+    landerUrls[id] = hit?.url || ''
+  } catch (e) {
+    landerUrls[id] = '' // 失败也写入空串,避免反复重试
+  } finally {
+    landerUrlPending.delete(id)
+  }
+}
+
+// 行渲染时预取 lander url(不阻塞表格)
+function prefetchLanderUrls() {
+  for (const row of rows.value) {
+    if (row.dim === 'lander' && row.key) ensureLanderUrl(row)
+  }
+}
+
+// 打开落地页：前端拼 eflp 访问签名(与 clickflare 同一套门禁,逻辑复制自 ef-tracker>落地页列表)
+async function openLander(id) {
+  const key = String(id)
+  if (landerUrls[key] === undefined) {
+    // 未预取到(如请求失败),按行名再试一次
+    const row = rows.value.find((r) => r.dim === 'lander' && String(r.key) === key)
+    if (row) await ensureLanderUrl(row)
+  }
+  const url = landerUrls[key]
+  if (!url) {
+    ElMessage.warning('未取到该落地页的 url')
+    return
+  }
+  const t = Math.floor(Date.now() / 10000)
+  const n = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  const raw = `eflp${t}${n}`
+  const s = SparkMD5.hash(raw).substring(0, 10)
+  const sep = url.includes('?') ? '&' : '?'
+  window.open(`${url}${sep}go=1&t=${t}&n=${n}&s=${s}&w=1`, '_blank')
+}
+
 // ===== 请求 =====
 // daterange → start/end。end 为排除上界(<)，+1 天以包含结束日整天
 function rangeToParams(r) {
@@ -489,6 +552,7 @@ async function loadData() {
     }))
     total.value = result?.total ?? 0
     totals.value = result?.totals ?? null
+    prefetchLanderUrls() // lander 维度行预取 url(异步,不阻塞表格)
   } catch (error) {
     ElMessage.error('加载失败: ' + (error?.response?.data?.error || error?.message || '网络错误'))
     rows.value = []
@@ -544,6 +608,7 @@ async function loadChildren(row) {
     }))
     filtered.splice(idx + 1, 0, ...children)
     rows.value = filtered
+    prefetchLanderUrls() // 展开的子层若含 lander 也预取
   } catch (error) {
     ElMessage.error('展开失败: ' + (error?.response?.data?.error || error?.message || '网络错误'))
     row.expanded = false
@@ -1045,6 +1110,53 @@ onUnmounted(() => {
   color: #202124;
 }
 
+// lander 名称旁「打开落地页」小图标(样式与 ef-tracker>落地页列表页一致)
+.external-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  width: 18px;
+  height: 18px;
+  margin-left: 7px;
+  color: #5f6368;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+
+  .external-icon {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+  }
+
+  &:hover {
+    color: #1a73e8;
+    background: #e8f0fe;
+  }
+}
+
+// 表头公式提示图标(? 圆圈)
+.nt-help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  margin-left: 2px;
+  cursor: help;
+
+  svg {
+    width: 13px;
+    height: 13px;
+    fill: #9aa0a6;
+    transition: fill 0.2s;
+  }
+
+  &:hover svg {
+    fill: #1a73e8;
+  }
+}
+
 .nt-empty {
   text-align: center;
   padding: 40px 0;
@@ -1157,7 +1269,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: #ffffff;
+  background: #f8f9fa; /* 浅灰底,不用纯白 */
   border: 1px solid #dadce0;
   border-radius: 8px;
   cursor: pointer;
