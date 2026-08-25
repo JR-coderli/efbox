@@ -487,6 +487,10 @@ function quickFilterPaymentStatus(status) {
 
 const STORAGE_KEY = 'payment_track_column_settings'
 
+// 列设置持久化方式：'db' 存数据库（按用户+页面），'local' 存 localStorage（其他页面沿用）
+const COLUMN_SETTINGS_MODE = 'db'
+const COLUMN_SETTINGS_PAGE_KEY = props.contentConfig.pageName // 'payment_tracks'
+
 const allColumns = computed(() => {
   return props.contentConfig.propsList.map(item => {
     let key = item.prop || item.type || item.label
@@ -567,35 +571,95 @@ const orderedColumns = computed(() => {
   return ordered
 })
 
-function loadColumnSettings() {
-  const saved = localStorage.getItem(STORAGE_KEY)
+// 将任意来源的已保存设置（可能缺列/多列）与当前列配置对齐
+function mergeSettings(parsed) {
   const currentAllColumns = allColumns.value
+  const currentKeys = new Set(currentAllColumns.map(col => col.key))
+  const settings = []
+  const processedKeys = new Set()
 
+  for (const item of parsed || []) {
+    if (currentKeys.has(item.key)) {
+      settings.push({ key: item.key, visible: item.visible !== false })
+      processedKeys.add(item.key)
+    }
+  }
+  for (const col of currentAllColumns) {
+    if (!processedKeys.has(col.key)) {
+      settings.push({ key: col.key, visible: !col.hidden })
+    }
+  }
+  return settings
+}
+
+// 默认设置：全部列按配置顺序可见
+function defaultSettings() {
+  return allColumns.value.map(col => ({ key: col.key, visible: !col.hidden }))
+}
+
+// db 模式：从数据库读取；无记录时回退 localStorage 并迁移首份到数据库
+async function loadColumnSettingsFromDb() {
+  let saved = null
+  try {
+    saved = await systemStore.getUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY)
+  } catch {
+    saved = null
+  }
+
+  if (Array.isArray(saved) && saved.length > 0) {
+    columnSettings.value = mergeSettings(saved)
+    return
+  }
+
+  // 数据库无记录：尝试迁移 localStorage 里的旧设置
+  const localSaved = localStorage.getItem(STORAGE_KEY)
+  let parsed = null
+  if (localSaved) {
+    try {
+      parsed = JSON.parse(localSaved)
+    } catch {
+      parsed = null
+    }
+  }
+
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    columnSettings.value = mergeSettings(parsed)
+    // 静默迁移到数据库，失败不影响使用
+    persistColumnSettings().catch(() => {})
+  } else {
+    columnSettings.value = defaultSettings()
+  }
+}
+
+// local 模式：原 localStorage 逻辑
+function loadColumnSettingsFromLocal() {
+  const saved = localStorage.getItem(STORAGE_KEY)
   if (saved) {
     try {
-      const parsed = JSON.parse(saved)
-      const currentKeys = new Set(currentAllColumns.map(col => col.key))
-      const settings = []
-      const processedKeys = new Set()
-
-      for (const item of parsed) {
-        if (currentKeys.has(item.key)) {
-          settings.push({ key: item.key, visible: item.visible !== false })
-          processedKeys.add(item.key)
-        }
-      }
-      for (const col of currentAllColumns) {
-        if (!processedKeys.has(col.key)) {
-          settings.push({ key: col.key, visible: !col.hidden })
-        }
-      }
-      columnSettings.value = settings
+      columnSettings.value = mergeSettings(JSON.parse(saved))
     } catch {
-      columnSettings.value = currentAllColumns.map(col => ({ key: col.key, visible: !col.hidden }))
+      columnSettings.value = defaultSettings()
     }
   } else {
-    columnSettings.value = currentAllColumns.map(col => ({ key: col.key, visible: !col.hidden }))
+    columnSettings.value = defaultSettings()
   }
+}
+
+function loadColumnSettings() {
+  if (COLUMN_SETTINGS_MODE === 'db') {
+    loadColumnSettingsFromDb()
+  } else {
+    loadColumnSettingsFromLocal()
+  }
+}
+
+// 把当前 columnSettings 持久化（db / local 双模式）
+function persistColumnSettings() {
+  if (COLUMN_SETTINGS_MODE === 'db') {
+    return systemStore.saveUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY, columnSettings.value)
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(columnSettings.value))
+  return Promise.resolve()
 }
 
 function saveColumnSettings() {
@@ -604,7 +668,7 @@ function saveColumnSettings() {
     visible: col.visible !== false
   }))
   columnSettings.value = settings
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+  persistColumnSettings().catch(() => {})
 }
 
 function isColumnVisible(item) {
@@ -653,9 +717,15 @@ function handleDrop(targetIndex) {
 }
 
 function resetColumns() {
-  localStorage.removeItem(STORAGE_KEY)
-  columnSettings.value = []
-  loadColumnSettings()
+  if (COLUMN_SETTINGS_MODE === 'db') {
+    // 重置 = 删除数据库记录，回到列配置默认值
+    systemStore.removeUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY).catch(() => {})
+    columnSettings.value = defaultSettings()
+  } else {
+    localStorage.removeItem(STORAGE_KEY)
+    columnSettings.value = []
+    loadColumnSettings()
+  }
 }
 
 function handleColumnSetting() {}
@@ -888,6 +958,7 @@ const tableRowClassName = ({ row }) => {
 
 onMounted(() => {
   document.addEventListener('click', closeMenu)
+  // db 模式下 loadColumnSettings 内部是异步请求，不阻塞列表加载
   loadColumnSettings()
   fetchPageListData()
   loadCustomerShortNames()

@@ -175,3 +175,25 @@ export function renamePaymentTrackStatus(oldStatus, newStatus) {
     data: { oldStatus, newStatus }
   })
 }
+
+
+export function getUiColumnSettings(pageKey) {
+  return hyRequest.get({
+    url: `/ui_settings/columns/${pageKey}`
+  })
+}
+
+
+export function saveUiColumnSettings(pageKey, columns) {
+  return hyRequest.put({
+    url: `/ui_settings/columns/${pageKey}`,
+    data: { columns }
+  })
+}
+
+
+export function removeUiColumnSettings(pageKey) {
+  return hyRequest.delete({
+    url: `/ui_settings/columns/${pageKey}`
+  })
+}

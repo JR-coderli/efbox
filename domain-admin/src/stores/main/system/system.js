@@ -23,7 +23,10 @@ import {
   getPaymentTrackEntityOptions,
   getPaymentTrackCurrencyOptions,
   getPaymentTrackStatusOptions,
-  renamePaymentTrackStatus
+  renamePaymentTrackStatus,
+  getUiColumnSettings,
+  saveUiColumnSettings,
+  removeUiColumnSettings
 } from '@/services/main/system/system'
 
 
@@ -392,6 +395,21 @@ const useSystemStore = defineStore('system', {
     async renamePaymentTrackStatusAction(oldStatus, newStatus) {
       const result = await renamePaymentTrackStatus(oldStatus, newStatus)
       return result.data
+    },
+
+
+    // 页面列设置（存数据库，按 用户+页面 维度）
+    async getUiColumnSettingsAction(pageKey) {
+      const result = await getUiColumnSettings(pageKey)
+      return result.data?.columns
+    },
+
+    async saveUiColumnSettingsAction(pageKey, columns) {
+      await saveUiColumnSettings(pageKey, columns)
+    },
+
+    async removeUiColumnSettingsAction(pageKey) {
+      await removeUiColumnSettings(pageKey)
     }
   }
 })
