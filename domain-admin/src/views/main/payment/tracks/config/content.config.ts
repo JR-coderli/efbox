@@ -80,6 +80,13 @@ const contentConfig = {
     },
     {
       type: 'custom',
+      label: '对账单',
+      prop: 'statements',
+      slotName: 'statements',
+      width: '170'
+    },
+    {
+      type: 'custom',
       label: '发票',
       prop: 'attachments',
       slotName: 'attachments',

@@ -49,6 +49,9 @@ const handleAttachmentUpload = uploadAttachment.single('payment_attachment')
 const uploadVoucher = multer({ storage: storages.storage8 })
 const handleVoucherUpload = uploadVoucher.single('payment_voucher')
 
+const uploadStatement = multer({ storage: storages.storage9 })
+const handleStatementUpload = uploadStatement.single('payment_statement')
+
 
 module.exports = {
   handleAvatar,
@@ -58,7 +61,8 @@ module.exports = {
   handleAvatar5,
   handleAvatar6,
   handleAttachmentUpload,
-  handleVoucherUpload
+  handleVoucherUpload,
+  handleStatementUpload
 }
 
 

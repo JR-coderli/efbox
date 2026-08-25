@@ -205,6 +205,52 @@
         </el-tooltip>
       </template>
 
+      <!-- 对账单 -->
+      <template #statements="scope">
+        <el-tooltip effect="light" placement="top" :show-after="500" :disabled="!scope.statements || scope.statements.length === 0">
+          <template #content>
+            <div class="file-tooltip" v-if="scope.statements && scope.statements.length > 0">
+              <div v-for="sta in scope.statements" :key="sta.id">{{ sta.filename }}</div>
+            </div>
+          </template>
+          <div
+            class="upload-cell"
+            :class="{ 'has-files': scope.statements && scope.statements.length > 0, 'is-active': preview.visible && preview.trackId === scope.id && preview.type === 'statement' }"
+            @dblclick.stop="openPreview($event, scope.statements || [], 0, scope.id, 'statement')"
+          >
+            <template v-if="scope.statements && scope.statements.length > 0">
+              <div class="file-preview-list voucher">
+                <template v-for="(sta, idx) in scope.statements" :key="sta.id">
+                  <div v-if="idx < 3" class="file-preview-item clickable" @click.stop="openFileInNewWindow(sta)">
+                    <el-image
+                      v-if="isImage(sta.mimetype)"
+                      :src="getFileUrl(sta.destination, sta.filename)"
+                      fit="cover"
+                      class="preview-img"
+                    />
+                    <img
+                      v-else-if="sta.thumbnail"
+                      :src="getFileUrl(sta.thumbnail)"
+                      class="preview-img pdf-thumb"
+                    />
+                    <div v-else class="file-type-icon">{{ getFileExt(sta.filename) }}</div>
+                  </div>
+                </template>
+                <span v-if="scope.statements.length > 3" class="file-more clickable" @click.stop="openFileInNewWindow(scope.statements[0])">+{{ scope.statements.length - 3 }}</span>
+              </div>
+            </template>
+            <span v-else class="upload-hint" data-text="双击上传对账单"></span>
+            <span
+              v-if="scope.statements && scope.statements.length > 0"
+              class="cell-dropdown-arrow"
+              @click.stop="openPreview($event, scope.statements || [], 0, scope.id, 'statement')"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
+            </span>
+          </div>
+        </el-tooltip>
+      </template>
+
       <!-- 备注 -->
       <template #remark="scope">
         <el-tooltip v-if="!isEditing(scope.id, 'remark') && scope.remark" effect="dark" placement="top" :show-after="300" :disabled="!scope.remark">
@@ -421,7 +467,7 @@
                 <template v-else>
                   <svg class="paste-icon" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
                   <div class="paste-text">Ctrl+V 粘贴文件</div>
-                  <div class="paste-sub">{{ pasteTarget.type === 'attachment' ? '上传附件' : '上传水单' }} · 每次仅支持单个文件</div>
+                  <div class="paste-sub">{{ pasteTypeLabel }} · 每次仅支持单个文件</div>
                 </template>
               </div>
             </div>
@@ -966,7 +1012,7 @@ const preview = reactive({
   visible: false,
   files: [],
   trackId: null,
-  type: null // 'attachment' | 'voucher'
+  type: null // 'attachment' | 'voucher' | 'statement'
 })
 const previewRect = ref(null)
 const previewPlacement = ref('bottom')
@@ -1025,13 +1071,20 @@ function closePreview() {
   previewRect.value = null
 }
 
+// 各类型附件对应的行字段名 / 上传表单字段 / 上传路径 / 删除路径
+const fileTypeMap = {
+  attachment: { rowField: 'attachments', formField: 'payment_attachment', urlSeg: 'attachment' },
+  voucher: { rowField: 'vouchers', formField: 'payment_voucher', urlSeg: 'voucher' },
+  statement: { rowField: 'statements', formField: 'payment_statement', urlSeg: 'statement' }
+}
+
 function refreshPreviewFiles() {
   if (!preview.trackId || !preview.type) return
   const list = contentRef.value?.pageList || []
   const row = list.find(item => item.id === preview.trackId)
   if (!row) return
-  const field = preview.type === 'attachment' ? 'attachments' : 'vouchers'
-  preview.files = row[field] || []
+  const field = fileTypeMap[preview.type]?.rowField
+  preview.files = (field && row[field]) || []
 }
 
 function previewFile(file) {
@@ -1069,8 +1122,9 @@ function triggerPreviewUpload() {
 async function uploadFilesToPreview(files) {
   if (!files || files.length === 0 || !preview.trackId) return
 
-  const fieldName = preview.type === 'attachment' ? 'payment_attachment' : 'payment_voucher'
-  const uploadUrl = `${BASE_URL}/payment_tracks/upload/${preview.type === 'attachment' ? 'attachment' : 'voucher'}/${preview.trackId}`
+  const typeConf = fileTypeMap[preview.type] || fileTypeMap.attachment
+  const fieldName = typeConf.formField
+  const uploadUrl = `${BASE_URL}/payment_tracks/upload/${typeConf.urlSeg}/${preview.trackId}`
   const token = localCache.getCache(LOGIN_TOKEN)
 
 
@@ -1176,7 +1230,7 @@ async function deleteFile(file) {
   const trackId = preview.trackId
 
   try {
-    const type = fileType === 'attachment' ? 'attachment' : 'voucher'
+    const type = fileTypeMap[fileType]?.urlSeg || 'attachment'
     const url = `${BASE_URL}/payment_tracks/${type}/${file.id}`
     const token = localCache.getCache(LOGIN_TOKEN)
     const res = await fetch(url, {
@@ -1495,6 +1549,10 @@ function isEditing(id, field) {
 
 const pasteBubblePlacement = ref('top')
 
+// 粘贴上传气泡的标题（附件/水单/对账单）
+const pasteTypeLabelMap = { attachment: '上传附件', voucher: '上传水单', statement: '上传对账单' }
+const pasteTypeLabel = computed(() => pasteTypeLabelMap[pasteTarget.value.type] || '上传附件')
+
 const pasteBubbleStyle = computed(() => {
   const rect = pasteRect.value
   if (!rect) return {}
@@ -1587,8 +1645,9 @@ async function handlePaste(event) {
   uploadProgress.value.fileName = file.name
   simulateProgress()
 
-  const fieldName = type === 'attachment' ? 'payment_attachment' : 'payment_voucher'
-  const url = `${BASE_URL}/payment_tracks/upload/${type === 'attachment' ? 'attachment' : 'voucher'}/${trackId}`
+  const typeConf = fileTypeMap[type] || fileTypeMap.attachment
+  const fieldName = typeConf.formField
+  const url = `${BASE_URL}/payment_tracks/upload/${typeConf.urlSeg}/${trackId}`
 
   const formData = new FormData()
   formData.append(fieldName, file)
@@ -1632,7 +1691,7 @@ async function handlePaste(event) {
     uploadProgress.value.percent = 100
     uploadProgress.value.done = true
     await new Promise(resolve => setTimeout(resolve, 600))
-    ElNotification({ message: type === 'attachment' ? '附件上传成功' : '水单上传成功', type: 'success', duration: 2000 })
+    ElNotification({ message: type === 'attachment' ? '附件上传成功' : type === 'statement' ? '对账单上传成功' : '水单上传成功', type: 'success', duration: 2000 })
     contentRef.value?.fetchPageListData()
   }
 

@@ -1,10 +1,10 @@
 const KoaRouter = require('@koa/router')
 const { verifyAuth } = require('../middleware/login.middleware')
-const { handleAttachmentUpload, handleVoucherUpload } = require('../middleware/file.middleware')
+const { handleAttachmentUpload, handleVoucherUpload, handleStatementUpload } = require('../middleware/file.middleware')
 const {
   create, remove, update, list,
-  uploadAttachment, uploadVoucher,
-  removeAttachment, removeVoucher,
+  uploadAttachment, uploadVoucher, uploadStatement,
+  removeAttachment, removeVoucher, removeStatement,
   customerList, entityOptions, currencyOptions, statusOptions, renameStatus
 } = require('../controller/payment-track.controller')
 
@@ -23,9 +23,13 @@ paymentTrackRouter.post('/upload/attachment/:trackId', verifyAuth, handleAttachm
 
 paymentTrackRouter.post('/upload/voucher/:trackId', verifyAuth, handleVoucherUpload, uploadVoucher)
 
+paymentTrackRouter.post('/upload/statement/:trackId', verifyAuth, handleStatementUpload, uploadStatement)
+
 paymentTrackRouter.delete('/attachment/:attachmentId', verifyAuth, removeAttachment)
 
 paymentTrackRouter.delete('/voucher/:voucherId', verifyAuth, removeVoucher)
+
+paymentTrackRouter.delete('/statement/:statementId', verifyAuth, removeStatement)
 
 paymentTrackRouter.post('/customers', verifyAuth, customerList)
 

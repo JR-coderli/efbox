@@ -4,7 +4,7 @@ const { addDayToDay } = require('../utils/format-date')
 class PaymentTrackService {
 
   async create(trackInfo) {
-    const { customer_id, payment_entity, amount, period, remark, created_by, attachments, vouchers, currency } = trackInfo
+    const { customer_id, payment_entity, amount, period, remark, created_by, attachments, vouchers, statements, currency } = trackInfo
 
 
     const [customers] = await connection.execute(
@@ -59,6 +59,21 @@ class PaymentTrackService {
       await connection.query(
         'INSERT INTO payment_track_vouchers (payment_track_id, filename, mimetype, size, destination) VALUES ?',
         [vouValues]
+      )
+    }
+
+
+    if (statements && Array.isArray(statements) && statements.length > 0) {
+      const staValues = statements.map(sta => [
+        trackId,
+        sta.filename || null,
+        sta.mimetype || null,
+        sta.size || 0,
+        sta.destination || null
+      ])
+      await connection.query(
+        'INSERT INTO payment_track_statements (payment_track_id, filename, mimetype, size, destination) VALUES ?',
+        [staValues]
       )
     }
 
@@ -312,6 +327,17 @@ class PaymentTrackService {
       }
 
 
+      const [statements] = await connection.execute(
+        `SELECT id, payment_track_id, filename, mimetype, size, destination, thumbnail, createAt FROM payment_track_statements WHERE payment_track_id IN (${trackIds.map(() => '?').join(',')})`,
+        trackIds
+      )
+      const staMap = {}
+      for (const sta of statements) {
+        if (!staMap[sta.payment_track_id]) staMap[sta.payment_track_id] = []
+        staMap[sta.payment_track_id].push(sta)
+      }
+
+
       const formatted = rows.map(item => ({
         id: item.id,
         amount: item.amount,
@@ -334,7 +360,8 @@ class PaymentTrackService {
           short_name: item.short_name
         },
         attachments: attMap[item.id] || [],
-        vouchers: vouMap[item.id] || []
+        vouchers: vouMap[item.id] || [],
+        statements: staMap[item.id] || []
       }))
 
       return {
@@ -370,6 +397,17 @@ class PaymentTrackService {
   }
 
 
+  async createStatement(fileInfo) {
+    const { payment_track_id, filename, mimetype, size, destination, thumbnail } = fileInfo
+    const sql = `
+      INSERT INTO payment_track_statements (payment_track_id, filename, mimetype, size, destination, thumbnail)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `
+    const [result] = await connection.execute(sql, [payment_track_id, filename, mimetype, size, destination, thumbnail || null])
+    return { insertId: result.insertId }
+  }
+
+
   async removeAttachment(id) {
     await connection.execute('DELETE FROM payment_track_attachments WHERE id = ?', [id])
   }
@@ -377,6 +415,11 @@ class PaymentTrackService {
 
   async removeVoucher(id) {
     await connection.execute('DELETE FROM payment_track_vouchers WHERE id = ?', [id])
+  }
+
+
+  async removeStatement(id) {
+    await connection.execute('DELETE FROM payment_track_statements WHERE id = ?', [id])
   }
 
 

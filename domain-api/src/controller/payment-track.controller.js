@@ -224,6 +224,65 @@ class PaymentTrackController {
   }
 
 
+  async uploadStatement(ctx, next) {
+    const { trackId } = ctx.params
+    const file = ctx.request.file
+
+    if (!file) {
+      ctx.body = { code: -1, message: '请选择文件' }
+      return
+    }
+
+    const { filename, mimetype, size, destination } = file
+
+
+    let thumbnailPath = null
+    const thumbnailBase64 = ctx.request.body?.thumbnail
+    if (thumbnailBase64) {
+      try {
+        const matches = thumbnailBase64.match(/^data:image\/\w+;base64,(.+)$/)
+        if (matches) {
+          const buffer = Buffer.from(matches[1], 'base64')
+          const thumbDir = path.join(destination)
+          const thumbFilename = `thumb_${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`
+          const thumbFullPath = path.join(thumbDir, thumbFilename)
+          fs.writeFileSync(thumbFullPath, buffer)
+          thumbnailPath = `${destination}/${thumbFilename}`
+        }
+      } catch {
+
+      }
+    }
+
+    const result = await paymentTrackService.createStatement({
+      payment_track_id: trackId,
+      filename,
+      mimetype,
+      size,
+      destination,
+      thumbnail: thumbnailPath
+    })
+
+    ctx.body = {
+      code: 0,
+      message: '对账单上传成功',
+      data: { insertId: result.insertId, filename }
+    }
+  }
+
+
+  async removeStatement(ctx, next) {
+    const { statementId } = ctx.params
+
+    await paymentTrackService.removeStatement(statementId)
+
+    ctx.body = {
+      code: 0,
+      message: '对账单已删除'
+    }
+  }
+
+
   async customerList(ctx, next) {
     const result = await paymentTrackService.customerList()
 
