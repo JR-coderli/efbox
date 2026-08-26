@@ -9,6 +9,7 @@ import useMainStore from '../main/main'
 
 
 function sortMenusBySort(menus) {
+  if (!Array.isArray(menus)) return []
   return menus.sort((a, b) => {
     if (a.sort !== b.sort) {
       return (a.sort || 0) - (b.sort || 0)
@@ -66,24 +67,36 @@ const useLoginStore = defineStore('login', {
         return
       }
 
-      const id = loginResult.data.id 
+      const id = loginResult.data.id
+      const roleId = loginResult.data.roleId // 登录接口直接返回，用于并行拉取菜单
       this.token = loginResult.data.token
 
 
       localCache.setCache(LOGIN_TOKEN, this.token) // 缓存token
 
 
-      const userInfoResult = await getUserInfoById(id)
-      const userInfo = userInfoResult.data
-      this.userInfo = userInfo
+      // 角色/菜单全集 与后续请求互不依赖，先并行发出（失败不阻塞登录）
+      const entirePromise = useMainStore().fetchEntireDataAction().catch(() => {})
 
+      // 菜单请求需要 roleId：优先用登录接口直接返回的 roleId（与用户信息并行），
+      // 老后端没有 roleId 时退回串行（等用户信息返回后取 role.id），绝不能发 /role/undefined/menu
+      let userMenusData
+      if (roleId) {
+        const [userInfoResult, userMenusResult] = await Promise.all([
+          getUserInfoById(id),
+          getUserMenusByRoleId(roleId)
+        ])
+        this.userInfo = userInfoResult.data
+        userMenusData = userMenusResult.data
+      } else {
+        const userInfoResult = await getUserInfoById(id)
+        this.userInfo = userInfoResult.data
+        const userMenusResult = await getUserMenusByRoleId(this.userInfo.role.id)
+        userMenusData = userMenusResult.data
+      }
 
-
-
-      const userMenusResult = await getUserMenusByRoleId(this.userInfo.role.id)
-      const userMenus = userMenusResult.data
-
-      this.userMenus = applyCustomMenuOrder(userMenus, this.userInfo.role.id)
+      const userInfo = this.userInfo
+      this.userMenus = applyCustomMenuOrder(userMenusData, userInfo.role.id)
 
 
       const permissions = mapMenusToPermissions(this.userMenus)
@@ -93,9 +106,7 @@ const useLoginStore = defineStore('login', {
       localCache.setCache('userInfo', userInfo)
       localCache.setCache('userMenus', this.userMenus)
 
-
-      const mainStore = useMainStore()
-      mainStore.fetchEntireDataAction()
+      await entirePromise
 
 
       resetFirstMenu()
@@ -115,9 +126,7 @@ const useLoginStore = defineStore('login', {
         duration: 1300,
         showClose: true
       })
-      setTimeout(() => { 
-        router.push("/main")
-      }, 750);
+      router.push('/main')
     },
 
 
@@ -133,8 +142,12 @@ const useLoginStore = defineStore('login', {
 
 
 
+        // 菜单 与 角色/菜单全集 互不依赖，并行请求
         try {
-          const userMenusResult = await getUserMenusByRoleId(userInfo.role.id)
+          const [userMenusResult] = await Promise.all([
+            getUserMenusByRoleId(userInfo.role.id),
+            useMainStore().fetchEntireDataAction().catch(() => {})
+          ])
           this.userMenus = applyCustomMenuOrder(userMenusResult.data, userInfo.role.id)
           localCache.setCache('userMenus', this.userMenus)
         } catch (err) {
@@ -142,11 +155,9 @@ const useLoginStore = defineStore('login', {
           if (userMenus) {
             this.userMenus = applyCustomMenuOrder(userMenus, userInfo.role.id)
           }
+          // 菜单失败时角色/菜单全集可能也没拉到，兜底再拉一次
+          useMainStore().fetchEntireDataAction().catch(() => {})
         }
-
-
-        const mainStore = useMainStore()
-        mainStore.fetchEntireDataAction()
 
 
         const permissions = mapMenusToPermissions(this.userMenus)

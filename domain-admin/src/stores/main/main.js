@@ -16,8 +16,11 @@ const useMainStore = defineStore('main', {
   actions: {
     async fetchEntireDataAction() {
 
-      const rolesResult = await getEntireRoles()
-      const menusResult = await getEntireMenus()
+      // 角色列表 与 菜单全集 互不依赖，并行请求
+      const [rolesResult, menusResult] = await Promise.all([
+        getEntireRoles(),
+        getEntireMenus()
+      ])
 
 
 

@@ -99,6 +99,13 @@ router.beforeEach(async (to, from) => {
   }
 
 
+  // 已登录用户主动访问登录页且 token 已失效/不存在 → 重置路由加载标记，
+  // 保证下次登录（同一次页面会话内登出再登录）时守卫会重新拉取菜单
+  if (to.path === '/login') {
+    routesLoaded = false
+  }
+
+
   if (token && to.path.startsWith('/main') && !routesLoaded) {
     const loginStore = useLoginStore()
     resetFirstMenu()
