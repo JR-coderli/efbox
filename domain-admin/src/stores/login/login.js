@@ -106,7 +106,8 @@ const useLoginStore = defineStore('login', {
       localCache.setCache('userInfo', userInfo)
       localCache.setCache('userMenus', this.userMenus)
 
-      await entirePromise
+      // 角色菜单全集不阻塞登录，后台完成即可（与原逻辑一致，仅改为与主链路并行）
+      void entirePromise
 
 
       resetFirstMenu()
