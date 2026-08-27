@@ -23,6 +23,19 @@ class UserService {
   }
 
 
+  // 按用户ID查真实角色名（attachRole 中间件用，做后端数据权限过滤）
+  async queryRoleNameById(id) {
+    const statement = `
+      SELECT r.name AS role_name
+      FROM cms_user u
+      LEFT JOIN role r ON u.role_id = r.id
+      WHERE u.id = ?;
+    `
+    const [values] = await connection.execute(statement, [id])
+    return values
+  }
+
+
   async queryById(id) {
     const statement = `
       SELECT

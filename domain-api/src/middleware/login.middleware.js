@@ -102,8 +102,33 @@ const verifyAuthOptional = async(ctx, next) => {
   await next()
 }
 
+/**
+ * 数据权限加固：从数据库查当前用户的真实角色名，写入 ctx.user.role_name。
+ * 放在 verifyAuth 之后使用；后续接口以 ctx.user.role_name / ctx.user.id 做数据过滤，
+ * 不再信任请求体里前端自报的 role_name / user_id（可被任意伪造）。
+ */
+const attachRole = async(ctx, next) => {
+  if (!ctx.user || !ctx.user.id) {
+    return ctx.app.emit('error', UNAUTHORIZATION, ctx)
+  }
+
+  try {
+    const [rows] = await userService.queryRoleNameById(ctx.user.id)
+    if (!rows[0]) {
+      return ctx.app.emit('error', UNAUTHORIZATION, ctx)
+    }
+    ctx.user.role_name = rows[0].role_name
+  } catch (err) {
+    console.log('[attachRole] 查询角色失败:', err)
+    return ctx.app.emit('error', UNAUTHORIZATION, ctx)
+  }
+
+  await next()
+}
+
 module.exports = {
   verifyLogin,
   verifyAuth,
-  verifyAuthOptional
+  verifyAuthOptional,
+  attachRole
 }

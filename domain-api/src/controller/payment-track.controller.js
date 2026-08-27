@@ -84,9 +84,9 @@ class PaymentTrackController {
   async list(ctx, next) {
     const trackInfo = ctx.request.body
 
-    if (!trackInfo.user_id) {
-      trackInfo.user_id = ctx.user.id
-    }
+    // 数据权限以服务端为准：attachRole 已查库写入真实角色，覆盖前端可伪造的 role_name/user_id
+    trackInfo.role_name = ctx.user.role_name
+    trackInfo.user_id = ctx.user.id
 
     const page = trackInfo.page
     const pageSize = trackInfo.pageSize

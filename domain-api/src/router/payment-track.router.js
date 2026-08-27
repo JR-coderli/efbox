@@ -1,5 +1,5 @@
 const KoaRouter = require('@koa/router')
-const { verifyAuth } = require('../middleware/login.middleware')
+const { verifyAuth, attachRole } = require('../middleware/login.middleware')
 const { handleAttachmentUpload, handleVoucherUpload, handleStatementUpload } = require('../middleware/file.middleware')
 const {
   create, remove, update, list,
@@ -17,7 +17,7 @@ const paymentTrackRouter = new KoaRouter({ prefix: '/payment_tracks' })
 
 paymentTrackRouter.post('/', verifyAuth, create)
 
-paymentTrackRouter.post('/list', verifyAuth, list)
+paymentTrackRouter.post('/list', verifyAuth, attachRole, list) // attachRole：按真实角色过滤数据
 
 paymentTrackRouter.post('/upload/attachment/:trackId', verifyAuth, handleAttachmentUpload, uploadAttachment)
 

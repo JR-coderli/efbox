@@ -129,6 +129,9 @@ class CusAttachmentsController {
     const page = cusAttachmentsInfo.page
     const pageSize = cusAttachmentsInfo.pageSize
 
+    // 数据权限以服务端为准：attachRole 已查库写入真实角色，覆盖前端可伪造的 role_name/user_id
+    cusAttachmentsInfo.role_name = ctx.user.role_name
+    cusAttachmentsInfo.user_id = ctx.user.id
 
     const result = await customerService.attalist(cusAttachmentsInfo)
 
