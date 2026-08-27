@@ -206,7 +206,7 @@ class CustomerController {
   }
 
 
-  // 收回授权 DELETE /customers/:customerId/grant/:userId
+  // 撤销授权 DELETE /customers/:customerId/grant/:userId
   async revokeAttachment(ctx, next) {
     const { customerId, userId } = ctx.params
 
@@ -223,7 +223,7 @@ class CustomerController {
       ctx.user.name,
       'customer',
       'update',
-      `收回附件查看授权: customerId=${customerId}, 收回 userId=${userId}`,
+      `撤销附件查看授权: customerId=${customerId}, 撤销 userId=${userId}`,
       null,
       { customerId, revokedFrom: userId }
     )
@@ -231,7 +231,7 @@ class CustomerController {
     const grantedUsers = await customerService.getGrantedUsers(Number(customerId))
     ctx.body = {
       code: 0,
-      message: result.affectedRows > 0 ? '已收回授权' : '该用户本无授权',
+      message: result.affectedRows > 0 ? '已撤销授权' : '该用户本无授权',
       data: { grantedUsers }
     }
   }

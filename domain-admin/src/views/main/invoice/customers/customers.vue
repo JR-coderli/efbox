@@ -131,17 +131,21 @@
           :style="grantBubbleStyle"
           @mousedown.stop
         >
-          <div class="grant-bubble-title">
-            <span>{{ grantBubble.customerName }} · 附件授权</span>
-            <button class="grant-close-btn" @click="closeGrantBubble">✕</button>
+          <div class="grant-bubble-header">
+            <div class="grant-bubble-title">附件授权</div>
+            <div class="grant-bubble-subtitle">{{ grantBubble.customerName }}</div>
+            <button class="grant-close-btn" title="关闭" @click="closeGrantBubble">✕</button>
           </div>
 
-          <!-- 已授权列表（可收回） -->
+          <!-- 已授权列表（可撤销） -->
           <div class="grant-list" v-if="grantBubble.grantedUsers.length > 0">
             <div v-for="u in grantBubble.grantedUsers" :key="u.id" class="grant-list-item">
-              <span class="grant-user-name">{{ u.name || u.nickname }}</span>
-              <span v-if="u.role_name" class="grant-user-role">{{ u.role_name }}</span>
-              <button class="grant-revoke-btn" @click="handleRevoke(u)">收回</button>
+              <span class="grant-avatar" :style="getAvatarStyle(u)">{{ getAvatarText(u) }}</span>
+              <div class="grant-user-meta">
+                <span class="grant-user-name">{{ u.name || u.nickname }}</span>
+                <span v-if="u.role_name" class="grant-user-role">{{ u.role_name }}</span>
+              </div>
+              <button class="grant-revoke-btn" @click="handleRevoke(u)">撤销</button>
             </div>
           </div>
           <div v-else class="grant-list-empty">暂无授权，该客户下附件仅创建者和特权角色可见</div>
@@ -149,7 +153,7 @@
           <!-- 添加授权 -->
           <div class="grant-add">
             <select v-model="grantBubble.selectedUserId" class="grant-select">
-              <option value="" disabled>选择用户…</option>
+              <option value="" disabled>选择要授权的用户…</option>
               <option v-for="u in grantableUserOptions" :key="u.id" :value="u.id">
                 {{ u.name }}{{ u.role_name ? `（${u.role_name}）` : '' }}
               </option>
@@ -224,13 +228,13 @@ const grantableUserOptions = computed(() => {
 const grantBubbleStyle = computed(() => {
   const rect = grantBubble.value.rect
   if (!rect) return {}
-  const bubbleWidth = 320
+  const bubbleWidth = 340
   let left = rect.left + rect.width / 2 - bubbleWidth / 2
   if (left < 12) left = 12
   const maxLeft = window.innerWidth - bubbleWidth - 12
   if (left > maxLeft) left = maxLeft
 
-  const bubbleHeight = 300
+  const bubbleHeight = 320
   const gap = 10
   let top
   const spaceBelow = window.innerHeight - rect.bottom
@@ -301,10 +305,24 @@ async function handleRevoke(user) {
     const data = await systemStore.revokeCustomerAttachmentAction(customerId, user.id)
     grantBubble.value.grantedUsers = data?.grantedUsers || []
     syncGrantedToRow(customerId, grantBubble.value.grantedUsers)
-    ElNotification({ message: '已收回授权', type: 'success', duration: 2000 })
+    ElNotification({ message: '已撤销授权', type: 'success', duration: 2000 })
   } catch {
-    ElNotification({ message: '收回失败', type: 'error' })
+    ElNotification({ message: '撤销失败', type: 'error' })
   }
+}
+
+
+// 谷歌风格头像：取名字首字符，背景色由名字哈希决定（复用开票实体的调色板）
+function getAvatarText(u) {
+  const name = u.name || u.nickname || '?'
+  return name.trim().charAt(0).toUpperCase()
+}
+
+function getAvatarStyle(u) {
+  const name = u.name || u.nickname || '?'
+  const hash = name.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+  const { bg, text } = defaultColors[hash % defaultColors.length]
+  return { backgroundColor: bg, color: text }
 }
 
 
@@ -543,40 +561,58 @@ function handleWheel(event) {
 .grant-bubble {
   position: absolute;
   background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  padding: 12px 14px;
+  border-radius: 8px;
+  // Material 高程：env light + key light 双层投影
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
+  padding: 16px 16px 12px;
   box-sizing: border-box;
   z-index: 10000;
+  font-family: 'Google Sans', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
-.grant-bubble-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  font-weight: 500;
-  color: #202124;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f1f3f4;
-  margin-bottom: 8px;
+.grant-bubble-header {
+  position: relative;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e8eaed;
+  margin-bottom: 4px;
+
+  .grant-bubble-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #202124;
+    line-height: 24px;
+  }
+
+  .grant-bubble-subtitle {
+    font-size: 13px;
+    color: #5f6368;
+    line-height: 20px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   .grant-close-btn {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 32px;
+    height: 32px;
     border: none;
     background: transparent;
-    color: #9aa0a6;
+    color: #5f6368;
     font-size: 14px;
     cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: 50%;
+    transition: background-color 0.15s;
+
     &:hover { background-color: #f1f3f4; color: #202124; }
   }
 }
 
 .grant-list {
-  max-height: 150px;
+  max-height: 180px;
   overflow-y: auto;
-  margin-bottom: 8px;
 
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-thumb { background-color: #dadce0; border-radius: 2px; }
@@ -585,16 +621,36 @@ function handleWheel(event) {
 .grant-list-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 6px;
-  border-radius: 6px;
-  font-size: 13px;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background-color 0.15s;
 
-  &:hover { background-color: #f8f9fa; }
+  &:hover { background-color: #f1f3f4; }
 
-  .grant-user-name {
+  .grant-avatar {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 500;
+    user-select: none;
+  }
+
+  .grant-user-meta {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.4;
+  }
+
+  .grant-user-name {
+    font-size: 14px;
     color: #202124;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -602,74 +658,89 @@ function handleWheel(event) {
   }
 
   .grant-user-role {
-    flex-shrink: 0;
-    font-size: 11px;
+    font-size: 12px;
     color: #5f6368;
-    background-color: #f1f3f4;
-    padding: 1px 8px;
-    border-radius: 8px;
   }
 
+  // Material 文字按钮：无边框，悬停蓝色浅底
   .grant-revoke-btn {
     flex-shrink: 0;
-    border: 1px solid #dadce0;
-    background: #fff;
-    color: #d93025;
-    font-size: 12px;
-    padding: 2px 10px;
+    border: none;
+    background: transparent;
+    color: #1a73e8;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.15s;
 
-    &:hover { background-color: #fce8e6; border-color: #d93025; }
+    &:hover { background-color: rgba(26, 115, 232, 0.08); }
   }
 }
 
 .grant-list-empty {
-  font-size: 12px;
-  color: #9aa0a6;
+  font-size: 13px;
+  color: #5f6368;
   text-align: center;
-  padding: 14px 0;
+  padding: 18px 8px;
+  line-height: 1.6;
 }
 
 .grant-add {
   display: flex;
   gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #f1f3f4;
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid #e8eaed;
 
+  // Material 描边输入框：灰描边 → 悬停加深 → 聚焦蓝框，自绘下拉箭头
   .grant-select {
     flex: 1;
-    height: 32px;
-    padding: 0 8px;
-    border: 1px solid #e8eaed;
-    border-radius: 6px;
-    font-size: 13px;
+    min-width: 0;
+    height: 36px;
+    padding: 0 32px 0 12px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 14px;
     color: #202124;
     outline: none;
-    background: #f8f9fa;
-    &:focus { border-color: #1a73e8; background: #fff; }
+    appearance: none;
+    cursor: pointer;
+    background: #fff url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='%235f6368'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 10px center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+
+    &:hover { border-color: #9aa0a6; }
+    &:focus { border-color: #1a73e8; box-shadow: 0 0 0 1px #1a73e8; }
   }
 
+  // Material 填充按钮：禁用态为灰底灰字（非透明）
   .grant-add-btn {
     flex-shrink: 0;
+    height: 36px;
     border: none;
     background: #1a73e8;
     color: #fff;
-    font-size: 13px;
-    padding: 0 16px;
-    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 0 20px;
+    border-radius: 4px;
     cursor: pointer;
-    &:hover:not(:disabled) { background: #1557b0; }
-    &:disabled { opacity: 0.5; cursor: not-allowed; }
+    transition: background-color 0.15s, box-shadow 0.15s;
+
+    &:hover:not(:disabled) {
+      background: #1765cc;
+      box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+    }
+    &:disabled { background: #f1f3f4; color: #9aa0a6; cursor: not-allowed; }
   }
 }
 
 .grant-hint {
-  margin-top: 8px;
-  font-size: 11px;
-  color: #9aa0a6;
-  line-height: 1.5;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #5f6368;
+  line-height: 1.6;
 }
 
 </style>

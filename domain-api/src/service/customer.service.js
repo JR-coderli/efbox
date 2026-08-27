@@ -348,7 +348,7 @@ class CustomerService {
   }
 
 
-  // 收回授权
+  // 撤销授权
   async revokeAttachment(userId, customerId) {
     const [result] = await connection.execute(
       'DELETE FROM customer_attachment_grants WHERE user_id = ? AND customer_id = ?',
@@ -358,7 +358,7 @@ class CustomerService {
   }
 
 
-  // 某客户当前已授权的用户列表（含用户名，供前端展示/收回）
+  // 某客户当前已授权的用户列表（含用户名，供前端展示/撤销）
   async getGrantedUsers(customerId) {
     const [rows] = await connection.execute(
       `SELECT g.user_id AS id, u.name, u.nickname, g.createAt AS granted_at` +
