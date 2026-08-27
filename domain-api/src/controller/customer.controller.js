@@ -164,6 +164,106 @@ class CustomerController {
       message: '更新付款周期成功'
     }
   }
+
+
+  // ===== 客户附件查看授权 =====
+
+  // 给用户授权某客户全部附件 POST /customers/:customerId/grant
+  // 权限：需 system:customers:grant（前端列可见性同样由该权限控制）
+  async grantAttachment(ctx, next) {
+    const { customerId } = ctx.params
+    const { user_id } = ctx.request.body || {}
+
+    if (!user_id) {
+      ctx.body = { code: -1, message: '缺少用户ID' }
+      return
+    }
+
+    const grantPermission = await customerService.hasGrantPermission(ctx.user.id)
+    if (!grantPermission) {
+      ctx.body = { code: -1, message: '没有用户授权权限' }
+      return
+    }
+
+    await customerService.grantAttachment(Number(user_id), Number(customerId), ctx.user.id)
+
+    operationLogService.log(
+      ctx.user.id,
+      ctx.user.name,
+      'customer',
+      'update',
+      `授权附件查看: customerId=${customerId}, 授权给 userId=${user_id}`,
+      null,
+      { customerId, grantedTo: user_id }
+    )
+
+    const grantedUsers = await customerService.getGrantedUsers(Number(customerId))
+    ctx.body = {
+      code: 0,
+      message: '授权成功',
+      data: { grantedUsers }
+    }
+  }
+
+
+  // 收回授权 DELETE /customers/:customerId/grant/:userId
+  async revokeAttachment(ctx, next) {
+    const { customerId, userId } = ctx.params
+
+    const grantPermission = await customerService.hasGrantPermission(ctx.user.id)
+    if (!grantPermission) {
+      ctx.body = { code: -1, message: '没有用户授权权限' }
+      return
+    }
+
+    const result = await customerService.revokeAttachment(Number(userId), Number(customerId))
+
+    operationLogService.log(
+      ctx.user.id,
+      ctx.user.name,
+      'customer',
+      'update',
+      `收回附件查看授权: customerId=${customerId}, 收回 userId=${userId}`,
+      null,
+      { customerId, revokedFrom: userId }
+    )
+
+    const grantedUsers = await customerService.getGrantedUsers(Number(customerId))
+    ctx.body = {
+      code: 0,
+      message: result.affectedRows > 0 ? '已收回授权' : '该用户本无授权',
+      data: { grantedUsers }
+    }
+  }
+
+
+  // 某客户当前已授权用户 GET /customers/:customerId/grants
+  async getGrants(ctx, next) {
+    const { customerId } = ctx.params
+    const grantedUsers = await customerService.getGrantedUsers(Number(customerId))
+    ctx.body = {
+      code: 0,
+      message: '查询授权成功',
+      data: { grantedUsers }
+    }
+  }
+
+
+  // 可授权用户简表 GET /customers/grant/users（授权气泡里选人用）
+  async grantUserList(ctx, next) {
+    const grantPermission = await customerService.hasGrantPermission(ctx.user.id)
+    if (!grantPermission) {
+      ctx.body = { code: -1, message: '没有用户授权权限' }
+      return
+    }
+
+    const users = await customerService.getGrantableUsers(ctx.user.id)
+    ctx.body = {
+      code: 0,
+      message: '用户列表',
+      data: { list: users }
+    }
+  }
 }
 
 module.exports = new CustomerController()

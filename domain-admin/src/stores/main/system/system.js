@@ -26,7 +26,10 @@ import {
   renamePaymentTrackStatus,
   getUiColumnSettings,
   saveUiColumnSettings,
-  removeUiColumnSettings
+  removeUiColumnSettings,
+  getGrantableUsers,
+  grantCustomerAttachment,
+  revokeCustomerAttachment
 } from '@/services/main/system/system'
 
 
@@ -60,6 +63,26 @@ const useSystemStore = defineStore('system', {
 
     async postPageListAction(pageName, queryInfo, listType = "list") {
       const pageListResult = await postPageListData(pageName, queryInfo, listType)
+
+      // 后端错误响应（如 token 过期 {code:-1006}）没有 data 字段：保持列表为空并透传错误码，不抛 TypeError
+      if (!pageListResult?.data || !Array.isArray(pageListResult.data.list)) {
+        console.warn('[postPageListAction] 列表响应异常:', pageListResult?.code, pageListResult?.message)
+
+        if (listType === 'import_list') {
+          this.importDomainsList = []
+          this.importDomainsAllCount = 0
+          return []
+        }
+        if (listType === 'normal_list') {
+          this.normalDomainsList = []
+          this.normalDomainsAllCount = 0
+          return []
+        }
+        this.pageList = []
+        this.pageAllCount = 0
+        return []
+      }
+
       const { allCount, list } = pageListResult.data
 
 
@@ -92,7 +115,7 @@ const useSystemStore = defineStore('system', {
           this.highlightRowId = null
         }, 2000)
       }
-      
+
 
       return pageListResult.data.list
     },
@@ -410,6 +433,24 @@ const useSystemStore = defineStore('system', {
 
     async removeUiColumnSettingsAction(pageKey) {
       await removeUiColumnSettings(pageKey)
+    },
+
+
+    // ===== 客户附件查看授权 =====
+
+    async getGrantableUsersAction() {
+      const result = await getGrantableUsers()
+      return result.data?.list || []
+    },
+
+    async grantCustomerAttachmentAction(customerId, userId) {
+      const result = await grantCustomerAttachment(customerId, userId)
+      return result.data
+    },
+
+    async revokeCustomerAttachmentAction(customerId, userId) {
+      const result = await revokeCustomerAttachment(customerId, userId)
+      return result.data
     }
   }
 })

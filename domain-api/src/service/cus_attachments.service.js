@@ -258,9 +258,10 @@ class CusAttachmentsService {
 
     } else if (role_name && user_id) {
 
-      whereClauses.push('ca.created_by = ?');
-      params.push(user_id);
-      countParams.push(user_id);
+      // 自己创建的 OR 被授权客户下的全部附件（customer_attachment_grants 一条记录 = 授权该用户看该客户全部附件）
+      whereClauses.push('(ca.created_by = ? OR ca.customer_id IN (SELECT customer_id FROM customer_attachment_grants WHERE user_id = ?))');
+      params.push(user_id, user_id);
+      countParams.push(user_id, user_id);
     } else {
 
       whereClauses.push('1 = 0'); // 永远不成立

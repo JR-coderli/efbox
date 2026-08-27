@@ -24,16 +24,18 @@ const useMainStore = defineStore('main', {
 
 
 
-      this.entireRoles = rolesResult.data.list
-      this.entireMenus = menusResult.data.list
+      // 错误响应（如 token 过期）没有 data.list：保持空数组，不抛错
+      this.entireRoles = rolesResult?.data?.list || []
+      this.entireMenus = menusResult?.data?.list || []
 
     },
 
     async postPageListAction(pageName, queryInfo, listType = "list") {
       const pageListResult = await postPageListData(pageName, queryInfo, listType)
-      this.customersList = pageListResult.data.list
 
-      return pageListResult.data.list
+      this.customersList = pageListResult?.data?.list || []
+
+      return this.customersList
     },
 
     toggleHeaderVisible(visible) {

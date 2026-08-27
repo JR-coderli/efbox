@@ -184,6 +184,30 @@ export function getUiColumnSettings(pageKey) {
 }
 
 
+// ===== 客户附件查看授权 =====
+
+export function getGrantableUsers() {
+  return hyRequest.get({
+    url: `/customers/grant/users`
+  })
+}
+
+
+export function grantCustomerAttachment(customerId, userId) {
+  return hyRequest.post({
+    url: `/customers/${customerId}/grant`,
+    data: { user_id: userId }
+  })
+}
+
+
+export function revokeCustomerAttachment(customerId, userId) {
+  return hyRequest.delete({
+    url: `/customers/${customerId}/grant/${userId}`
+  })
+}
+
+
 export function saveUiColumnSettings(pageKey, columns) {
   return hyRequest.put({
     url: `/ui_settings/columns/${pageKey}`,

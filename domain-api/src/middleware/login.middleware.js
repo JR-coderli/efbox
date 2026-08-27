@@ -113,7 +113,8 @@ const attachRole = async(ctx, next) => {
   }
 
   try {
-    const [rows] = await userService.queryRoleNameById(ctx.user.id)
+    // queryRoleNameById 内部已解构 execute 结果，直接返回行数组，这里不能再解构
+    const rows = await userService.queryRoleNameById(ctx.user.id)
     if (!rows[0]) {
       return ctx.app.emit('error', UNAUTHORIZATION, ctx)
     }

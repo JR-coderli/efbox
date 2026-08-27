@@ -234,6 +234,7 @@
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import usePermissions from '@/hooks/usePermissions'
+import useLoginStore from '@/stores/login/login'
 import useSystemStore from '@/stores/main/system/system'
 import { throttle } from 'lodash'
 import { storeToRefs } from 'pinia'
@@ -266,7 +267,7 @@ const STORAGE_KEY = 'customer_column_settings'
 
 
 const allColumns = computed(() => {
-  return props.contentConfig.propsList.map(item => {
+  return effectivePropsList.value.map(item => {
 
     let key = item.prop || item.type || item.label
 
@@ -289,7 +290,7 @@ const draggingIndex = ref(null) // 当前拖拽的索引
 
 
 const displayColumns = computed(() => {
-  const originalList = props.contentConfig.propsList
+  const originalList = effectivePropsList.value
   const saved = columnSettings.value
 
 
@@ -493,6 +494,24 @@ const isDelete = usePermissions(`${props.contentConfig.pageName}:delete`)
 const isUpdate = usePermissions(`${props.contentConfig.pageName}:update`)
 const isQuery = usePermissions(`${props.contentConfig.pageName}:query`)
 
+// 用户授权权限（system:customers:grant）：没有权限的用户完全看不到该列
+const loginStore = useLoginStore()
+const permissionCache = {}
+function hasPermissionOnce(code) {
+  if (!(code in permissionCache)) {
+    permissionCache[code] = usePermissions(code)
+  }
+  return permissionCache[code]
+}
+
+// 列配置里带 requirePermission 的列，按当前用户权限过滤（无权限 = 该列不存在）
+const effectivePropsList = computed(() => {
+  return props.contentConfig.propsList.filter(item => {
+    if (!item.requirePermission) return true
+    return hasPermissionOnce(item.requirePermission)
+  })
+})
+
 
 const systemStore = useSystemStore()
 const { pageList, pageAllCount, highlightRowId } = storeToRefs(systemStore)
@@ -669,7 +688,8 @@ const tableRowClassName = ({ row }) => {
 
 defineExpose({
   fetchPageListData,
-  pageList
+  pageList,
+  finalList // 父组件授权气泡同步 granted_users 到表格行用（syncGrantedToRow）
 })
 </script>
 

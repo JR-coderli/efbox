@@ -65,6 +65,13 @@ class CustomerService {
 
     await connection.execute('DELETE FROM customer_emails WHERE customer_id = ?', [id])
 
+    // 同步清理该客户的附件查看授权（若建表时已加外键 ON DELETE CASCADE，这里冗余无害）
+    try {
+      await connection.execute('DELETE FROM customer_attachment_grants WHERE customer_id = ?', [id])
+    } catch (err) {
+      console.log('[customers remove] 清理授权记录失败（表可能未建）:', err && err.message)
+    }
+
     await connection.execute('DELETE FROM customers WHERE id = ?', [id])
   }
 
@@ -232,6 +239,20 @@ class CustomerService {
           customer.attachment_count = 0
         }
       }
+
+
+      // 附带每个客户的已授权用户（"用户授权"列展示用；表未建/查询失败不影响列表）
+      try {
+        const grantedMap = await this.getGrantedUsersMap(customerIds)
+        for (const customer of mainRows) {
+          customer.granted_users = grantedMap[customer.id] || []
+        }
+      } catch (err) {
+        console.log('[customers list] 查询授权用户失败:', err && err.message)
+        for (const customer of mainRows) {
+          customer.granted_users = []
+        }
+      }
     }
 
 
@@ -284,6 +305,90 @@ class CustomerService {
         [receivable_date, item.id]
       )
     }
+  }
+
+
+  // ===== 客户附件查看授权 =====
+
+  // 校验用户是否拥有 system:customers:grant 权限（后端防伪造，与前端列可见性同一权限点）
+  async hasGrantPermission(userId) {
+    const [rows] = await connection.execute(
+      `SELECT COUNT(*) as count
+       FROM role_menu rm
+       JOIN menu m ON rm.menuId = m.id
+       JOIN cms_user u ON u.role_id = rm.roleId
+       WHERE u.id = ? AND m.permission = 'system:customers:grant'`,
+      [userId]
+    )
+    return (rows[0]?.count || 0) > 0
+  }
+
+
+  // 可被授权的用户简表（授权气泡选人用）
+  // 排除：技术员角色（本身可看全部附件，无需授权）、与操作者同角色的账号（含操作者自己）
+  async getGrantableUsers(operatorId) {
+    const [rows] = await connection.execute(
+      `SELECT u.id, u.name, u.nickname, r.name AS role_name
+       FROM cms_user u
+       LEFT JOIN role r ON u.role_id = r.id
+       WHERE (r.name IS NULL OR r.name <> '技术员')
+         AND u.role_id <> (SELECT role_id FROM cms_user WHERE id = ?)
+       ORDER BY u.id`,
+      [operatorId]
+    )
+    return rows
+  }
+
+  // 给用户授权某客户全部附件（重复授权幂等：已存在则忽略）
+  async grantAttachment(userId, customerId, grantedBy) {
+    await connection.execute(
+      `INSERT IGNORE INTO customer_attachment_grants (user_id, customer_id, granted_by) VALUES (?, ?, ?)`,
+      [userId, customerId, grantedBy || null]
+    )
+  }
+
+
+  // 收回授权
+  async revokeAttachment(userId, customerId) {
+    const [result] = await connection.execute(
+      'DELETE FROM customer_attachment_grants WHERE user_id = ? AND customer_id = ?',
+      [userId, customerId]
+    )
+    return { affectedRows: result.affectedRows }
+  }
+
+
+  // 某客户当前已授权的用户列表（含用户名，供前端展示/收回）
+  async getGrantedUsers(customerId) {
+    const [rows] = await connection.execute(
+      `SELECT g.user_id AS id, u.name, u.nickname, g.createAt AS granted_at` +
+      ` FROM customer_attachment_grants g` +
+      ` LEFT JOIN cms_user u ON g.user_id = u.id` +
+      ` WHERE g.customer_id = ?` +
+      ` ORDER BY g.createAt DESC`,
+      [customerId]
+    )
+    return rows
+  }
+
+
+  // 批量查多个客户的授权用户（客户列表列展示用），返回 { customerId: [{id, name, nickname}] }
+  async getGrantedUsersMap(customerIds) {
+    const map = {}
+    if (!customerIds || customerIds.length === 0) return map
+    const [rows] = await connection.execute(
+      `SELECT g.customer_id, g.user_id AS id, u.name, u.nickname` +
+      ` FROM customer_attachment_grants g` +
+      ` LEFT JOIN cms_user u ON g.user_id = u.id` +
+      ` WHERE g.customer_id IN (${customerIds.map(() => '?').join(',')})` +
+      ` ORDER BY g.createAt DESC`,
+      customerIds
+    )
+    for (const row of rows) {
+      if (!map[row.customer_id]) map[row.customer_id] = []
+      map[row.customer_id].push({ id: row.id, name: row.name, nickname: row.nickname })
+    }
+    return map
   }
 }
 

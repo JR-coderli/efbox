@@ -2,6 +2,7 @@
   <div class="customer-page">
     <!-- 表格列表 -->
     <customer-content
+      ref="contentRef"
       :content-config="contentConfig"
       @new-click="handleNewClick"
       @edit-click="handleEditClick"
@@ -101,7 +102,64 @@
         </span>
         <span v-else class="empty-placeholder"></span>
       </template>
+
+      <!-- 用户授权（仅 system:customers:grant 权限用户可见此列） -->
+      <template #user_grant="scope">
+        <div
+          class="grant-cell"
+          :class="{ 'is-active': grantBubble.customerId === scope.id }"
+          @dblclick.stop="openGrantBubble($event, scope)"
+        >
+          <template v-if="scope.granted_users && scope.granted_users.length > 0">
+            <span class="grant-count-badge">{{ scope.granted_users.length }}人</span>
+            <span class="grant-names">{{ scope.granted_users.map(u => u.name || u.nickname).join('、') }}</span>
+          </template>
+          <span v-else class="grant-empty-hint"></span>
+        </div>
+      </template>
     </customer-content>
+
+    <!-- 授权气泡（teleport 到 body 避免被表格遮挡） -->
+    <teleport to="body">
+      <div
+        v-if="grantBubble.customerId"
+        class="grant-bubble-backdrop"
+        @mousedown="closeGrantBubble"
+      >
+        <div
+          class="grant-bubble"
+          :style="grantBubbleStyle"
+          @mousedown.stop
+        >
+          <div class="grant-bubble-title">
+            <span>{{ grantBubble.customerName }} · 附件授权</span>
+            <button class="grant-close-btn" @click="closeGrantBubble">✕</button>
+          </div>
+
+          <!-- 已授权列表（可收回） -->
+          <div class="grant-list" v-if="grantBubble.grantedUsers.length > 0">
+            <div v-for="u in grantBubble.grantedUsers" :key="u.id" class="grant-list-item">
+              <span class="grant-user-name">{{ u.name || u.nickname }}</span>
+              <span v-if="u.role_name" class="grant-user-role">{{ u.role_name }}</span>
+              <button class="grant-revoke-btn" @click="handleRevoke(u)">收回</button>
+            </div>
+          </div>
+          <div v-else class="grant-list-empty">暂无授权，该客户下附件仅创建者和特权角色可见</div>
+
+          <!-- 添加授权 -->
+          <div class="grant-add">
+            <select v-model="grantBubble.selectedUserId" class="grant-select">
+              <option value="" disabled>选择用户…</option>
+              <option v-for="u in grantableUserOptions" :key="u.id" :value="u.id">
+                {{ u.name }}{{ u.role_name ? `（${u.role_name}）` : '' }}
+              </option>
+            </select>
+            <button class="grant-add-btn" :disabled="!grantBubble.selectedUserId" @click="handleGrant">授权</button>
+          </div>
+          <div class="grant-hint">授权后，该用户可查看此客户下全部附件（含他人创建），并可直接删改</div>
+        </div>
+      </div>
+    </teleport>
 
     <!-- 注意事项行内编辑（teleport 到 body 避免被表格遮挡） -->
     <teleport to="body">
@@ -141,13 +199,117 @@ import contentConfig from './config/content.config'
 import CustomerModal from './c-cpns/customer-modal.vue'
 import modalConfig from './config/modal.config'
 
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, computed } from 'vue'
 import useSystemStore from '@/stores/main/system/system'
 
 const systemStore = useSystemStore()
 
 
+// ===== 用户授权（客户附件查看授权） =====
+const grantBubble = ref({
+  customerId: null,
+  customerName: '',
+  rect: null,
+  grantedUsers: [],   // [{id, name, nickname, role_name?}]
+  selectedUserId: ''
+})
+const grantableUsers = ref([]) // 可授权的用户简表
+
+const grantableUserOptions = computed(() => {
+  // 排除已授权的用户，避免重复授权
+  const grantedIds = new Set(grantBubble.value.grantedUsers.map(u => u.id))
+  return grantableUsers.value.filter(u => !grantedIds.has(u.id))
+})
+
+const grantBubbleStyle = computed(() => {
+  const rect = grantBubble.value.rect
+  if (!rect) return {}
+  const bubbleWidth = 320
+  let left = rect.left + rect.width / 2 - bubbleWidth / 2
+  if (left < 12) left = 12
+  const maxLeft = window.innerWidth - bubbleWidth - 12
+  if (left > maxLeft) left = maxLeft
+
+  const bubbleHeight = 300
+  const gap = 10
+  let top
+  const spaceBelow = window.innerHeight - rect.bottom
+  if (spaceBelow >= bubbleHeight + gap) {
+    top = rect.bottom + gap
+  } else if (rect.top >= bubbleHeight + gap) {
+    top = rect.top - bubbleHeight - gap
+  } else {
+    top = 12
+  }
+  return { left: `${left}px`, top: `${top}px`, width: `${bubbleWidth}px` }
+})
+
+async function openGrantBubble(event, row) {
+  grantBubble.value = {
+    customerId: row.id,
+    customerName: row.short_name || row.full_name || `客户#${row.id}`,
+    rect: event.currentTarget.getBoundingClientRect(),
+    grantedUsers: (row.granted_users || []).slice(),
+    selectedUserId: ''
+  }
+  // 懒加载一次可授权用户列表
+  if (grantableUsers.value.length === 0) {
+    try {
+      grantableUsers.value = await systemStore.getGrantableUsersAction()
+    } catch {
+      grantableUsers.value = []
+    }
+  }
+}
+
+function closeGrantBubble() {
+  grantBubble.value = {
+    customerId: null,
+    customerName: '',
+    rect: null,
+    grantedUsers: [],
+    selectedUserId: ''
+  }
+}
+
+// 同步授权数据到表格行（不重新拉列表，避免打断滚动位置）
+function syncGrantedToRow(customerId, grantedUsers) {
+  const content = contentRef.value
+  if (!content?.finalList) return
+  const row = content.finalList.find(r => r.id === customerId)
+  if (row) row.granted_users = grantedUsers.map(u => ({ id: u.id, name: u.name, nickname: u.nickname }))
+}
+
+async function handleGrant() {
+  const { customerId, selectedUserId } = grantBubble.value
+  if (!customerId || !selectedUserId) return
+  try {
+    const data = await systemStore.grantCustomerAttachmentAction(customerId, selectedUserId)
+    grantBubble.value.grantedUsers = data?.grantedUsers || []
+    grantBubble.value.selectedUserId = ''
+    syncGrantedToRow(customerId, grantBubble.value.grantedUsers)
+    ElNotification({ message: '授权成功', type: 'success', duration: 2000 })
+  } catch {
+    ElNotification({ message: '授权失败', type: 'error' })
+  }
+}
+
+async function handleRevoke(user) {
+  const { customerId } = grantBubble.value
+  if (!customerId) return
+  try {
+    const data = await systemStore.revokeCustomerAttachmentAction(customerId, user.id)
+    grantBubble.value.grantedUsers = data?.grantedUsers || []
+    syncGrantedToRow(customerId, grantBubble.value.grantedUsers)
+    ElNotification({ message: '已收回授权', type: 'success', duration: 2000 })
+  } catch {
+    ElNotification({ message: '收回失败', type: 'error' })
+  }
+}
+
+
 const modalRef = ref()
+const contentRef = ref(null)
 const inlineInputRef = ref(null)
 const editingCell = ref({
   id: null,
@@ -309,6 +471,210 @@ function handleWheel(event) {
 
 <style lang="less" scoped>
 
+// ===== 用户授权列 =====
+.grant-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 40px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, background-color 0.15s;
+
+  &:hover, &.is-active {
+    border-color: #1a73e8;
+    background-color: #f0f5ff;
+  }
+
+  .grant-count-badge {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    background-color: #e6f4ea;
+    color: #137333;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .grant-names {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: #202124;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .grant-empty-hint {
+    width: 8px;
+    height: 8px;
+    background-color: #e8eaed;
+    border-radius: 50%;
+  }
+
+  // 与付款周期/注意事项等可编辑列一致：悬停空单元格显示"双击编辑"
+  &:hover > .grant-empty-hint {
+    width: auto;
+    height: auto;
+    background-color: transparent;
+    border-radius: 0;
+    color: #9aa0a6;
+    font-size: 13px;
+
+    &::after {
+      content: '双击编辑';
+    }
+  }
+}
+
+.grant-bubble-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.grant-bubble {
+  position: absolute;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 12px 14px;
+  box-sizing: border-box;
+  z-index: 10000;
+}
+
+.grant-bubble-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: #202124;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f3f4;
+  margin-bottom: 8px;
+
+  .grant-close-btn {
+    border: none;
+    background: transparent;
+    color: #9aa0a6;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    &:hover { background-color: #f1f3f4; color: #202124; }
+  }
+}
+
+.grant-list {
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb { background-color: #dadce0; border-radius: 2px; }
+}
+
+.grant-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+
+  &:hover { background-color: #f8f9fa; }
+
+  .grant-user-name {
+    flex: 1;
+    min-width: 0;
+    color: #202124;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .grant-user-role {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #5f6368;
+    background-color: #f1f3f4;
+    padding: 1px 8px;
+    border-radius: 8px;
+  }
+
+  .grant-revoke-btn {
+    flex-shrink: 0;
+    border: 1px solid #dadce0;
+    background: #fff;
+    color: #d93025;
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+
+    &:hover { background-color: #fce8e6; border-color: #d93025; }
+  }
+}
+
+.grant-list-empty {
+  font-size: 12px;
+  color: #9aa0a6;
+  text-align: center;
+  padding: 14px 0;
+}
+
+.grant-add {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f3f4;
+
+  .grant-select {
+    flex: 1;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid #e8eaed;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #202124;
+    outline: none;
+    background: #f8f9fa;
+    &:focus { border-color: #1a73e8; background: #fff; }
+  }
+
+  .grant-add-btn {
+    flex-shrink: 0;
+    border: none;
+    background: #1a73e8;
+    color: #fff;
+    font-size: 13px;
+    padding: 0 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    &:hover:not(:disabled) { background: #1557b0; }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+}
+
+.grant-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #9aa0a6;
+  line-height: 1.5;
+}
+
+</style>
+
+<style lang="less" scoped>
 
 .email-cell {
   display: flex;

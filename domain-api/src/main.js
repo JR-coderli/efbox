@@ -1,7 +1,7 @@
 
 const server = require('./app')
 const { SERVER_PORT } = require('./config/server')
-require('./utils/handle-error')
+// 错误监听已改为在 app/index.js 内 attach（必须在 createServer 之前挂载，见 utils/handle-error.js 注释）
 
 
 // 全局错误处理：捕获未处理的 Promise 拒绝和未捕获异常

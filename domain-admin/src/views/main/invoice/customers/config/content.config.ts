@@ -89,6 +89,15 @@ const contentConfig = {
       prop: 'invoice_entity',
       width: '150'
     },
+    {
+      type: 'custom',
+      slotName: 'user_grant',
+      label: '用户授权',
+      prop: 'user_grant',
+      width: '180',
+      // 仅拥有 system:customers:grant 权限的用户渲染此列（见 customer-content.vue 过滤逻辑）
+      requirePermission: 'system:customers:grant'
+    },
 
 
     {

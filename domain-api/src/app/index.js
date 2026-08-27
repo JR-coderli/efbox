@@ -33,6 +33,10 @@ ensureDirectories()
 
 const app = new Koa()
 
+// 错误监听必须在 app.callback()（即下方 createServer）之前挂上：
+// Koa 的 callback() 发现没有 error 监听时会注册默认 onerror（对字符串错误直接抛 TypeError）。
+// 因此在创建 server 之前先 require 错误处理器，保证业务 emit('error', 错误码字符串) 由它接管。
+require('../utils/handle-error').attachErrorHandler(app)
 
 app.use(handleCors)
 app.use(bodyParser())
