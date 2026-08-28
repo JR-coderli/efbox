@@ -36,14 +36,25 @@ class DomainsService {
   async normal_list(offset, size, createAtStart, createAtEnd, existing_domain, landing_page_url, is_normal) {
 
 
+    // 域名搜索：除子串匹配外，把搜索词剥掉一级子域（pro.quicksala2.com → quicksala2.com）
+    // 再 OR 匹配，使搜索子域名时也能命中其主域记录；两级以上子域递归剥到主域为止
+    const domainConditions = ['existing_domain LIKE ?']
+    const domainParams = [`%${existing_domain ?? ''}%`]
+    let stripped = String(existing_domain ?? '').trim()
+    while (stripped.includes('.')) {
+      stripped = stripped.slice(stripped.indexOf('.') + 1)
+      domainConditions.push('existing_domain LIKE ?')
+      domainParams.push(`%${stripped}%`)
+    }
+
     const params = [
-      `%${existing_domain ?? ''}%`,
+      ...domainParams,
       `%${landing_page_url ?? ''}%`,
     ];
 
 
     let whereClause = `
-      existing_domain LIKE ?
+      (${domainConditions.join(' OR ')})
       AND landing_page_url LIKE ?
     `;
 
@@ -100,14 +111,24 @@ class DomainsService {
   async import_list(offset, size, createAtStart, createAtEnd, existing_domain, landing_page_url, is_normal) {
 
 
+    // 与 normal_list 相同的子域剥离搜索：搜子域名时也命中主域记录
+    const domainConditions = ['existing_domain LIKE ?']
+    const domainParams = [`%${existing_domain ?? ''}%`]
+    let stripped = String(existing_domain ?? '').trim()
+    while (stripped.includes('.')) {
+      stripped = stripped.slice(stripped.indexOf('.') + 1)
+      domainConditions.push('existing_domain LIKE ?')
+      domainParams.push(`%${stripped}%`)
+    }
+
     const params = [
-      `%${existing_domain ?? ''}%`,
+      ...domainParams,
       `%${landing_page_url ?? ''}%`,
     ];
 
 
     let whereClause = `
-      existing_domain LIKE ?
+      (${domainConditions.join(' OR ')})
       AND landing_page_url LIKE ?
     `;
 

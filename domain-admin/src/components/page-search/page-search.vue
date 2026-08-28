@@ -1,7 +1,8 @@
 <template>
   <div class="search" v-if="isQuery">
     <!-- 1、输入搜索关键字的表单 -->
-    <el-form :model="searchForm" ref="formRef" label-width="50px" size="large">
+    <!-- @submit.prevent：单输入框表单按回车会触发原生 form submit（URL 被加上 ? 且整页刷新，首次搜索结果被丢弃），必须阻止 -->
+    <el-form :model="searchForm" ref="formRef" label-width="50px" size="large" @submit.prevent>
       <el-row :gutter="20">
         <template v-for="item in searchConfig.formItems" :key="item.prop">
           <el-col :span="8">

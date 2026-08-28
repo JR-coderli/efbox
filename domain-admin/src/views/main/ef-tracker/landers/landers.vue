@@ -20,12 +20,6 @@
             </el-input>
           </div>
           <div class="search-item">
-            <label>时区</label>
-            <el-select v-model="tz" class="search-input" style="width: 130px" @change="handleSearch">
-              <el-option v-for="o in tzOptions" :key="o.value" :label="o.label" :value="o.value" />
-            </el-select>
-          </div>
-          <div class="search-item">
             <label>创建日期</label>
             <el-date-picker
               v-model="dateRange"
@@ -244,18 +238,8 @@ const pagination = reactive({
   pageSize: 10
 })
 
-// 时区：默认 +8；切路由 / 刷新都会重建组件 → 回到 +8；分页不修改 tz → 保留当前选择
-const tz = ref(8)
-const tzOptions = [
-  { label: 'UTC+8', value: 8 },
-  { label: 'UTC+7', value: 7 },
-  { label: 'UTC+5:30', value: 5.5 },
-  { label: 'UTC+0', value: 0 },
-  { label: 'UTC-3', value: -3 },
-  { label: 'UTC-4', value: -4 },
-  { label: 'UTC-5', value: -5 },
-  { label: 'UTC-8', value: -8 }
-]
+// 时区固定 +8（接口按 tz 返回带偏移的 ISO 串；页面不再提供时区选择）
+const TZ_PLUS_8 = 8
 
 const filters = reactive({
   keyword: ''
@@ -418,9 +402,10 @@ async function uploadScreenshot(row, file) {
   }
 }
 
+// 时间显示：接口固定按 +8 返回（tz=8），T 换空格、去掉毫秒和尾部的时区偏移（+08:00），不标 +8 字样
 function fmtTime(s) {
   if (!s) return '-'
-  return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, (_m, sign, h, min) => ' ' + sign + parseInt(h, 10) + (parseInt(min, 10) ? ':' + parseInt(min, 10) : '')).replace(/Z$/, ' +0')
+  return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, '').replace(/Z$/, '')
 }
 
 function rangeToParams(range) {
@@ -437,7 +422,7 @@ function buildParams() {
   const p = {
     page: pagination.page,
     size: pagination.pageSize,
-    tz: tz.value
+    tz: TZ_PLUS_8
   }
   if (filters.keyword) p.keyword = filters.keyword
   Object.assign(p, rangeToParams(dateRange.value))
@@ -466,7 +451,6 @@ function handleSearch() {
 function handleReset() {
   filters.keyword = ''
   dateRange.value = []
-  tz.value = 8
   pagination.page = 1
   loadData()
 }
