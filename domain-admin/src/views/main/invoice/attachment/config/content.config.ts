@@ -54,7 +54,7 @@ const contentConfig = {
       slotName: 'amount',
       label: '金额',
       prop: 'amount',
-      width: '100',
+      width: '120',
       sortable: 'custom'
     },
 
