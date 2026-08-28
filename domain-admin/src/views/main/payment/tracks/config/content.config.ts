@@ -113,7 +113,8 @@ const contentConfig = {
       label: '币种',
       prop: 'currency',
       slotName: 'currency',
-      width: '100'
+      width: '100',
+      sortable: 'custom' // 后端排序（currency 已加入白名单映射表），字母表正序/倒序，与其他排序列一致
     },
     {
       label: '差额',

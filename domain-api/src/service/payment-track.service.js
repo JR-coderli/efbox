@@ -284,6 +284,7 @@ class PaymentTrackService {
       period: 'pt.period',
       createAt: 'pt.createAt',
       updateAt: 'pt.updateAt',
+      currency: 'pt.currency',
       payment_status: 'pt.payment_status',
       payable_date: 'pt.payable_date',
       confirmed_date: 'pt.confirmed_date'
