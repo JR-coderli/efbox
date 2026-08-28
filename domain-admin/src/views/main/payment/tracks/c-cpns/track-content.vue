@@ -172,6 +172,7 @@
           :summary-method="getSummary"
           @row-contextmenu="handleContextMenu"
           :row-class-name="tableRowClassName"
+          @sort-change="handleSortChange"
         >
           <template v-for="item in displayColumns" :key="item.label">
             <!-- 序号 -->
@@ -208,7 +209,7 @@
               </el-table-column>
             </template>
 
-            <!-- 自定义插槽 -->
+            <!-- 自定义插槽（sortable: 'custom' 的列会渲染原生排序图标，排序状态由 handleSortChange 接管） -->
             <template v-else-if="item.type === 'custom'">
               <el-table-column v-bind="item">
                 <template #default="scope">
@@ -310,6 +311,11 @@ const searchMonth = ref('')  // 点击月份筛选（周期起始月份）
 const searchCurrency = ref('')     // 点击币种筛选
 const searchEntity = ref('')       // 点击付款主体筛选
 const searchDateRange = ref(null)  // 日期范围筛选（格式 ['YYYY-MM-DD', 'YYYY-MM-DD']）
+
+// 表头排序状态（Element Plus sortable: 'custom'）：周期 / 差额 两列支持
+// '' 默认(id DESC) → 'asc' 正序 → 'desc' 倒序，点击表头图标三态循环
+// 排序由后端 ORDER BY 实现，作用于全量数据，不受分页影响
+const sortState = ref({ prop: '', order: '' })
 
 // 快捷日期选项：前七天 / 前三十天 / 上个月 / 这个月 / 今年
 const dateShortcuts = [
@@ -843,7 +849,9 @@ function fetchPageListData(showLoading = true) {
     start_date: searchDateRange.value?.[0] || undefined,
     end_date: searchDateRange.value?.[1] || undefined,
     role_name: loginStore.userInfo?.role?.name || '',
-    user_id: loginStore.userInfo?.id
+    user_id: loginStore.userInfo?.id,
+    sort_prop: sortState.value.prop || undefined,
+    sort_order: sortState.value.order || undefined
   }
 
   return systemStore.postPageListAction(props.contentConfig.pageName, queryInfo, 'list')
@@ -876,8 +884,20 @@ function handleDateChange() {
 
 function handleReset() {
   searchShortName.value = ''
-  searchPaymentStatus.value = ''
   searchDateRange.value = null
+  sortState.value = { prop: '', order: '' }
+  page.value = 1
+  fetchPageListData()
+}
+
+
+// 表头排序（Element Plus sortable: 'custom'）：周期 / 差额 列三态 ascending / descending / null(默认 id DESC)
+// order 为 null 表示取消排序回到默认；排序由后端 ORDER BY 全量排序，不受分页影响
+function handleSortChange({ prop, order }) {
+  sortState.value = {
+    prop: order ? prop : '',
+    order: order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : ''
+  }
   page.value = 1
   fetchPageListData()
 }

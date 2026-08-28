@@ -275,14 +275,26 @@ class PaymentTrackService {
     }
 
 
-    const allowedSortProps = ['id', 'amount', 'amount_paid', 'createAt', 'payment_status', 'payable_date', 'confirmed_date']
+    // 排序白名单及列映射：amount_diff 无实体列，映射为表达式（差额 = 应付 - 已付，NULL 按 0 处理，与前端 getDiff 一致）
+    const sortPropMap = {
+      id: 'pt.id',
+      amount: 'pt.amount',
+      amount_paid: 'pt.amount_paid',
+      amount_diff: '(IFNULL(pt.amount, 0) - IFNULL(pt.amount_paid, 0))',
+      period: 'pt.period',
+      createAt: 'pt.createAt',
+      payment_status: 'pt.payment_status',
+      payable_date: 'pt.payable_date',
+      confirmed_date: 'pt.confirmed_date'
+    }
     const allowedSortOrders = ['asc', 'desc', 'ASC', 'DESC']
 
-    if (sort_prop && sort_prop !== '' && sort_order && sort_order !== '' && allowedSortProps.includes(sort_prop)) {
+    if (sort_prop && sort_prop !== '' && sort_order && sort_order !== '' && sortPropMap[sort_prop]) {
       const validSortOrder = allowedSortOrders.includes(sort_order) ? sort_order.toUpperCase() : 'DESC'
-      sql += ` ORDER BY pt.${sort_prop} ${validSortOrder}`
+      // 次级按 id DESC：主排序值相同时保证分页顺序稳定，避免翻页出现重复/丢失行
+      sql += ` ORDER BY ${sortPropMap[sort_prop]} ${validSortOrder}, pt.id DESC`
     } else {
-      sql += ` ORDER BY pt.createAt DESC`
+      sql += ` ORDER BY pt.id DESC`
     }
 
 

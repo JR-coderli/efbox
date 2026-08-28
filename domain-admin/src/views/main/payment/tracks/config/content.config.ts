@@ -105,7 +105,8 @@ const contentConfig = {
       prop: 'period',
       slotName: 'period',
       width: '210',
-      showOverflowTooltip: true
+      showOverflowTooltip: true,
+      sortable: 'custom' // 后端排序（sort-change → sort_prop/sort_order），与收款管理金额列一致
     },
     {
       type: 'custom',
@@ -117,12 +118,14 @@ const contentConfig = {
     {
       label: '差额',
       prop: 'amount_diff',
-      width: '130'
+      width: '130',
+      sortable: 'custom' // 后端表达式排序（amount - amount_paid），与周期列一致
     },
     {
       label: '确认日期',
       prop: 'confirmed_date',
-      width: '170'
+      width: '170',
+      sortable: 'custom' // 后端排序（confirmed_date 已在白名单映射表），与周期/差额列一致
     },
     {
       label: '创建人',
@@ -132,7 +135,8 @@ const contentConfig = {
     {
       label: '创建时间',
       prop: 'createAt',
-      width: '170'
+      width: '170',
+      sortable: 'custom' // 后端排序（createAt 已在白名单映射表），与周期/差额/确认日期列一致
     },
     {
       type: 'handler',
