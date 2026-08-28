@@ -283,6 +283,7 @@ class PaymentTrackService {
       amount_diff: '(IFNULL(pt.amount, 0) - IFNULL(pt.amount_paid, 0))',
       period: 'pt.period',
       createAt: 'pt.createAt',
+      updateAt: 'pt.updateAt',
       payment_status: 'pt.payment_status',
       payable_date: 'pt.payable_date',
       confirmed_date: 'pt.confirmed_date'

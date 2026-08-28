@@ -139,6 +139,12 @@ const contentConfig = {
       sortable: 'custom' // 后端排序（createAt 已在白名单映射表），与周期/差额/确认日期列一致
     },
     {
+      label: '更新时间',
+      prop: 'updateAt',
+      width: '170',
+      sortable: 'custom' // 后端排序（updateAt 已加入白名单映射表），与创建时间列一致
+    },
+    {
       type: 'handler',
       label: '操作',
       width: '80'
