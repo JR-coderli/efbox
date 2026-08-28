@@ -32,7 +32,7 @@
                 <span class="col-drag-handle" title="拖拽排序">
                   <svg class="grip-icon" viewBox="0 0 10 16"><circle cx="2.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></svg>
                 </span>
-                <el-checkbox v-model="col.visible">{{ col.label }}</el-checkbox>
+                <el-checkbox v-model="col.visible" @change="persistColumns">{{ col.label }}</el-checkbox>
               </li>
             </ul>
           </div>
@@ -64,11 +64,28 @@
               <el-form-item label="关键词">
                 <el-input
                   v-model="filters.keyword"
-                  placeholder="click_id / 活动 / 广告组 / 素材 / IP"
+                  placeholder="media_click_id / system_click_id / campaign_name / adset_name / creative_name / ip_address"
                   clearable
                   style="width: 240px"
                   @keyup.enter="handleSearch"
-                />
+                >
+                  <template #suffix>
+                    <el-tooltip
+                      effect="light"
+                      placement="bottom-start"
+                      :show-after="300"
+                      popper-class="clicks-keyword-tip"
+                    >
+                      <template #content>
+                        <div class="keyword-tip-content">
+                          <div class="keyword-tip-title">Keyword searches these columns (OR):</div>
+                          <div v-for="f in KEYWORD_FIELDS" :key="f" class="keyword-tip-field">{{ f }}</div>
+                        </div>
+                      </template>
+                      <el-icon class="keyword-tip-icon"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </template>
+                </el-input>
               </el-form-item>
               <el-form-item label="时区">
                 <el-select v-model="tz" style="width: 130px" @change="handleSearch">
@@ -318,7 +335,19 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { QuestionFilled } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
+import useSystemStore from '@/stores/main/system/system'
+
+// keyword 可搜索的列（与后端 /query/clicks keyword 搜索范围一致，任一字段命中即返回）
+const KEYWORD_FIELDS = [
+  'media_click_id',
+  'system_click_id',
+  'campaign_name',
+  'adset_name',
+  'creative_name',
+  'ip_address'
+]
 import { getClicks, getLpVisitLogs, getLpClicks, getConversions, getEfLanderScreenshots } from '@/services/main/ef-tracker'
 import { BASE_URL } from '@/services/request/config'
 import SparkMD5 from 'spark-md5'
@@ -609,11 +638,14 @@ async function openDetail(step, row) {
 
 // ===== 列配置（数据驱动，配合齿轮面板做显隐 / 拖拽排序）=====
 // type：plain 纯字段 / time 时间格式化 / names 名称映射(row.names[nameKey]) / funnel 漏斗
-// 不做持久化：组件每次重建（路由切换 / 刷新）都回到 DEFAULT_COLUMNS 的默认顺序与可见性
+// 持久化：存数据库 ui_settings（按用户+页面，与付款追踪列设置同一套接口）；
+// 代码里的 DEFAULT_COLUMNS 是列全集权威，库中只存用户偏好（顺序+可见性），加载时合并：
+// 新增列自动按默认值补进（可见）、删除的列自动剔除，用户不用重置
 // defaultHidden: true → 该列默认隐藏（可在齿轮面板里手动勾开）
 const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
+  { key: 'ip', label: 'ip', type: 'plain', prop: 'ip_address', width: 120, overflow: true, defaultHidden: true },
   { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 350, align: 'center' },
   { key: 'total_time', label: '总用时', type: 'duration', width: 90, align: 'center' },
   { key: 'preview_img', label: '预览图', type: 'screenshot', width: 120, align: 'center' },
@@ -629,24 +661,82 @@ const DEFAULT_COLUMNS = [
   { key: 'names.lander', label: 'Lander_name', type: 'names', nameKey: 'lander', prop: 'names.lander', minWidth: 210, overflow: true },
   { key: 'names.offer', label: 'Offer_name', type: 'names', nameKey: 'offer', prop: 'names.offer', minWidth: 210, overflow: true },
   { key: 'path_code', label: 'path_code', type: 'plain', prop: 'path_code', width: 100, overflow: true, defaultHidden: true },
-  { key: 'campaign', label: 'campaign', type: 'plain', prop: 'campaign_name', minWidth: 120, overflow: true, defaultHidden: true },
-  { key: 'adset', label: 'adset', type: 'plain', prop: 'adset_name', minWidth: 100, overflow: true, defaultHidden: true },
-  { key: 'creative', label: 'creative', type: 'plain', prop: 'creative_name', minWidth: 100, overflow: true, defaultHidden: true },
-  { key: 'ip', label: 'ip', type: 'plain', prop: 'ip_address', width: 120, overflow: true, defaultHidden: true },
+  { key: 'campaign_name', label: 'campaign_name', type: 'plain', prop: 'campaign_name', minWidth: 160, overflow: true, defaultHidden: true },
+  { key: 'campaign_id', label: 'campaign_id', type: 'plain', prop: 'campaign_id', minWidth: 120, overflow: true, defaultHidden: true },
+  { key: 'adset_name', label: 'adset_name', type: 'plain', prop: 'adset_name', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 'adset_id', label: 'adset_id', type: 'plain', prop: 'adset_id', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 'creative_name', label: 'creative_name', type: 'plain', prop: 'creative_name', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 'creative_id', label: 'creative_id', type: 'plain', prop: 'creative_id', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 'subid', label: 'subid', type: 'plain', prop: 'subid', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 's1', label: 's1', type: 'plain', prop: 's1', minWidth: 90, overflow: true, defaultHidden: true },
+  { key: 's2', label: 's2', type: 'plain', prop: 's2', minWidth: 90, overflow: true, defaultHidden: true },
+  { key: 's3', label: 's3', type: 'plain', prop: 's3', minWidth: 90, overflow: true, defaultHidden: true },
+  { key: 's4', label: 's4', type: 'plain', prop: 's4', minWidth: 90, overflow: true, defaultHidden: true },
+  { key: 's5', label: 's5', type: 'plain', prop: 's5', minWidth: 90, overflow: true, defaultHidden: true },
+  { key: 'user_agent', label: 'user_agent', type: 'plain', prop: 'user_agent', minWidth: 220, overflow: true, defaultHidden: true },
   { key: 'lander_url', label: 'lander_url', type: 'plain', prop: 'lander_url', minWidth: 220, overflow: true },
   { key: 'preview_url', label: 'preview_url', type: 'preview', minWidth: 220, overflow: true },
   { key: 'referer', label: 'referer', type: 'plain', prop: 'referer', minWidth: 220, overflow: true, defaultHidden: true }
 ]
 
 // 工作副本：齿轮面板只改它（visible / 顺序），不影响 DEFAULT_COLUMNS
+// 初始为默认配置；数据库设置异步加载回来后覆盖（加载期间先渲染默认列，避免空白）
 const columns = ref(DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden })))
 const visibleColumns = computed(() => columns.value.filter((c) => c.visible))
+
+// ===== 持久化（数据库 ui_settings，按用户+页面）=====
+const COLUMN_SETTINGS_PAGE_KEY = 'ef_tracker_clicks'
+const systemStore = useSystemStore()
+
+// 将库中设置（可能缺列/多列/乱序）与当前 DEFAULT_COLUMNS 对齐：
+// 库里没有的新列 → 按默认值追加到尾部；库里多余的死键 → 丢弃
+function mergeColumns(saved) {
+  const defaults = DEFAULT_COLUMNS
+  const defByKey = new Map(defaults.map((c) => [c.key, c]))
+  const seen = new Set()
+  const merged = []
+  for (const item of saved || []) {
+    const def = defByKey.get(item.key)
+    if (!def) continue // 代码里已删除的列
+    merged.push({ ...def, visible: item.visible !== false })
+    seen.add(def.key)
+  }
+  for (const def of defaults) {
+    if (!seen.has(def.key)) {
+      merged.push({ ...def, visible: !def.defaultHidden }) // 新列按默认可见性补进
+    }
+  }
+  return merged
+}
+
+// 当前列顺序+可见性 → 存库（静默失败，不阻塞面板操作）
+function persistColumns() {
+  systemStore
+    .saveUiColumnSettingsAction(
+      COLUMN_SETTINGS_PAGE_KEY,
+      columns.value.map((c) => ({ key: c.key, visible: c.visible !== false }))
+    )
+    .catch(() => {})
+}
+
+async function loadColumns() {
+  try {
+    const saved = await systemStore.getUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY)
+    if (Array.isArray(saved) && saved.length > 0) {
+      columns.value = mergeColumns(saved)
+    }
+  } catch {
+    // 读库失败保持默认配置，不影响使用
+  }
+}
 
 // 齿轮配置面板
 const colListRef = ref(null)
 let sortableInstance = null
 
+// 重置 = 删除库中记录，回到 DEFAULT_COLUMNS 默认顺序与可见性
 function resetColumns() {
+  systemStore.removeUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY).catch(() => {})
   columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden }))
 }
 
@@ -666,6 +756,7 @@ function ensureSortable() {
       const [moved] = arr.splice(oldIndex, 1)
       arr.splice(newIndex, 0, moved)
       columns.value = arr // 同步回数据，Vue 按 key(col.key) 重排便表格列顺序
+      persistColumns()
     }
   })
 }
@@ -756,6 +847,7 @@ function handleCurrentChange(page) {
 
 onMounted(() => {
   loadData()
+  loadColumns() // 异步加载库中列设置，回来后覆盖默认配置（不阻塞列表首屏）
   calcDetailHeight()
   window.addEventListener('resize', calcDetailHeight)
 })
@@ -947,6 +1039,12 @@ function toggleUnique() {
   border: none;
   font-family: 'Google Sans', Roboto, Arial, sans-serif;
 
+  // 省略号截断修复：Element 的 .cell.el-tooltip 自带 min-width:50px（nowrap 长内容会把
+  // 省略号顶出 td 边界），取消最小宽度让 .cell 能收缩到列宽内
+  .cell.el-tooltip {
+    min-width: 0 !important;
+  }
+
   .el-table__header-wrapper {
     th {
       background-color: #f1f3f4;
@@ -955,10 +1053,14 @@ function toggleUnique() {
       font-weight: 500;
       font-size: 13px;
       height: 44px;
-      padding: 0 14px;
+
+      // 列间竖向分割线（最右列不加，贴合谷歌表格风格）
+      &:not(:last-child) {
+        border-right: 1px solid #e8eaed;
+      }
 
       .cell {
-        padding: 0;
+        padding: 0 14px;
         text-align: center !important; // 表头文字统一居中（覆盖各列 align 的继承）
       }
     }
@@ -980,10 +1082,17 @@ function toggleUnique() {
         color: #202124;
         font-size: 13px;
         height: 48px;
-        padding: 0 14px;
 
+        // 列间竖向分割线（最右列不加，贴合谷歌表格风格）
+        &:not(:last-child) {
+          border-right: 1px solid #f1f3f4;
+        }
+
+        // 横向 padding 放在 .cell 上（Element 原生模式）而非 td 上：
+        // .cell 自带 overflow:hidden + ellipsis，padding 在其盒模型内部，
+        // 省略号在 .cell 内截断，绝不会越过 td 边界
         .cell {
-          padding: 0;
+          padding: 0 14px;
         }
       }
     }
@@ -998,6 +1107,17 @@ function toggleUnique() {
 .date-text {
   color: #5f6368;
   font-size: 13px;
+}
+
+// 输入框 suffix 的问号图标：与 clearable 的清除图标并排，悬停提示可搜索字段
+.keyword-tip-icon {
+  color: #9aa0a6;
+  cursor: help;
+  margin-right: 2px;
+
+  &:hover {
+    color: #5f6368;
+  }
 }
 
 // 金额列用等宽数字字体（tabular figures），数字对齐、便于比较金额
@@ -1167,6 +1287,27 @@ function toggleUnique() {
 .clicks-overflow-tooltip {
   max-width: 400px;
   word-break: break-all;
+}
+
+/* 关键词可搜索字段提示（el-tooltip 传送到 body，scoped 选不中，写在全局） */
+.clicks-keyword-tip.el-popper {
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+}
+
+.keyword-tip-content {
+  .keyword-tip-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: #3c4043;
+    margin-bottom: 4px;
+  }
+
+  .keyword-tip-field {
+    font-family: 'Roboto Mono', 'Consolas', monospace;
+    font-size: 12px;
+    color: #202124;
+    line-height: 1.7;
+  }
 }
 
 /* 列配置面板（el-popover teleported 到 body，scoped 选不中，写在全局） */
