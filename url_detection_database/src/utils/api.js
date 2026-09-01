@@ -62,9 +62,16 @@ async function updateDomainStatus(id, isAccessible, isSafe, url) {
       try {
         const domain = extractDomain(url)
         if (domain) {
+          // 一次检测事件只查询一次备用域名，两边共用同一个结果，
+          // 保证 Clickflare / ef-tracker 替换到同一个备用域名上（避免两侧各自查询时备用池中途变化导致分歧）
+          const replacementDomain = await getReplacementDomain(domain)
+          if (!replacementDomain) {
+            console.log(`无法获取替换域名, 跳过替换操作`)
+            return
+          }
           // 两边独立替换、互不影响：Clickflare 没在用不影响 ef-tracker 侧替换，反之亦然
-          await replaceDangerousDomain(domain)
-          await replaceEfTrackerDomain(domain)
+          await replaceDangerousDomain(domain, replacementDomain)   // Clickflare 侧
+          await replaceEfTrackerDomain(domain, replacementDomain)   // ef-tracker 侧
         }
       } catch (err) {
         console.log(`❌ 替换危险域名失败: ${err.message}`)
@@ -127,7 +134,7 @@ async function getReplacementDomain(dangerousDomain) {
 }
 
 
-async function replaceDangerousDomain(domain) {
+async function replaceDangerousDomain(domain, replacementDomain) {
   try {
 
     const landerExists = await checkLanderExists(domain)
@@ -137,12 +144,7 @@ async function replaceDangerousDomain(domain) {
     }
 
 
-    const replacementDomain = await getReplacementDomain(domain)
-    if (!replacementDomain) {
-      console.log(`无法获取替换域名, 跳过替换操作`)
-      return null
-    }
-
+    // replacementDomain 由调用方统一查询传入（与 ef-tracker 侧共用同一个备用域名）
     const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
     const url = `${baseUrl}/lander-replacement/replace`
 
@@ -172,11 +174,13 @@ async function replaceDangerousDomain(domain) {
 // 替换 ef-tracker 系统(ab_landers)中的危险域名。
 // 后端会先预演判断对方是否在用该域名: 没在用不产生替换记录, 在用则批量替换并记录(target_system='eftracker')。
 // 与 Clickflare 侧的 replaceDangerousDomain 相互独立, 各自判断各自记录。
-async function replaceEfTrackerDomain(domain) {
+// replacementDomain 由调用方统一查询传入（与 Clickflare 侧共用同一个备用域名）。
+async function replaceEfTrackerDomain(domain, replacementDomain) {
   try {
     const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
     const res = await axios.post(`${baseUrl}/lander-replacement/ef-replace`, {
-      domain: domain
+      domain: domain,
+      replacement_domain: replacementDomain
     })
 
     if (res?.data?.code === 0) {

@@ -8,10 +8,12 @@ class LanderReplacementController {
    * 替换危险域名（ef-tracker 侧）
    * 检测脚本检测到危险域名后调用：先预演判断对方是否在用，
    * 在用则按 domains 表的备用域名规则选替换域名，调对方 /landers/replace-url 批量替换并记录
-   * body: { domain }
+   * body: { domain, replacement_domain? }
+   *   replacement_domain 可选：检测脚本自动流程会统一查询后传入（保证 CF/EF 两侧用同一个备用域名）；
+   *   不传则按原逻辑自行查询（手动调用、前端页面调用兼容）。
    */
   async replaceEfTrackerDomain(ctx, next) {
-    const { domain } = ctx.request.body
+    const { domain, replacement_domain } = ctx.request.body
 
     if (!domain) {
       ctx.body = {
@@ -34,18 +36,22 @@ class LanderReplacementController {
         return
       }
 
-      // 与 Clickflare 侧同一套备用域名选择规则
-      const replacement = await domainsService.getReplacementDomain(domain)
-      if (!replacement.success) {
-        ctx.body = {
-          code: 1,
-          message: replacement.message,
-          data: null
+      // 调用方已统一指定替换域名时直接使用；未指定才按备用域名规则自行查询
+      let replacementDomain = replacement_domain
+      if (!replacementDomain) {
+        const replacement = await domainsService.getReplacementDomain(domain)
+        if (!replacement.success) {
+          ctx.body = {
+            code: 1,
+            message: replacement.message,
+            data: null
+          }
+          return
         }
-        return
+        replacementDomain = replacement.replacementDomain
       }
 
-      const result = await efLanderReplacementService.replaceDangerousDomain(domain, replacement.replacementDomain)
+      const result = await efLanderReplacementService.replaceDangerousDomain(domain, replacementDomain)
 
       ctx.body = {
         code: result.success ? 0 : 1,

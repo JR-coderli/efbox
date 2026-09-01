@@ -1,6 +1,7 @@
 const connection = require('../app/database')
 const axios = require('axios')
 const efTrackerConfig = require('../config/ef-tracker')
+const domainPurposeInheritService = require('./domain-purpose-inherit.service')
 
 /**
  * ef-归因系统（ab_landers）的危险域名替换服务。
@@ -100,6 +101,11 @@ class EfLanderReplacementService {
       )
 
       console.log(`[ef-替换] 任务 ${recordId} 完成: ${dangerousDomain} -> ${replacementDomain}, 替换 ${affected} 条`)
+
+      // 替换成功后：备用域名 purpose 继承危险域名 purpose 原文（如 s1-备用 -> s1-LP）。
+      // 独立服务，内部不抛错，继承失败只打日志，不影响替换主流程。
+      await domainPurposeInheritService.inheritByRecordId(recordId)
+
       return { success: true, message: 'ef-tracker 批量替换任务已完成', data: { recordId, affectedCount: affected } }
     } catch (error) {
       const errorMsg = error.response?.data?.error || error.message

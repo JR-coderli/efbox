@@ -1,6 +1,7 @@
 const connection = require('../app/database')
 const clickflareConfig = require('../config/clickflare')
 const axios = require('axios')
+const domainPurposeInheritService = require('./domain-purpose-inherit.service')
 
 // === 限流相关配置 ===
 const REQUEST_DELAY_MS = 800      // 单次 PATCH 请求之间的基础间隔（毫秒）
@@ -516,6 +517,12 @@ class LanderReplacementService {
     )
 
     console.log(`[Replace Domain] 任务 ${recordId} 完成: 状态=${status}, 成功 ${successCount} 条，失败 ${failedCount} 条`)
+
+    // 替换有成功条目时：备用域名 purpose 继承危险域名 purpose 原文（如 s1-备用 -> s1-LP）。
+    // 独立服务，内部不抛错，继承失败只打日志，不影响替换主流程。
+    if (successCount > 0) {
+      await domainPurposeInheritService.inheritByRecordId(recordId)
+    }
   }
 
   // ================================================================
