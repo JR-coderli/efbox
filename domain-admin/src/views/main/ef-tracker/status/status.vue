@@ -52,7 +52,11 @@
           <span class="check-dot"></span>
           <span class="check-name">{{ c.name }}</span>
           <span class="check-detail">{{ c.detail }}</span>
-          <span class="check-status">{{ c.statusText }}</span>
+          <el-tag
+            size="small"
+            effect="light"
+            :type="c.level === 'ok' ? 'success' : c.level === 'warn' ? 'warning' : 'danger'"
+          >{{ c.statusText }}</el-tag>
         </div>
       </div>
 
@@ -518,7 +522,7 @@ function fmtTime(s) {
 .google-page {
   padding: 12px;
   margin: 0 auto;
-  background: #eef0f2;
+  background: #fafafa;
   min-height: 100%;
   border-radius: 8px;
 }
@@ -783,20 +787,6 @@ function fmtTime(s) {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .check-status {
-    flex-shrink: 0;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 18px;
-    padding: 1px 10px;
-    border-radius: 10px;
-    white-space: nowrap;
-
-    .check-row.ok & { color: #1e8e3e; background: #e6f4ea; }
-    .check-row.warn & { color: #e8710a; background: #fef7e0; }
-    .check-row.bad & { color: #d93025; background: #fce8e6; }
   }
 }
 
