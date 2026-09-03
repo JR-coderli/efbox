@@ -29,6 +29,7 @@ import efConversions from '@/router/main/ef-tracker/conversions/conversions'
 import efLanders from '@/router/main/ef-tracker/landers/landers'
 import efOverview from '@/router/main/ef-tracker/overview/overview'
 import efDatapanel from '@/router/main/ef-tracker/datapanel/datapanel'
+import efStatus from '@/router/main/ef-tracker/status/status'
 
 
 function loadLocalRoutes() {
@@ -68,6 +69,7 @@ function loadLocalRoutes() {
   localRoutes.push(efLanders)
   localRoutes.push(efOverview)
   localRoutes.push(efDatapanel)
+  localRoutes.push(efStatus)
 
   return localRoutes
 }

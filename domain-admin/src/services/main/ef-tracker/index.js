@@ -104,6 +104,24 @@ export function replaceLanderUrl(payload) {
 }
 
 // ============================================================
+// 13. 双机状态面板 —— /query/status（唯一带鉴权的查询接口）
+// 返回 { local: { server, db, partitions, archive }, peer?: { reachable, status, error, addr } }
+// ============================================================
+
+// /query/status 需要 query 参数 token（与对端 conf/app.ini [status] token 匹配，不匹配返回 404）。
+// token 从对端服务器配置里取，填到下面常量；与 /query 其它接口一样前端直连外部系统，不经 domain-admin 后端。
+const QUERY_STATUS_TOKEN = 'fec52d833e5d3c127c1e3587bf643d6c09033ecd556de18183244296921217ab'
+
+export function getStatus() {
+  return queryRequest
+    .get('/query/status', {
+      params: { token: QUERY_STATUS_TOKEN },
+      timeout: 20000 // 重型请求（约 10 条 SQL + 一次内网探测），放宽到 20s
+    })
+    .then((res) => res.data)
+}
+
+// ============================================================
 // 以下走本地 domain-admin 后端（hyRequest），用于 ef-归因系统 落地页截图（方案 B）
 // 与上面的 /query 外部接口无关，互不影响。
 // ============================================================
