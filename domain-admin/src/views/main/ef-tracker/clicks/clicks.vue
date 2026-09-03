@@ -64,7 +64,7 @@
               <el-form-item label="关键词">
                 <el-input
                   v-model="filters.keyword"
-                  placeholder="media_click_id / system_click_id / campaign_name / adset_name / creative_name / ip_address"
+                  placeholder="campaign_name / adset_name / creative_name / ip_address（两个 click_id 请用表头精确查询）"
                   clearable
                   style="width: 240px"
                   @keyup.enter="handleSearch"
@@ -103,16 +103,16 @@
                 />
               </el-form-item>
               <el-form-item label="媒体ID">
-                <el-input v-model="filters.mid" placeholder="mid" clearable style="width: 110px" @keyup.enter="handleSearch" />
+                <el-input v-model="filters.mid" placeholder="mid" clearable style="width: 110px" @input="digitsOnly('mid')" @keyup.enter="handleSearch" />
               </el-form-item>
               <el-form-item label="Tracker">
-                <el-input v-model="filters.tid" placeholder="tid" clearable style="width: 110px" @keyup.enter="handleSearch" />
+                <el-input v-model="filters.tid" placeholder="tid" clearable style="width: 110px" @input="digitsOnly('tid')" @keyup.enter="handleSearch" />
               </el-form-item>
               <el-form-item label="Offer">
-                <el-input v-model="filters.oid" placeholder="oid" clearable style="width: 110px" @keyup.enter="handleSearch" />
+                <el-input v-model="filters.oid" placeholder="oid" clearable style="width: 110px" @input="digitsOnly('oid')" @keyup.enter="handleSearch" />
               </el-form-item>
               <el-form-item label="LP">
-                <el-input v-model="filters.lid" placeholder="lid" clearable style="width: 110px" @keyup.enter="handleSearch" />
+                <el-input v-model="filters.lid" placeholder="lid" clearable style="width: 110px" @input="digitsOnly('lid')" @keyup.enter="handleSearch" />
               </el-form-item>
               <el-form-item label="路径">
                 <el-input v-model="filters.path_code" placeholder="path_code" clearable style="width: 130px" @keyup.enter="handleSearch" />
@@ -128,7 +128,7 @@
 
       <!-- 表格 -->
       <div class="table-wrapper">
-        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :tooltip-options="{ popperClass: 'clicks-overflow-tooltip' }">
+        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'clicks-overflow-tooltip' }">
           <template v-for="col in visibleColumns" :key="col.key">
             <!-- 漏斗列 -->
             <el-table-column
@@ -268,6 +268,32 @@
                 <span v-else class="shot-empty">-</span>
               </template>
             </el-table-column>
+            <!-- 表头精确查询列（type=filter）：多级表头实现——第一行列名、第二行输入框，输入框独立成行，介于表头与数据之间 -->
+            <el-table-column
+              v-else-if="col.type === 'filter'"
+              :label="col.label"
+              :min-width="col.minWidth"
+              :align="col.align"
+            >
+              <el-table-column
+                :prop="col.prop"
+                :min-width="col.minWidth"
+                :class-name="col.cellClass"
+                :show-overflow-tooltip="col.overflow"
+              >
+                <template #header>
+                  <el-input
+                    v-model="filters[col.filterKey]"
+                    size="small"
+                    :placeholder="col.label"
+                    clearable
+                    class="header-filter-input"
+                    @keyup.enter="handleSearch"
+                    @clear="handleSearch"
+                  />
+                </template>
+              </el-table-column>
+            </el-table-column>
             <!-- 普通字段列 -->
             <el-table-column
               v-else
@@ -339,10 +365,9 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
 import useSystemStore from '@/stores/main/system/system'
 
-// keyword 可搜索的列（与后端 /query/clicks keyword 搜索范围一致，任一字段命中即返回）
+// keyword 可搜索的列（与后端 /query/clicks keyword 搜索范围一致，任一字段命中即返回）。
+// media_click_id / system_click_id 有表头精确输入框（走专用查询串），不再建议走 keyword。
 const KEYWORD_FIELDS = [
-  'media_click_id',
-  'system_click_id',
   'campaign_name',
   'adset_name',
   'creative_name',
@@ -367,6 +392,9 @@ const pagination = reactive({
   pageSize: 10
 })
 
+// 每页 100 条时表格内部滚动（表头吸顶、分页固定在下方），页面整体不滚动；小页码维持原状
+const tableMaxHeight = computed(() => (pagination.pageSize >= 100 ? 'calc(100vh - 300px)' : null))
+
 // 时区：默认 +8；切路由 / 刷新都会重建组件 → 回到 +8；分页不修改 tz → 保留当前选择
 const tz = ref(8)
 const tzOptions = [
@@ -381,14 +409,24 @@ const tzOptions = [
 ]
 
 // 该表精确过滤参数（全部可选，不传即不过滤）
+// mid/tid/oid/lid 仅允许数字：输入时实时剔除非数字字符（接口对非法值会返回 400）
 const filters = reactive({
   keyword: '',
   mid: '',
   tid: '',
   oid: '',
   lid: '',
-  path_code: ''
+  path_code: '',
+  media_click_id: '',   // 表头精确查询：走 media_click_id 查询串（非 keyword）
+  system_click_id: ''   // 表头精确查询：走 system_click_id 查询串（非 keyword）
 })
+
+// mid/tid/oid/lid 输入框只收数字：实时剔除非数字字符（配合模板 @input="digitsOnly('mid')" 等使用）
+function digitsOnly(field) {
+  return (v) => {
+    filters[field] = String(v ?? '').replace(/\D/g, '')
+  }
+}
 
 // 日期范围（el-date-picker daterange，元素为 Date 对象）
 const dateRange = ref([])
@@ -649,8 +687,9 @@ const DEFAULT_COLUMNS = [
   { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 350, align: 'center' },
   { key: 'total_time', label: '总用时', type: 'duration', width: 90, align: 'center' },
   { key: 'preview_img', label: '预览图', type: 'screenshot', width: 120, align: 'center' },
-  { key: 'system_click_id', label: 'system_click_id', type: 'plain', prop: 'system_click_id', minWidth: 270, overflow: true },
-  { key: 'media_click_id', label: 'media_click_id', type: 'plain', prop: 'media_click_id', minWidth: 160, overflow: true },
+  // type=filter：多级表头精确查询（第一行列名、第二行输入框），走专用查询串，不走 keyword
+  { key: 'system_click_id', label: 'system_click_id', type: 'filter', prop: 'system_click_id', filterKey: 'system_click_id', minWidth: 230, overflow: true },
+  { key: 'media_click_id', label: 'media_click_id', type: 'filter', prop: 'media_click_id', filterKey: 'media_click_id', minWidth: 180, overflow: true },
   { key: 'mid', label: 'mid', type: 'plain', prop: 'mid', width: 70, align: 'center', defaultHidden: true },
   { key: 'tid', label: 'tid', type: 'plain', prop: 'tid', width: 80, align: 'center', defaultHidden: true },
   { key: 'oid', label: 'oid', type: 'plain', prop: 'oid', width: 80, align: 'center', defaultHidden: true },
@@ -795,6 +834,9 @@ function buildParams() {
   if (filters.oid) p.oid = filters.oid
   if (filters.lid) p.lid = filters.lid
   if (filters.path_code) p.path_code = filters.path_code
+  // 两个 click_id 走专用精确查询串（避免 keyword 模糊扫多列，性能更好）
+  if (filters.media_click_id) p.media_click_id = filters.media_click_id
+  if (filters.system_click_id) p.system_click_id = filters.system_click_id
   p.with_names = true // 返回 mid/tid/oid/lid 对应的名称（names 字段）
   p.with_funnel = true // 返回归因漏斗（funnel：到达LP / 点击Offer / 转化 / 媒体下发）
   if (uniqueOnly.value) p.unique = true // 去重：按 media_click_id 只保留最新一条
@@ -828,6 +870,8 @@ function handleReset() {
   filters.oid = ''
   filters.lid = ''
   filters.path_code = ''
+  filters.media_click_id = ''
+  filters.system_click_id = ''
   dateRange.value = []
   tz.value = 8
   pagination.page = 1
@@ -1102,6 +1146,26 @@ function toggleUnique() {
   &::after {
     display: none;
   }
+}
+
+// 多级表头的第二行 = 精确查询输入行：白底、上下留白，与第一行（灰底列名）视觉分离，形似 Clickflare 的过滤行
+:deep(.google-table) {
+  .el-table__header-wrapper {
+    tr:nth-child(2) th {
+      background-color: #fff;
+      height: auto;
+      padding: 6px 10px;
+
+      .cell {
+        padding: 0;
+      }
+    }
+  }
+}
+
+// 表头过滤输入框撑满列宽
+.header-filter-input {
+  width: 100%;
 }
 
 .date-text {
