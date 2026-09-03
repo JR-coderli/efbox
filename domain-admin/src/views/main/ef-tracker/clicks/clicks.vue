@@ -102,21 +102,7 @@
                   style="width: 240px"
                 />
               </el-form-item>
-              <el-form-item label="媒体ID">
-                <el-input v-model="filters.mid" placeholder="mid" clearable style="width: 110px" @input="digitsOnly('mid')" @keyup.enter="handleSearch" />
-              </el-form-item>
-              <el-form-item label="Tracker">
-                <el-input v-model="filters.tid" placeholder="tid" clearable style="width: 110px" @input="digitsOnly('tid')" @keyup.enter="handleSearch" />
-              </el-form-item>
-              <el-form-item label="Offer">
-                <el-input v-model="filters.oid" placeholder="oid" clearable style="width: 110px" @input="digitsOnly('oid')" @keyup.enter="handleSearch" />
-              </el-form-item>
-              <el-form-item label="LP">
-                <el-input v-model="filters.lid" placeholder="lid" clearable style="width: 110px" @input="digitsOnly('lid')" @keyup.enter="handleSearch" />
-              </el-form-item>
-              <el-form-item label="路径">
-                <el-input v-model="filters.path_code" placeholder="path_code" clearable style="width: 130px" @keyup.enter="handleSearch" />
-              </el-form-item>
+              <!-- mid/tid/oid/lid/path_code 的精确查询已集成到多级表头第二行，此处不再重复放输入框 -->
             </el-form>
           </div>
           <div class="filter-actions">
@@ -130,10 +116,11 @@
       <div class="table-wrapper">
         <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'clicks-overflow-tooltip' }">
           <template v-for="col in visibleColumns" :key="col.key">
+            <!-- 所有列统一两级表头（多级表头）：第一行列名、第二行过滤行——type=filter 列内嵌精确查询输入框，其余列空白，形似 Clickflare -->
+            <el-table-column :label="col.label" :align="col.align">
             <!-- 漏斗列 -->
             <el-table-column
               v-if="col.type === 'funnel'"
-              :label="col.label"
               :min-width="col.minWidth"
               :align="col.align"
             >
@@ -204,7 +191,6 @@
             <!-- 总用时（媒体点击 → 最远已完成步骤的时间差）-->
             <el-table-column
               v-else-if="col.type === 'duration'"
-              :label="col.label"
               :width="col.width"
               :align="col.align"
             >
@@ -215,7 +201,6 @@
             <!-- 创建时间（格式化） -->
             <el-table-column
               v-else-if="col.type === 'time'"
-              :label="col.label"
               :prop="col.prop"
               :width="col.width"
             >
@@ -226,7 +211,6 @@
             <!-- names 名称映射列（row.names[nameKey]） -->
             <el-table-column
               v-else-if="col.type === 'names'"
-              :label="col.label"
               :prop="col.prop"
               :min-width="col.minWidth"
               :show-overflow-tooltip="col.overflow"
@@ -238,7 +222,6 @@
             <!-- preview_url：lander_url 去查询串 + eflp 签名（点击实时生成、新窗口打开）-->
             <el-table-column
               v-else-if="col.type === 'preview'"
-              :label="col.label"
               :min-width="col.minWidth"
               :show-overflow-tooltip="col.overflow"
             >
@@ -250,7 +233,6 @@
             <!-- 预览图：仅「有 LP展示(reached_lp)」的行显示该 lander 的缓存截图；点击可大图预览 -->
             <el-table-column
               v-else-if="col.type === 'screenshot'"
-              :label="col.label"
               :width="col.width"
               :min-width="col.minWidth"
               :align="col.align"
@@ -268,36 +250,30 @@
                 <span v-else class="shot-empty">-</span>
               </template>
             </el-table-column>
-            <!-- 表头精确查询列（type=filter）：多级表头实现——第一行列名、第二行输入框，输入框独立成行，介于表头与数据之间 -->
+            <!-- 表头精确查询列（type=filter）：第二行表头为输入框，走专用查询串（非 keyword） -->
             <el-table-column
               v-else-if="col.type === 'filter'"
-              :label="col.label"
+              :prop="col.prop"
               :min-width="col.minWidth"
-              :align="col.align"
+              :class-name="col.cellClass"
+              :show-overflow-tooltip="col.overflow"
             >
-              <el-table-column
-                :prop="col.prop"
-                :min-width="col.minWidth"
-                :class-name="col.cellClass"
-                :show-overflow-tooltip="col.overflow"
-              >
-                <template #header>
-                  <el-input
-                    v-model="filters[col.filterKey]"
-                    size="small"
-                    :placeholder="col.label"
-                    clearable
-                    class="header-filter-input"
-                    @keyup.enter="handleSearch"
-                    @clear="handleSearch"
-                  />
-                </template>
-              </el-table-column>
+              <template #header>
+                <el-input
+                  v-model="filters[col.filterKey]"
+                  size="small"
+                  :placeholder="col.label"
+                  clearable
+                  class="header-filter-input"
+                  @input="(v) => onFilterInput(col, v)"
+                  @keyup.enter="handleSearch"
+                  @clear="handleSearch"
+                />
+              </template>
             </el-table-column>
             <!-- 普通字段列 -->
             <el-table-column
               v-else
-              :label="col.label"
               :prop="col.prop"
               :width="col.width"
               :min-width="col.minWidth"
@@ -305,6 +281,7 @@
               :class-name="col.cellClass"
               :show-overflow-tooltip="col.overflow"
             />
+            </el-table-column>
           </template>
 
           <template #empty>
@@ -392,8 +369,8 @@ const pagination = reactive({
   pageSize: 10
 })
 
-// 每页 100 条时表格内部滚动（表头吸顶、分页固定在下方），页面整体不滚动；小页码维持原状
-const tableMaxHeight = computed(() => (pagination.pageSize >= 100 ? 'calc(100vh - 300px)' : null))
+// 表格限高：内容超过可视区域时表格内部滚动（表头吸顶、分页固定），与每页条数无关
+const tableMaxHeight = computed(() => 'calc(100vh - 300px)')
 
 // 时区：默认 +8；切路由 / 刷新都会重建组件 → 回到 +8；分页不修改 tz → 保留当前选择
 const tz = ref(8)
@@ -421,11 +398,9 @@ const filters = reactive({
   system_click_id: ''   // 表头精确查询：走 system_click_id 查询串（非 keyword）
 })
 
-// mid/tid/oid/lid 输入框只收数字：实时剔除非数字字符（配合模板 @input="digitsOnly('mid')" 等使用）
-function digitsOnly(field) {
-  return (v) => {
-    filters[field] = String(v ?? '').replace(/\D/g, '')
-  }
+// 表头过滤输入框统一入口：digits 列（mid/tid/oid/lid）只保留数字，其余原样
+function onFilterInput(col, v) {
+  filters[col.filterKey] = col.digits ? String(v ?? '').replace(/\D/g, '') : v
 }
 
 // 日期范围（el-date-picker daterange，元素为 Date 对象）
@@ -690,16 +665,18 @@ const DEFAULT_COLUMNS = [
   // type=filter：多级表头精确查询（第一行列名、第二行输入框），走专用查询串，不走 keyword
   { key: 'system_click_id', label: 'system_click_id', type: 'filter', prop: 'system_click_id', filterKey: 'system_click_id', minWidth: 230, overflow: true },
   { key: 'media_click_id', label: 'media_click_id', type: 'filter', prop: 'media_click_id', filterKey: 'media_click_id', minWidth: 180, overflow: true },
-  { key: 'mid', label: 'mid', type: 'plain', prop: 'mid', width: 70, align: 'center', defaultHidden: true },
-  { key: 'tid', label: 'tid', type: 'plain', prop: 'tid', width: 80, align: 'center', defaultHidden: true },
-  { key: 'oid', label: 'oid', type: 'plain', prop: 'oid', width: 80, align: 'center', defaultHidden: true },
-  { key: 'lid', label: 'lid', type: 'plain', prop: 'lid', width: 80, align: 'center', defaultHidden: true },
+  // type=filter：表头第二行为精确查询输入框，走专用查询串（mid/tid/oid/lid/path_code + 两个 click_id，共 7 个）
+  // digits=true 的列输入时只保留数字
+  { key: 'mid', label: 'mid', type: 'filter', prop: 'mid', filterKey: 'mid', digits: true, width: 110, align: 'center', defaultHidden: true },
+  { key: 'tid', label: 'tid', type: 'filter', prop: 'tid', filterKey: 'tid', digits: true, width: 110, align: 'center', defaultHidden: true },
+  { key: 'oid', label: 'oid', type: 'filter', prop: 'oid', filterKey: 'oid', digits: true, width: 110, align: 'center', defaultHidden: true },
+  { key: 'lid', label: 'lid', type: 'filter', prop: 'lid', filterKey: 'lid', digits: true, width: 110, align: 'center', defaultHidden: true },
   { key: 'cost', label: 'cost', type: 'plain', prop: 'cost', width: 100, align: 'right', cellClass: 'col-money' },
   { key: 'names.media', label: 'Media_name', type: 'names', nameKey: 'media', prop: 'names.media', minWidth: 110, overflow: true },
   { key: 'names.tracker', label: 'Tracker_name', type: 'names', nameKey: 'tracker', prop: 'names.tracker', minWidth: 210, overflow: true },
   { key: 'names.lander', label: 'Lander_name', type: 'names', nameKey: 'lander', prop: 'names.lander', minWidth: 210, overflow: true },
   { key: 'names.offer', label: 'Offer_name', type: 'names', nameKey: 'offer', prop: 'names.offer', minWidth: 210, overflow: true },
-  { key: 'path_code', label: 'path_code', type: 'plain', prop: 'path_code', width: 100, overflow: true, defaultHidden: true },
+  { key: 'path_code', label: 'path_code', type: 'filter', prop: 'path_code', filterKey: 'path_code', width: 140, overflow: true, defaultHidden: true },
   { key: 'campaign_name', label: 'campaign_name', type: 'plain', prop: 'campaign_name', minWidth: 160, overflow: true, defaultHidden: true },
   { key: 'campaign_id', label: 'campaign_id', type: 'plain', prop: 'campaign_id', minWidth: 120, overflow: true, defaultHidden: true },
   { key: 'adset_name', label: 'adset_name', type: 'plain', prop: 'adset_name', minWidth: 100, overflow: true, defaultHidden: true },
