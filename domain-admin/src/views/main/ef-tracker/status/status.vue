@@ -3,8 +3,8 @@
     <!-- 页面标题栏 -->
     <div class="page-header">
       <div class="header-left">
-        <h1 class="page-title">双机状态监控</h1>
-        <p class="page-subtitle">/query/status · A/B 双机全景 · 更新于 {{ lastUpdate }}</p>
+        <h1 class="page-title">服务器状态</h1>
+        <p class="page-subtitle">更新于 {{ lastUpdate }}</p>
       </div>
       <div class="header-actions">
         <div class="auto-refresh" title="status 是重型请求（约 10 条 SQL + 内网探测），非必要时建议保持关闭">
@@ -63,20 +63,41 @@
         <div class="content-card">
           <div class="card-title"><span class="title-dot" :class="overall.level"></span>服务器信息</div>
           <div class="card-body">
-            <div class="kv-row"><span>主机名</span><b>{{ data.local?.server?.hostname || '-' }}</b></div>
-            <div class="kv-row"><span>负载 1 / 5 / 15 分钟</span><b>{{ fmtLoad(data.local?.server?.load1) }} / {{ fmtLoad(data.local?.server?.load5) }} / {{ fmtLoad(data.local?.server?.load15) }}</b></div>
-            <div class="kv-row"><span>内存</span><b>{{ Math.round(data.local?.server?.mem_avail_mb || 0) }} 可用 / 共 {{ Math.round(data.local?.server?.mem_total_mb || 0) }} MB</b></div>
-            <div class="kv-row"><span>服务器时间</span><b>{{ fmtTime(data.local?.server?.now) }}</b></div>
-            <div class="disk-list" v-if="data.local?.server?.disks?.length">
-              <div class="disk-item" v-for="d in data.local.server.disks" :key="d.mount">
-                <div class="disk-top">
-                  <span class="disk-mount">{{ d.mount }}</span>
-                  <span class="disk-pct">{{ Math.round(d.used_pct ?? 0) }}%</span>
+            <div class="disk-list" v-if="cpuCores || data.local?.server?.disks?.length">
+              <div class="disk-item" v-if="cpuCores">
+                <el-progress
+                  type="circle"
+                  :percentage="Math.min(100, cpuPct1)"
+                  :width="140"
+                  :stroke-width="10"
+                  :color="cpuColor"
+                  class="disk-circle"
+                />
+                <div class="disk-side">
+                  <span class="disk-mount">CPU 负载率</span>
+                  <span class="disk-bottom">load1 {{ fmtLoad(data.local?.server?.load1) }} / {{ cpuCores }} 核{{ cpuPct1 > 100 ? '，已过载排队' : '' }}</span>
                 </div>
-                <div class="bar-track"><div class="bar-fill" :class="barClass(d.used_pct)" :style="{ width: Math.min(100, d.used_pct ?? 0) + '%' }"></div></div>
-                <div class="disk-bottom">{{ d.free_gb ?? '-' }} GB 可用 / 共 {{ d.total_gb ?? '-' }} GB</div>
+              </div>
+              <div class="disk-item" v-for="d in data.local.server.disks" :key="d.mount">
+                <el-progress
+                  type="circle"
+                  :percentage="Math.min(100, Math.round(d.used_pct ?? 0))"
+                  :width="140"
+                  :stroke-width="10"
+                  :color="pctColor(d.used_pct)"
+                  class="disk-circle"
+                />
+                <div class="disk-side">
+                  <span class="disk-mount">{{ d.mount }}</span>
+                  <span class="disk-bottom">已用 {{ usedGb(d) }} / 共 {{ d.total_gb ?? '-' }} GB</span>
+                </div>
               </div>
             </div>
+            <div class="body-divider" v-if="data.local?.server?.disks?.length"></div>
+            <div class="kv-row"><span>主机名</span><b>{{ data.local?.server?.hostname || '-' }}</b></div>
+            <div class="kv-row"><span>负载 1 / 5 / 15 分钟</span><b>{{ fmtLoad(data.local?.server?.load1) }} / {{ fmtLoad(data.local?.server?.load5) }} / {{ fmtLoad(data.local?.server?.load15) }}</b></div>
+            <div class="kv-row"><span>内存</span><b>{{ memUsedText(data.local?.server) }}</b></div>
+            <div class="kv-row"><span>服务器时间</span><b>{{ fmtTime(data.local?.server?.now) }}</b></div>
           </div>
         </div>
 
@@ -84,13 +105,24 @@
         <div class="content-card">
           <div class="card-title"><span class="title-dot" :class="overall.level"></span>数据库（PostgreSQL）</div>
           <div class="card-body">
+            <div class="gauge-row">
+              <el-progress
+                type="circle"
+                :percentage="connPct"
+                :width="130"
+                :stroke-width="10"
+                :color="connPct >= 80 ? '#d93025' : connPct >= 60 ? '#f9ab00' : '#1e8e3e'"
+                class="conn-circle"
+              />
+              <div class="gauge-info">
+                <div class="gauge-num">{{ data.local?.db?.connections ?? '-' }}<span class="gauge-total"> / {{ data.local?.db?.max_connections ?? '-' }}</span></div>
+                <div class="gauge-label">当前连接 / 上限</div>
+              </div>
+            </div>
+            <div class="body-divider"></div>
             <div class="kv-row"><span>版本</span><b>{{ data.local?.db?.version || '-' }}</b></div>
             <div class="kv-row"><span>角色</span><b>{{ data.local?.db?.role || '-' }}<i v-if="data.local?.db?.in_recovery" class="text-warn">（recovery）</i></b></div>
             <div class="kv-row"><span>库大小</span><b>{{ data.local?.db?.database_size || '-' }}</b></div>
-            <div class="kv-row"><span>当前连接</span><b>{{ data.local?.db?.connections ?? '-' }} / {{ data.local?.db?.max_connections ?? '-' }}</b></div>
-            <div class="conn-bar">
-              <div class="bar-track"><div class="bar-fill" :class="connPct >= 80 ? 'bad' : connPct >= 60 ? 'warn' : 'ok'" :style="{ width: Math.min(100, connPct) + '%' }"></div></div>
-            </div>
             <div class="repl-block" v-if="data.local?.db?.replication?.length">
               <div class="repl-title">从库复制状态</div>
               <div class="repl-item" v-for="(r, i) in data.local.db.replication" :key="i">
@@ -150,6 +182,37 @@
               对端服务器 · {{ data.peer.status?.server?.hostname || '-' }}
             </div>
             <div class="card-body">
+              <div class="disk-list" v-if="data.peer.status?.server?.cpu_cores || data.peer.status?.server?.disks?.length">
+                <div class="disk-item" v-if="data.peer.status?.server?.cpu_cores">
+                  <el-progress
+                    type="circle"
+                    :percentage="Math.min(100, Math.round(((data.peer.status?.server?.load1 || 0) / data.peer.status?.server?.cpu_cores) * 100))"
+                    :width="140"
+                    :stroke-width="10"
+                    :color="peerCpuColor"
+                    class="disk-circle"
+                  />
+                  <div class="disk-side">
+                    <span class="disk-mount">CPU 负载率</span>
+                    <span class="disk-bottom">load1 {{ fmtLoad(data.peer.status?.server?.load1) }} / {{ data.peer.status?.server?.cpu_cores }} 核</span>
+                  </div>
+                </div>
+                <div class="disk-item" v-for="d in data.peer.status.server.disks" :key="d.mount">
+                  <el-progress
+                    type="circle"
+                    :percentage="Math.min(100, Math.round(d.used_pct ?? 0))"
+                    :width="140"
+                    :stroke-width="10"
+                    :color="pctColor(d.used_pct)"
+                    class="disk-circle"
+                  />
+                  <div class="disk-side">
+                    <span class="disk-mount">{{ d.mount }}</span>
+                    <span class="disk-bottom">已用 {{ usedGb(d) }} / 共 {{ d.total_gb ?? '-' }} GB</span>
+                  </div>
+                </div>
+              </div>
+              <div class="body-divider" v-if="data.peer.status?.server?.disks?.length"></div>
               <div class="kv-row">
                 <span>角色</span>
                 <b>
@@ -159,16 +222,7 @@
                 </b>
               </div>
               <div class="kv-row"><span>负载 1 / 5 / 15 分钟</span><b>{{ fmtLoad(data.peer.status?.server?.load1) }} / {{ fmtLoad(data.peer.status?.server?.load5) }} / {{ fmtLoad(data.peer.status?.server?.load15) }}</b></div>
-              <div class="kv-row"><span>内存</span><b>{{ Math.round(data.peer.status?.server?.mem_avail_mb || 0) }} 可用 / 共 {{ Math.round(data.peer.status?.server?.mem_total_mb || 0) }} MB</b></div>
-              <div class="disk-list" v-if="data.peer.status?.server?.disks?.length">
-                <div class="disk-item" v-for="d in data.peer.status.server.disks" :key="d.mount">
-                  <div class="disk-top">
-                    <span class="disk-mount">{{ d.mount }}</span>
-                    <span class="disk-pct">{{ Math.round(d.used_pct ?? 0) }}%</span>
-                  </div>
-                  <div class="bar-track"><div class="bar-fill" :class="barClass(d.used_pct)" :style="{ width: Math.min(100, d.used_pct ?? 0) + '%' }"></div></div>
-                </div>
-              </div>
+              <div class="kv-row"><span>内存</span><b>{{ memUsedText(data.peer.status?.server) }}</b></div>
             </div>
           </div>
           <div class="content-card">
@@ -294,16 +348,40 @@ onMounted(() => {
 // ===== 展示辅助 =====
 const dbRole = computed(() => data.value?.local?.db?.role || '')
 
-const memPct = computed(() => {
+// 内存已用百分比（已用 = 总量 - 可用）
+const memUsedPct = computed(() => {
   const s = data.value?.local?.server
   if (!s?.mem_total_mb) return 0
-  return Math.round(((s.mem_avail_mb || 0) / s.mem_total_mb) * 100)
+  return Math.round(((s.mem_total_mb - (s.mem_avail_mb || 0)) / s.mem_total_mb) * 100)
 })
 
 const connPct = computed(() => {
   const db = data.value?.local?.db
   if (!db?.max_connections) return 0
   return Math.round((db.connections / db.max_connections) * 100)
+})
+
+// ===== CPU 负载率：接口提供 cpu_cores 时用 load/cores 判断 =====
+// 口径：当前显示值 = load1 ÷ cores；告警判断用 load5 ÷ cores，>100% 即过载排队
+const cpuCores = computed(() => data.value?.local?.server?.cpu_cores || 0)
+const cpuPct1 = computed(() => (cpuCores.value ? Math.round(((data.value?.local?.server?.load1 || 0) / cpuCores.value) * 100) : 0))
+const cpuPct5 = computed(() => (cpuCores.value ? Math.round(((data.value?.local?.server?.load5 || 0) / cpuCores.value) * 100) : 0))
+
+function cpuLevel(pct5) {
+  return pct5 > 100 ? 'bad' : pct5 >= 80 ? 'warn' : 'ok'
+}
+
+const cpuColor = computed(() => {
+  const l = cpuLevel(cpuPct5.value)
+  return l === 'bad' ? '#d93025' : l === 'warn' ? '#f9ab00' : '#1e8e3e'
+})
+
+// 对端 CPU 环颜色（同口径）
+const peerCpuColor = computed(() => {
+  const s = data.value?.peer?.status?.server
+  if (!s?.cpu_cores) return '#1e8e3e'
+  const l = cpuLevel(Math.round(((s.load5 || 0) / s.cpu_cores) * 100))
+  return l === 'bad' ? '#d93025' : l === 'warn' ? '#f9ab00' : '#1e8e3e'
 })
 
 // ===== 关键检查项（一眼看问题的核心）=====
@@ -316,19 +394,27 @@ const checks = computed(() => {
   const repl = db.replication || []
   const peer = data.value.peer
 
-  // 负载（4 核机 <4 健康；无核数信息，按经验值 ≥8 严重 / ≥4 警告）
-  const load1 = s.load1 || 0
-  list.push({
-    name: '系统负载',
-    level: load1 >= 8 ? 'bad' : load1 >= 4 ? 'warn' : 'ok',
-    detail: `1m ${fmtLoad(s.load1)} · 5m ${fmtLoad(s.load5)} · 15m ${fmtLoad(s.load15)}`
-  })
+  // CPU / 负载：有 cpu_cores 用负载率（load/cores）判断，load5>100% 过载；旧接口无核数则按经验值兜底
+  if (s.cpu_cores) {
+    list.push({
+      name: 'CPU 负载',
+      level: cpuLevel(Math.round(((s.load5 || 0) / s.cpu_cores) * 100)),
+      detail: `负载率 ${Math.round(((s.load1 || 0) / s.cpu_cores) * 100)}%（load1 ${fmtLoad(s.load1)} / ${s.cpu_cores} 核，按 load5 ${fmtLoad(s.load5)} 判断）`
+    })
+  } else {
+    const load1 = s.load1 || 0
+    list.push({
+      name: '系统负载',
+      level: load1 >= 8 ? 'bad' : load1 >= 4 ? 'warn' : 'ok',
+      detail: `1m ${fmtLoad(s.load1)} · 5m ${fmtLoad(s.load5)} · 15m ${fmtLoad(s.load15)}（接口未返回核数，按经验值估算）`
+    })
+  }
 
-  // 内存
+  // 内存（显示已用量：已用 = 总量 - 可用；已用 ≥60% 警告 / ≥80% 严重）
   list.push({
     name: '内存',
-    level: memPct.value <= 20 ? 'bad' : memPct.value <= 40 ? 'warn' : 'ok',
-    detail: `可用 ${Math.round(s.mem_avail_mb || 0)} / 共 ${Math.round(s.mem_total_mb || 0)} MB（${memPct.value}%）`
+    level: memUsedPct.value >= 80 ? 'bad' : memUsedPct.value >= 60 ? 'warn' : 'ok',
+    detail: `已用 ${memUsedText(s)}（${memUsedPct.value}%）`
   })
 
   // 磁盘（每个挂载点一行）
@@ -337,7 +423,7 @@ const checks = computed(() => {
     list.push({
       name: `磁盘 ${d.mount}`,
       level: p >= 90 ? 'bad' : p >= 80 ? 'warn' : 'ok',
-      detail: `已用 ${Math.round(p)}%，剩余 ${d.free_gb ?? '-'} GB / 共 ${d.total_gb ?? '-'} GB`
+      detail: `已用 ${usedGb(d)} / 共 ${d.total_gb ?? '-'} GB（${Math.round(p)}%）`
     })
   }
 
@@ -390,12 +476,25 @@ const overall = computed(() => {
   return { level, text, issues }
 })
 
-// 磁盘使用率配色：>90% 红，>80% 黄，其余绿
-function barClass(p) {
-  if (p === undefined || p === null) return ''
-  if (p >= 90) return 'bad'
-  if (p >= 80) return 'warn'
-  return 'ok'
+// 磁盘使用率颜色（圆圈进度条用十六进制）：>90% 红，>80% 黄，其余绿
+function pctColor(p) {
+  if (p === undefined || p === null) return '#80868b'
+  if (p >= 90) return '#d93025'
+  if (p >= 80) return '#f9ab00'
+  return '#1e8e3e'
+}
+
+// 磁盘已用容量（接口只返回 free/total，已用 = 总量 - 剩余）
+function usedGb(d) {
+  if (d.total_gb == null || d.free_gb == null) return '-'
+  return `${Math.round((d.total_gb - d.free_gb) * 10) / 10}`
+}
+
+// 内存已用文本（接口返回 avail/total，已用 = 总量 - 可用；无数据返回 '-'）
+function memUsedText(s) {
+  const total = s?.mem_total_mb
+  if (!total) return '-'
+  return `${Math.round(total - (s.mem_avail_mb || 0))} / 共 ${Math.round(total)} MB`
 }
 
 // Windows 本地开发 load/mem 读不到（为 0），显示 '-'
@@ -417,8 +516,11 @@ function fmtTime(s) {
 <style lang="less" scoped>
 // ===== Google 风格：白底、蓝色主色、12px 圆角卡片，与系统其它页面一致 =====
 .google-page {
-  padding: 8px;
+  padding: 12px;
   margin: 0 auto;
+  background: #eef0f2;
+  min-height: 100%;
+  border-radius: 8px;
 }
 
 .page-header {
@@ -444,9 +546,8 @@ function fmtTime(s) {
 
 .page-subtitle {
   font-size: 13px;
-  color: #5f6368;
+  color: #3c4043;
   margin: 4px 0 0 0;
-  font-family: Consolas, Monaco, monospace;
 }
 
 .header-actions {
@@ -463,13 +564,13 @@ function fmtTime(s) {
 
 .auto-refresh-label {
   font-size: 13px;
-  color: #5f6368;
+  color: #3c4043;
 }
 
 .auto-refresh-count {
   font-size: 12px;
   color: #1a73e8;
-  font-family: Consolas, Monaco, monospace;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
 }
 
 .google-btn {
@@ -484,7 +585,7 @@ function fmtTime(s) {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-family: 'Roboto', 'Google Sans', 'Helvetica Neue', Arial, 'Microsoft YaHei', sans-serif;
   transition: background-color 0.2s;
 
   &:disabled {
@@ -531,9 +632,9 @@ function fmtTime(s) {
   margin-bottom: 16px;
   border-left: 4px solid #1e8e3e;
 
-  &.ok { border-left-color: #1e8e3e; }
-  &.warn { border-left-color: #f9ab00; }
-  &.bad { border-left-color: #d93025; }
+  &.ok { background: #f0f9f2; border-left-color: #1e8e3e; }
+  &.warn { background: #fdf6e3; border-left-color: #f9ab00; }
+  &.bad { background: #fdeceb; border-left-color: #d93025; }
 }
 
 .hero-main {
@@ -585,7 +686,7 @@ function fmtTime(s) {
   word-break: break-all;
 
   &.ok {
-    color: #5f6368;
+    color: #3c4043;
   }
 }
 
@@ -600,7 +701,7 @@ function fmtTime(s) {
   font-size: 15px;
   font-weight: 500;
   color: #202124;
-  font-family: Consolas, Monaco, monospace;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
 }
 
 .role-tag {
@@ -608,7 +709,7 @@ function fmtTime(s) {
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 11px;
-  font-family: Consolas, Monaco, monospace;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
 
   &.green { background: #e6f4ea; color: #1e8e3e; }
   &.blue { background: #e8f0fe; color: #1a73e8; }
@@ -634,7 +735,12 @@ function fmtTime(s) {
   padding: 12px 20px;
   border-bottom: 1px solid #f1f3f4;
   font-size: 13px;
-  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-family: 'Roboto', 'Google Sans', 'Helvetica Neue', Arial, 'Microsoft YaHei', sans-serif;
+  transition: background-color 0.15s;
+
+  &:hover {
+    background: #f8f9fa;
+  }
 
   &:last-child {
     border-bottom: none;
@@ -672,8 +778,7 @@ function fmtTime(s) {
   .check-detail {
     flex: 1;
     min-width: 0;
-    color: #5f6368;
-    font-family: Consolas, Monaco, monospace;
+    color: #3c4043;
     font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
@@ -682,26 +787,31 @@ function fmtTime(s) {
 
   .check-status {
     flex-shrink: 0;
+    font-size: 12px;
     font-weight: 500;
+    line-height: 18px;
+    padding: 1px 10px;
+    border-radius: 10px;
+    white-space: nowrap;
 
-    .check-row.ok & { color: #1e8e3e; }
-    .check-row.warn & { color: #f9ab00; }
-    .check-row.bad & { color: #d93025; }
+    .check-row.ok & { color: #1e8e3e; background: #e6f4ea; }
+    .check-row.warn & { color: #e8710a; background: #fef7e0; }
+    .check-row.bad & { color: #d93025; background: #fce8e6; }
   }
 }
 
 // ===== 详细信息 =====
 .detail-title {
   font-size: 13px;
-  color: #5f6368;
+  color: #3c4043;
   margin: 18px 4px 10px;
 }
 
 .panel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
 
   &:last-child {
     margin-bottom: 0;
@@ -712,10 +822,11 @@ function fmtTime(s) {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 20px;
-  font-size: 14px;
+  padding: 10px 16px;
+  font-size: 13px;
   font-weight: 500;
   color: #202124;
+  background: #f8f9fa;
   border-bottom: 1px solid #e8eaed;
 }
 
@@ -731,7 +842,14 @@ function fmtTime(s) {
 }
 
 .card-body {
-  padding: 10px 20px 16px;
+  padding: 8px 16px 12px;
+}
+
+// 视觉区与明细区之间的分隔线（本子横线样式）
+.body-divider {
+  height: 1px;
+  background: #e8eaed;
+  margin: 16px 0 10px;
 }
 
 .kv-row {
@@ -739,11 +857,11 @@ function fmtTime(s) {
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  padding: 4px 0;
+  padding: 3px 0;
   font-size: 13px;
 
   span {
-    color: #5f6368;
+    color: #3c4043;
     white-space: nowrap;
   }
 
@@ -752,8 +870,7 @@ function fmtTime(s) {
     font-weight: 500;
     text-align: right;
     word-break: break-all;
-    font-family: Consolas, Monaco, monospace;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .mono {
@@ -771,68 +888,96 @@ function fmtTime(s) {
 }
 
 .dim-inline {
-  color: #9aa0a6;
+  color: #5f6368;
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .dim {
-  color: #9aa0a6;
+  color: #5f6368;
   font-size: 12px;
 }
 
-// 磁盘列表
+// 磁盘列表（大圆盘居中横向排布，圆盘为卡片视觉主体）
 .disk-list {
-  margin-top: 10px;
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  gap: 20px;
+}
+
+.disk-item {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
 }
 
-.disk-top {
+.disk-side {
   display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  margin-bottom: 4px;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+// 圆盘内百分比放大
+:deep(.disk-circle .el-progress__text) {
+  font-size: 22px !important;
+  font-weight: 600;
+  color: #202124;
+}
+
+.disk-side {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .disk-mount {
-  color: #5f6368;
-  font-family: Consolas, Monaco, monospace;
-}
-
-.disk-pct {
-  color: #202124;
-  font-weight: 600;
-  font-family: Consolas, Monaco, monospace;
-}
-
-.bar-track {
-  height: 6px;
-  border-radius: 3px;
-  background: #f1f3f4;
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.4s ease;
-
-  &.ok { background: #1e8e3e; }
-  &.warn { background: #f9ab00; }
-  &.bad { background: #d93025; }
+  color: #3c4043;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .disk-bottom {
-  margin-top: 3px;
-  font-size: 11px;
-  color: #9aa0a6;
-  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  color: #5f6368;
 }
 
-.conn-bar {
-  margin: 6px 0 2px;
+// 连接数圆盘（PC 横向：圆盘在左、数字在右；移动端纵向居中）
+.gauge-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.gauge-info {
+  min-width: 0;
+  text-align: left;
+}
+
+.gauge-num {
+  font-size: 16px;
+  font-weight: 500;
+  color: #202124;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+
+  .gauge-total {
+    font-size: 12px;
+    color: #5f6368;
+  }
+}
+
+.gauge-label {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #3c4043;
 }
 
 // 复制块
@@ -844,7 +989,7 @@ function fmtTime(s) {
 
 .repl-title {
   font-size: 12px;
-  color: #5f6368;
+  color: #3c4043;
   margin-bottom: 6px;
 }
 
@@ -857,7 +1002,7 @@ function fmtTime(s) {
 
   b {
     color: #202124;
-    font-family: Consolas, Monaco, monospace;
+    font-family: Consolas, Monaco, 'Courier New', monospace;
   }
 }
 
@@ -875,7 +1020,7 @@ function fmtTime(s) {
   &.blue { background: #1a73e8; }
 }
 
-// ===== 对端 =====
+// ===== 对端（与本机卡片之间用分隔线 + 大间距明确区分） =====
 .peer-title {
   display: flex;
   align-items: center;
@@ -883,7 +1028,9 @@ function fmtTime(s) {
   font-size: 14px;
   font-weight: 500;
   color: #202124;
-  margin: 4px 4px 10px;
+  margin: 28px 4px 12px;
+  padding-top: 18px;
+  border-top: 1px solid #dadce0;
 }
 
 .peer-error {
@@ -914,11 +1061,10 @@ function fmtTime(s) {
   .el-table__header-wrapper th {
     background-color: #f8f9fa;
     border-bottom: 1px solid #e8eaed;
-    color: #5f6368;
+    color: #3c4043;
     font-weight: 500;
     font-size: 12px;
     padding: 6px 0;
-    font-family: Consolas, Monaco, monospace;
 
     .cell {
       padding: 0 14px;
@@ -929,7 +1075,7 @@ function fmtTime(s) {
     color: #202124;
     font-size: 12px;
     padding: 6px 0;
-    font-family: Consolas, Monaco, monospace;
+    font-family: Consolas, Monaco, 'Courier New', monospace;
     border-bottom: 1px solid #f1f3f4;
 
     .cell {
@@ -947,6 +1093,77 @@ function fmtTime(s) {
   --el-switch-on-color: #1a73e8;
 }
 
+// 圆圈进度环内文字
+:deep(.conn-circle .el-progress__text) {
+  color: #202124;
+  font-size: 20px !important;
+  font-weight: 600;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+}
+
+// ===== 移动端适配 =====
+@media (max-width: 768px) {
+  .google-page {
+    padding: 8px;
+  }
+
+  .page-title {
+    font-size: 18px;
+  }
+
+  .hero-banner {
+    padding: 14px 16px;
+  }
+
+  .hero-status {
+    font-size: 17px;
+  }
+
+  // 卡片单列，绝不超出屏幕
+  .panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .check-row {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .check-name {
+    width: 88px;
+  }
+
+  // 检查详情太挤时直接隐藏，保留状态列
+  .check-detail {
+    display: none;
+  }
+
+  .card-body {
+    padding: 10px 14px 14px;
+  }
+
+  .kv-row b {
+    font-size: 12px;
+  }
+
+  .hero-side {
+    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  // 圆盘类布局移动端全部纵向居中
+  .gauge-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .gauge-info {
+    text-align: center;
+  }
+}
+
 :deep(.el-loading-mask) {
   background-color: rgba(255, 255, 255, 0.8);
   z-index: 1 !important;
@@ -956,7 +1173,7 @@ function fmtTime(s) {
   }
 
   .el-loading-text {
-    color: #5f6368;
+    color: #3c4043;
     font-size: 13px;
   }
 }

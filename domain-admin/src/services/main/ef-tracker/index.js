@@ -104,7 +104,7 @@ export function replaceLanderUrl(payload) {
 }
 
 // ============================================================
-// 13. 双机状态面板 —— /query/status（唯一带鉴权的查询接口）
+// 13. 服务器状态面板 —— /query/status（唯一带鉴权的查询接口）
 // 返回 { local: { server, db, partitions, archive }, peer?: { reachable, status, error, addr } }
 // ============================================================
 
