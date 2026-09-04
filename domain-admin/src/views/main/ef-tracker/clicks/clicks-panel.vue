@@ -1186,6 +1186,12 @@ function toggleUnique() {
     tr:first-child th .cell {
       user-select: none;
     }
+
+    // 第一行列名（所有列的表头文字）加粗黑体
+    tr:first-child th .cell {
+      font-weight: 700;
+      color: #202124;
+    }
   }
 }
 

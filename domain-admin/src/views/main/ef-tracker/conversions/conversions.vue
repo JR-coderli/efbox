@@ -33,16 +33,7 @@
                   @change="handleSearch"
                 />
               </el-form-item>
-              <el-form-item label="回传状态">
-                <el-input v-model="filters.http_status_code" placeholder="如 200" clearable style="width: 120px" @keyup.enter="handleSearch" @clear="handleSearch" />
-              </el-form-item>
-              <el-form-item label="应回传">
-                <el-select v-model="filters.should_postback" clearable placeholder="全部" style="width: 110px" @change="handleSearch">
-                  <el-option label="是" value="true" />
-                  <el-option label="否" value="false" />
-                </el-select>
-              </el-form-item>
-              <!-- mid/tid 的精确查询已集成到多级表头第二行，此处不再重复放输入框 -->
+              <!-- mid/tid/应回传/回传状态 的精确查询已集成到多级表头第二行，此处不再重复放输入框 -->
             </el-form>
           </div>
           <div class="filter-actions">
@@ -126,21 +117,25 @@
           <el-table-column label="payout" align="right">
             <el-table-column prop="payout" align="right" class-name="col-money" :width="colWidths.payout" />
           </el-table-column>
-          <el-table-column label="应回传" align="center">
-            <el-table-column prop="should_postback" align="center" :width="colWidths.should_postback">
+          <el-table-column label="应下发" align="center" class-name="group-media-postback">
+            <el-table-column prop="should_postback" align="center" class-name="group-media-postback" :width="colWidths.should_postback">
+              <template #header>
+                <el-select
+                  v-model="filters.should_postback"
+                  size="small"
+                  clearable
+                  placeholder="全部"
+                  class="header-filter-input"
+                  @change="handleSearch"
+                >
+                  <el-option label="是" value="true" />
+                  <el-option label="否" value="false" />
+                </el-select>
+              </template>
               <template #default="{ row }">
                 <el-tag :type="row.should_postback ? 'success' : 'danger'" size="small">{{ row.should_postback ? '是' : '否' }}</el-tag>
               </template>
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="回传状态" align="center">
-            <el-table-column prop="http_status_code" align="center" :width="colWidths.http_status_code" />
-          </el-table-column>
-          <el-table-column label="media_postback_url">
-            <el-table-column prop="media_postback_url" :width="colWidths.media_postback_url" min-width="200" show-overflow-tooltip />
-          </el-table-column>
-          <el-table-column label="response_body">
-            <el-table-column prop="response_body" :width="colWidths.response_body" min-width="220" show-overflow-tooltip />
           </el-table-column>
           <el-table-column label="下发媒体时间">
             <el-table-column prop="posted_at" :width="colWidths.posted_at">
@@ -148,6 +143,28 @@
                 <span class="date-text">{{ fmtTime(row.posted_at) }}</span>
               </template>
             </el-table-column>
+          </el-table-column>
+          <el-table-column label="下发状态" align="center">
+            <el-table-column prop="http_status_code" align="center" :width="colWidths.http_status_code">
+              <template #header>
+                <el-input
+                  v-model="filters.http_status_code"
+                  size="small"
+                  placeholder="下发状态"
+                  clearable
+                  class="header-filter-input"
+                  @input="(v) => (filters.http_status_code = String(v ?? '').replace(/\D/g, ''))"
+                  @keyup.enter="handleSearch"
+                  @clear="handleSearch"
+                />
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="media_postback_url">
+            <el-table-column prop="media_postback_url" :width="colWidths.media_postback_url" min-width="200" show-overflow-tooltip />
+          </el-table-column>
+          <el-table-column label="response_body">
+            <el-table-column prop="response_body" :width="colWidths.response_body" min-width="220" show-overflow-tooltip />
           </el-table-column>
           <template #empty>
             <el-empty description="暂无数据" />
@@ -192,10 +209,12 @@ const pagination = reactive({
 // 列顺序（模板里的 el-table-column 顺序）与这里一一对应。
 const COLUMN_KEYS = [
   'id', 'created_at', 'system_click_id', 'media_click_id', 'mid', 'tid',
-  'media', 'tracker', 'payout', 'should_postback', 'http_status_code',
-  'media_postback_url', 'response_body', 'posted_at'
+  'media', 'tracker', 'payout', 'should_postback', 'posted_at', 'http_status_code',
+  'media_postback_url', 'response_body'
 ]
-const colWidths = reactive(Object.fromEntries(COLUMN_KEYS.map((k) => [k, null]))) // null = 未拖过，走各自 min-width
+// 各列初始宽度：null = 未拖过，走各自 min-width；表头带过滤控件的列给足默认宽度，避免控件被挤压
+const DEFAULT_COL_WIDTHS = { created_at: 180, should_postback: 120, http_status_code: 120, posted_at: 180 }
+const colWidths = reactive(Object.fromEntries(COLUMN_KEYS.map((k) => [k, DEFAULT_COL_WIDTHS[k] ?? null])))
 
 const tableRef = ref(null)
 const colDrag = { col: null, startX: 0, startWidth: 0, active: false }
@@ -432,7 +451,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-top: 30px;
+  // padding-top: 30px;
 }
 
 .filter-form {
@@ -523,6 +542,13 @@ onUnmounted(() => {
     min-width: 0 !important;
   }
 
+  // 分组分隔线：应回传列是「我们 → 媒体回传」分组的起始（左边是广告主 → 我们的回传数据），
+  // 其左侧画一条明显的深色竖线，表头两行 + 表体单元格都要有
+  th.group-media-postback,
+  td.group-media-postback {
+    border-left: 2px solid #bdc1c6;
+  }
+
   .el-table__header-wrapper {
     th {
       background-color: #f1f3f4;
@@ -552,6 +578,12 @@ onUnmounted(() => {
     // 第一行列名是自定义拖动区域：禁止选中文字，拖动手感更干净
     tr:first-child th .cell {
       user-select: none;
+    }
+
+    // 第一行列名（所有列的表头文字）加粗黑体
+    tr:first-child th .cell {
+      font-weight: 700;
+      color: #202124;
     }
   }
 
@@ -598,10 +630,19 @@ onUnmounted(() => {
   width: 100%;
 }
 
-/* payout 金额列：等宽数字字体 + 表格数字对齐（与媒体点击 cost 列一致） */
+/* payout 金额列：等宽数字字体 + 表格数字对齐 + 单元格内垂直居中（与媒体点击 cost 列一致） */
 :deep(.google-table td.col-money .cell) {
   font-family: 'Roboto Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
   font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+/* 金额列表头：加粗 + 用表格同款表头字重的字体 */
+:deep(.google-table th.col-money .cell) {
+  font-weight: 700;
+  font-family: 'Roboto Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
 }
 
 .pagination-wrapper {
