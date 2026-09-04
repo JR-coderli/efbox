@@ -662,7 +662,7 @@ onUnmounted(() => {
    行高对齐 td(48px) + 1px 分隔线（同媒体点击 Tab） */
 .rows-loading-mask {
   position: absolute;
-  top: 135px;
+  top: 143px; /* 工具栏 ~53px + 两级表头 ~90px（第一行列名 44 + 第二行过滤行 ~46） */
   left: 0;
   right: 0;
   bottom: 0;

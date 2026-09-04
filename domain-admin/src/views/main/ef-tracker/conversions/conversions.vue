@@ -68,11 +68,29 @@
               </template>
             </el-table-column>
           </el-table-column>
+          <!-- 广告主/客户名：oid → ab_offers.aid → ab_advertisers.name（oid=0 或未配 aid 时为空） -->
+          <el-table-column label="广告主">
+            <el-table-column prop="names.advertiser" :width="colWidths.advertiser" min-width="110" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.names?.advertiser || '-' }}</span>
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="payout" align="right">
+            <el-table-column prop="payout" align="right" class-name="col-money" :width="colWidths.payout" />
+          </el-table-column>
           <el-table-column label="system_click_id">
             <el-table-column prop="system_click_id" :width="colWidths.system_click_id" min-width="200" show-overflow-tooltip />
           </el-table-column>
           <el-table-column label="media_click_id">
             <el-table-column prop="media_click_id" :width="colWidths.media_click_id" min-width="160" show-overflow-tooltip />
+          </el-table-column>
+          <el-table-column label="Media_name">
+            <el-table-column prop="names.media" :width="colWidths.media" min-width="110" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.names?.media || '-' }}</span>
+              </template>
+            </el-table-column>
           </el-table-column>
           <el-table-column label="mid" align="center">
             <el-table-column prop="mid" align="center" :width="colWidths.mid">
@@ -87,6 +105,13 @@
                   @keyup.enter="handleSearch"
                   @clear="handleSearch"
                 />
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="Tracker_name">
+            <el-table-column prop="names.tracker" :width="colWidths.tracker" min-width="110" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.names?.tracker || '-' }}</span>
               </template>
             </el-table-column>
           </el-table-column>
@@ -105,23 +130,6 @@
                 />
               </template>
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="媒体">
-            <el-table-column prop="names.media" :width="colWidths.media" min-width="110" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.names?.media || '-' }}</span>
-              </template>
-            </el-table-column>
-          </el-table-column>
-          <el-table-column label="Tracker">
-            <el-table-column prop="names.tracker" :width="colWidths.tracker" min-width="110" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.names?.tracker || '-' }}</span>
-              </template>
-            </el-table-column>
-          </el-table-column>
-          <el-table-column label="payout" align="right">
-            <el-table-column prop="payout" align="right" class-name="col-money" :width="colWidths.payout" />
           </el-table-column>
           <el-table-column label="应下发" align="center" class-name="group-media-postback">
             <el-table-column prop="should_postback" align="center" class-name="group-media-postback" :width="colWidths.should_postback">
@@ -215,12 +223,12 @@ const pagination = reactive({
 // 鼠标移到第一行某个 th 右缘 8px 内 → col-resize 光标；按下拖动 → 反查列，新宽度写回 colWidths。
 // 列顺序（模板里的 el-table-column 顺序）与这里一一对应。
 const COLUMN_KEYS = [
-  'id', 'created_at', 'system_click_id', 'media_click_id', 'mid', 'tid',
-  'media', 'tracker', 'payout', 'should_postback', 'posted_at', 'http_status_code',
+  'id', 'created_at', 'advertiser', 'payout', 'system_click_id', 'media_click_id',
+  'media', 'mid', 'tracker', 'tid', 'should_postback', 'posted_at', 'http_status_code',
   'media_postback_url', 'response_body'
 ]
 // 各列初始宽度：null = 未拖过，走各自 min-width；表头带过滤控件的列给足默认宽度，避免控件被挤压
-const DEFAULT_COL_WIDTHS = { created_at: 180, should_postback: 120, http_status_code: 120, posted_at: 180 }
+const DEFAULT_COL_WIDTHS = { created_at: 180, tracker: 200, should_postback: 120, http_status_code: 120, posted_at: 180 }
 const colWidths = reactive(Object.fromEntries(COLUMN_KEYS.map((k) => [k, DEFAULT_COL_WIDTHS[k] ?? null])))
 
 const tableRef = ref(null)
@@ -547,7 +555,7 @@ onUnmounted(() => {
    表头不加蒙版、完全可见可交互。行高对齐 td(48px) + 1px 分隔线（同媒体点击 Tab） */
 .rows-loading-mask {
   position: absolute;
-  top: 82px;
+  top: 100px; /* 本 Tab 第二行表头含 el-select（应下发下拉框），渲染高度比纯 input 高 ~10px */
   left: 0;
   right: 0;
   bottom: 0;

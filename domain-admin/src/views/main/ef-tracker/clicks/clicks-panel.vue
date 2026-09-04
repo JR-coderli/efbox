@@ -1117,7 +1117,7 @@ function toggleUnique() {
    行高对齐 td(48px) + 1px 分隔线 */
 .rows-loading-mask {
   position: absolute;
-  top: 82px; /* 表头高度（第一行列名 44 + 第二行过滤行 ~38）：表头区域不在蒙版内 */
+  top: 90px; /* 两级表头实测高度：第一行列名 44 + 第二行过滤行（含 padding）~46，留余量 */
   left: 0;
   right: 0;
   bottom: 0;

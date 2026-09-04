@@ -40,7 +40,9 @@ function normalizeConversion(item) {
     names: rawNames
       ? {
           media: rawNames.media ?? rawNames.Media ?? '',
-          tracker: rawNames.tracker ?? rawNames.Tracker ?? ''
+          tracker: rawNames.tracker ?? rawNames.Tracker ?? '',
+          offer: rawNames.offer ?? rawNames.Offer ?? '',
+          advertiser: rawNames.advertiser ?? rawNames.Advertiser ?? ''
         }
       : null
   }
