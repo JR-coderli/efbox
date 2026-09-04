@@ -149,6 +149,49 @@
                     @clear="handleSearch"
                   />
                 </template>
+                <!-- http状态：按区间着色（2xx 绿 / 3xx 蓝 / 4xx 橙 / 5xx 红 / 空 灰） -->
+                <template v-if="col.key === 'http_status'" #default="{ row }">
+                  <span class="status-chip" :class="statusChipClass(row.http_status)">{{ row.http_status ?? '-' }}</span>
+                </template>
+              </el-table-column>
+              <!-- error_code：徽章底色（等宽字体 + 圆角胶囊） -->
+              <el-table-column
+                v-else-if="col.key === 'error_code'"
+                :prop="col.prop"
+                :width="col.width"
+                :min-width="col.minWidth"
+                :align="col.align"
+                :show-overflow-tooltip="col.overflow"
+              >
+                <template #default="{ row }">
+                  <span class="code-chip">{{ row.error_code || '-' }}</span>
+                </template>
+              </el-table-column>
+              <!-- method：请求方法徽章（GET 蓝 / POST 绿 / 其他灰） -->
+              <el-table-column
+                v-else-if="col.key === 'method'"
+                :prop="col.prop"
+                :width="col.width"
+                :min-width="col.minWidth"
+                :align="col.align"
+                :show-overflow-tooltip="col.overflow"
+              >
+                <template #default="{ row }">
+                  <span class="method-chip" :class="methodChipClass(row.request_method)">{{ row.request_method || '-' }}</span>
+                </template>
+              </el-table-column>
+              <!-- ip：等宽字体（与金额列同款），便于逐位比对 -->
+              <el-table-column
+                v-else-if="col.key === 'ip'"
+                :prop="col.prop"
+                :width="col.width"
+                :min-width="col.minWidth"
+                :align="col.align"
+                :show-overflow-tooltip="col.overflow"
+              >
+                <template #default="{ row }">
+                  <span class="mono-text">{{ row.ip_address || '-' }}</span>
+                </template>
               </el-table-column>
               <!-- 普通字段列 -->
               <el-table-column
@@ -337,7 +380,7 @@ const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
   { key: 'request_url', label: 'request_url', type: 'plain', prop: 'request_url', minWidth: 220, overflow: true },
-  { key: 'error_code', label: 'error_code', type: 'plain', prop: 'error_code', width: 120, overflow: true },
+  { key: 'error_code', label: 'error_code', type: 'plain', prop: 'error_code', width: 220, overflow: true },
   { key: 'http_status', label: 'http状态', type: 'filter', prop: 'http_status', filterKey: 'http_status', width: 110, align: 'center' },
   { key: 'error_message', label: 'error_message', type: 'plain', prop: 'error_message', minWidth: 220, overflow: true },
   { key: 'error_reason', label: 'error_reason', type: 'plain', prop: 'error_reason', minWidth: 180, overflow: true },
@@ -351,6 +394,25 @@ const DEFAULT_COLUMNS = [
 // 表头过滤输入框统一入口：数字列（mid/tid/http_status）只保留数字（接口对非数字返回 400）
 function onFilterInput(col, v) {
   filters[col.filterKey] = String(v ?? '').replace(/\D/g, '')
+}
+
+// ===== 单元格特殊样式 =====
+// http状态按区间着色：2xx 成功(绿) / 3xx 重定向(蓝) / 4xx 客户端错(橙) / 5xx 服务端错(红) / 空(灰)
+function statusChipClass(code) {
+  if (code == null || code === '') return 'sc-none'
+  const n = Number(code)
+  if (n >= 200 && n < 300) return 'sc-2xx'
+  if (n >= 300 && n < 400) return 'sc-3xx'
+  if (n >= 400 && n < 500) return 'sc-4xx'
+  if (n >= 500) return 'sc-5xx'
+  return 'sc-none'
+}
+
+// 请求方法徽章：GET 蓝 / POST 绿 / 其他灰
+function methodChipClass(m) {
+  if (m === 'GET') return 'mc-get'
+  if (m === 'POST') return 'mc-post'
+  return 'mc-other'
 }
 
 const columns = ref(DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden })))
@@ -764,6 +826,49 @@ onUnmounted(() => {
 .date-text {
   color: #5f6368;
   font-size: 13px;
+}
+
+/* ===== 单元格特殊样式 ===== */
+/* 通用胶囊底：等宽字体 + 圆角 + 轻底色，长文本可截断（不换行） */
+.status-chip,
+.code-chip,
+.method-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-family: 'Roboto Mono', 'Consolas', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+/* http状态：2xx 绿 / 3xx 蓝 / 4xx 橙 / 5xx 红 / 空 灰（沿用漏斗徽章配色体系） */
+.sc-2xx { background: #e6f4ea; color: #137333; }
+.sc-3xx { background: #e8f0fe; color: #1a73e8; }
+.sc-4xx { background: #fef7e0; color: #b06000; }
+.sc-5xx { background: #fce8e6; color: #c5221f; }
+.sc-none { background: #f1f3f4; color: #80868b; }
+
+/* error_code：中性深灰胶囊（错误码本身即语义，不按内容分色，醒目但不刺眼） */
+.code-chip {
+  background: #f1f3f4;
+  color: #3c4043;
+}
+
+/* method：GET 蓝 / POST 绿 / 其他灰 */
+.mc-get { background: #e8f0fe; color: #1a73e8; }
+.mc-post { background: #e6f4ea; color: #137333; }
+.mc-other { background: #f1f3f4; color: #5f6368; }
+
+/* ip：等宽字体（逐位比对友好），不加底色 */
+.mono-text {
+  font-family: 'Roboto Mono', 'Consolas', monospace;
+  font-size: 12px;
 }
 
 /* 表头过滤输入框撑满列宽 */
