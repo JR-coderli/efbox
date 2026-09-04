@@ -340,7 +340,8 @@ import Sortable from 'sortablejs'
 import useSystemStore from '@/stores/main/system/system'
 
 // keyword 可搜索的列（与后端 /query/clicks keyword 搜索范围一致，任一字段命中即返回）。
-// media_click_id / system_click_id 有表头精确输入框（走专用查询串），不再建议走 keyword。
+// campaign_name/adset_name/creative_name/ip_address/media_click_id/system_click_id 均有表头
+// 精确输入框（走专用查询串），keyword 已无独占字段，仅保留提示说明。
 const KEYWORD_FIELDS = [
   'campaign_name',
   'adset_name',
@@ -397,7 +398,11 @@ const filters = reactive({
   lid: '',
   path_code: '',
   media_click_id: '',   // 表头精确查询：走 media_click_id 查询串（非 keyword）
-  system_click_id: ''   // 表头精确查询：走 system_click_id 查询串（非 keyword）
+  system_click_id: '',  // 表头精确查询：走 system_click_id 查询串（非 keyword）
+  campaign_name: '',    // 表头精确查询：广告系列名（2026-09-03 接口新增的专属查询串）
+  adset_name: '',       // 表头精确查询：广告组名（同上）
+  creative_name: '',    // 表头精确查询：广告创意名（同上）
+  ip_address: ''        // 表头精确查询：客户端 IP（同上）
 })
 
 // 表头过滤输入框统一入口：digits 列（mid/tid/oid/lid）只保留数字，其余原样
@@ -743,7 +748,7 @@ async function openDetail(step, row) {
 const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
-  { key: 'ip', label: 'ip', type: 'plain', prop: 'ip_address', width: 120, overflow: true, defaultHidden: true },
+  { key: 'ip', label: 'ip', type: 'filter', prop: 'ip_address', filterKey: 'ip_address', minWidth: 140, overflow: true, defaultHidden: true },
   { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 350, align: 'center' },
   { key: 'total_time', label: '总用时', type: 'duration', width: 90, align: 'center' },
   { key: 'preview_img', label: '预览图', type: 'screenshot', width: 120, align: 'center' },
@@ -762,11 +767,12 @@ const DEFAULT_COLUMNS = [
   { key: 'names.lander', label: 'Lander_name', type: 'names', nameKey: 'lander', prop: 'names.lander', minWidth: 210, overflow: true },
   { key: 'names.offer', label: 'Offer_name', type: 'names', nameKey: 'offer', prop: 'names.offer', minWidth: 210, overflow: true },
   { key: 'path_code', label: 'code', type: 'filter', prop: 'path_code', filterKey: 'path_code', width: 140, overflow: true, defaultHidden: true },
-  { key: 'campaign_name', label: 'campaign_name', type: 'plain', prop: 'campaign_name', minWidth: 160, overflow: true, defaultHidden: true },
+  // campaign_name/adset_name/creative_name/ip_address：2026-09-03 接口新增的专属精确查询串 → 表头过滤列
+  { key: 'campaign_name', label: 'campaign_name', type: 'filter', prop: 'campaign_name', filterKey: 'campaign_name', minWidth: 160, overflow: true, defaultHidden: true },
   { key: 'campaign_id', label: 'campaign_id', type: 'plain', prop: 'campaign_id', minWidth: 120, overflow: true, defaultHidden: true },
-  { key: 'adset_name', label: 'adset_name', type: 'plain', prop: 'adset_name', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 'adset_name', label: 'adset_name', type: 'filter', prop: 'adset_name', filterKey: 'adset_name', minWidth: 140, overflow: true, defaultHidden: true },
   { key: 'adset_id', label: 'adset_id', type: 'plain', prop: 'adset_id', minWidth: 100, overflow: true, defaultHidden: true },
-  { key: 'creative_name', label: 'creative_name', type: 'plain', prop: 'creative_name', minWidth: 100, overflow: true, defaultHidden: true },
+  { key: 'creative_name', label: 'creative_name', type: 'filter', prop: 'creative_name', filterKey: 'creative_name', minWidth: 140, overflow: true, defaultHidden: true },
   { key: 'creative_id', label: 'creative_id', type: 'plain', prop: 'creative_id', minWidth: 100, overflow: true, defaultHidden: true },
   { key: 'subid', label: 'subid', type: 'plain', prop: 'subid', minWidth: 100, overflow: true, defaultHidden: true },
   { key: 's1', label: 's1', type: 'plain', prop: 's1', minWidth: 90, overflow: true, defaultHidden: true },
@@ -899,6 +905,11 @@ function buildParams() {
   // 两个 click_id 走专用精确查询串（避免 keyword 模糊扫多列，性能更好）
   if (filters.media_click_id) p.media_click_id = filters.media_click_id
   if (filters.system_click_id) p.system_click_id = filters.system_click_id
+  // campaign/adset/creative/ip 四个专属精确查询串（2026-09-03 接口新增）
+  if (filters.campaign_name) p.campaign_name = filters.campaign_name
+  if (filters.adset_name) p.adset_name = filters.adset_name
+  if (filters.creative_name) p.creative_name = filters.creative_name
+  if (filters.ip_address) p.ip_address = filters.ip_address
   p.with_names = true // 返回 mid/tid/oid/lid 对应的名称（names 字段）
   p.with_funnel = true // 返回归因漏斗（funnel：到达LP / 点击Offer / 转化 / 媒体下发）
   if (uniqueOnly.value) p.unique = true // 去重：按 media_click_id 只保留最新一条
