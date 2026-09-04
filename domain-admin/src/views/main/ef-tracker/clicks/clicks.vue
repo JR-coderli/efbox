@@ -93,7 +93,7 @@ watch(
   color: #5f6368;
   cursor: pointer;
   user-select: none;
-  border-bottom: 3px solid #e8eaed;
+  border-bottom: 3px solid transparent;
   transition: color 0.2s;
 
   &:not(:last-child) {

@@ -14,6 +14,7 @@
                   clearable
                   style="width: 240px"
                   @keyup.enter="handleSearch"
+                  @clear="handleSearch"
                 >
                   <template #suffix>
                     <el-tooltip
@@ -46,6 +47,7 @@
                   end-placeholder="结束日期"
                   clearable
                   style="width: 240px"
+                  @change="handleSearch"
                 />
               </el-form-item>
               <!-- mid/tid/oid/lid/path_code 的精确查询已集成到多级表头第二行，此处不再重复放输入框 -->
@@ -90,8 +92,6 @@
             >
               <span>{{ uniqueOnly ? '已去重' : '去重' }}</span>
             </button>
-            <button class="google-btn google-btn-primary" @click="handleSearch">搜索</button>
-            <button class="google-btn google-btn-secondary" @click="handleReset">重置</button>
             <button class="google-btn google-btn-secondary" @click="handleRefresh" :disabled="loading || refreshCountdown > 0">
               <svg class="btn-icon" :class="{ 'is-loading': loading }" viewBox="0 0 24 24">
                 <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
@@ -368,13 +368,8 @@ const tableMaxHeight = computed(() => 'calc(100vh - 360px)')
 const tz = ref(8)
 const tzOptions = [
   { label: 'UTC+8', value: 8 },
-  { label: 'UTC+7', value: 7 },
-  { label: 'UTC+5:30', value: 5.5 },
   { label: 'UTC+0', value: 0 },
-  { label: 'UTC-3', value: -3 },
-  { label: 'UTC-4', value: -4 },
-  { label: 'UTC-5', value: -5 },
-  { label: 'UTC-8', value: -8 }
+  { label: 'UTC-5', value: -5 }
 ]
 
 // 该表精确过滤参数（全部可选，不传即不过滤）
@@ -751,7 +746,7 @@ const DEFAULT_COLUMNS = [
   { key: 'names.tracker', label: 'Tracker_name', type: 'names', nameKey: 'tracker', prop: 'names.tracker', minWidth: 210, overflow: true },
   { key: 'names.lander', label: 'Lander_name', type: 'names', nameKey: 'lander', prop: 'names.lander', minWidth: 210, overflow: true },
   { key: 'names.offer', label: 'Offer_name', type: 'names', nameKey: 'offer', prop: 'names.offer', minWidth: 210, overflow: true },
-  { key: 'path_code', label: 'code', type: 'filter', prop: 'path_code', filterKey: 'path_code', width: 340, overflow: true, defaultHidden: true },
+  { key: 'path_code', label: 'code', type: 'filter', prop: 'path_code', filterKey: 'path_code', width: 140, overflow: true, defaultHidden: true },
   { key: 'campaign_name', label: 'campaign_name', type: 'plain', prop: 'campaign_name', minWidth: 160, overflow: true, defaultHidden: true },
   { key: 'campaign_id', label: 'campaign_id', type: 'plain', prop: 'campaign_id', minWidth: 120, overflow: true, defaultHidden: true },
   { key: 'adset_name', label: 'adset_name', type: 'plain', prop: 'adset_name', minWidth: 100, overflow: true, defaultHidden: true },
@@ -915,21 +910,6 @@ function handleSearch() {
   loadData()
 }
 
-function handleReset() {
-  filters.keyword = ''
-  filters.mid = ''
-  filters.tid = ''
-  filters.oid = ''
-  filters.lid = ''
-  filters.path_code = ''
-  filters.media_click_id = ''
-  filters.system_click_id = ''
-  dateRange.value = []
-  tz.value = 8
-  pagination.page = 1
-  loadData()
-}
-
 function handleSizeChange(size) {
   pagination.pageSize = size
   pagination.page = 1
@@ -1018,7 +998,7 @@ function toggleUnique() {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-top: 30px;
+  // padding-top: 30px;
 }
 
 .filter-form {
