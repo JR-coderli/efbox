@@ -555,7 +555,7 @@ onUnmounted(() => {
    表头不加蒙版、完全可见可交互。行高对齐 td(48px) + 1px 分隔线（同媒体点击 Tab） */
 .rows-loading-mask {
   position: absolute;
-  top: 100px; /* 本 Tab 第二行表头含 el-select（应下发下拉框），渲染高度比纯 input 高 ~10px */
+  top: 92px; /* 两级表头高度：第一行列名 44 + 第二行过滤行 ~48（含 el-select 略高的余量） */
   left: 0;
   right: 0;
   bottom: 0;
@@ -647,9 +647,13 @@ onUnmounted(() => {
 
         // 横向 padding 放在 .cell 上（Element 原生模式）而非 td 上：
         // .cell 自带 overflow:hidden + ellipsis，padding 在其盒模型内部，
-        // 省略号在 .cell 内截断，绝不会越过 td 边界
+        // 省略号在 .cell 内截断，绝不会越过 td 边界。
+        // 垂直居中用 line-height 方案而非 flex：flex 会让裸文本列（system_click_id 等
+        // 无 default 插槽的纯字段列）失去 text-overflow 省略号、且贴边无对齐
         .cell {
           padding: 0 14px;
+          text-align: center;
+          line-height: 47px; /* (行高 48 - 1px 分隔线) / 1，单行文本垂直居中 */
         }
       }
     }
