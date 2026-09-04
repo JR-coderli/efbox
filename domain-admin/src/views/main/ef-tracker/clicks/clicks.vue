@@ -23,6 +23,7 @@
 <script setup>
 import { ref, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { localCache } from '@/utils/cache'
 import ClicksPanel from './clicks-panel.vue'
 import ConversionsPanel from '../conversions/conversions.vue'
 import ErrorLogsPanel from '../error-logs/error-logs.vue'
@@ -39,12 +40,21 @@ const TABS = [
 
 const TAB_KEYS = TABS.map((t) => t.key)
 
-// ?tab= 参数 → 合法 tab key；非法值/缺省 → 回退第一个 Tab
+// 记住用户最后一次所在的 Tab（localStorage，跨会话保留）：
+// 再次从菜单进入「日志」页且 URL 未指定 ?tab= 时，直接回到上次离开的 Tab
+const LAST_TAB_KEY = 'ef_tracker_last_tab'
+function readLastTab() {
+  const saved = localCache.getCache(LAST_TAB_KEY)
+  return TAB_KEYS.includes(saved) ? saved : 'clicks'
+}
+
+// ?tab= 参数 → 合法 tab key；优先级：URL 显式指定 > 上次记住的 > 第一个 Tab
 function normalizeTab(tab) {
-  return TAB_KEYS.includes(tab) ? tab : 'clicks'
+  return TAB_KEYS.includes(tab) ? tab : readLastTab()
 }
 
 const activeTab = ref(normalizeTab(route.query.tab))
+localCache.setCache(LAST_TAB_KEY, activeTab.value)
 const visited = reactive({ clicks: false, conversions: false, errors: false })
 visited[activeTab.value] = true
 
@@ -52,6 +62,7 @@ function switchTab(tab) {
   if (!tab || tab === activeTab.value) return
   activeTab.value = tab
   visited[tab] = true
+  localCache.setCache(LAST_TAB_KEY, tab) // 记住最后一次选择的 Tab
   // 同步到 ?tab=（replace 不产生历史记录；刷新/分享链接/旧路径 redirect 都能还原 Tab）
   router.replace({ query: { ...route.query, tab } })
 }
@@ -64,6 +75,7 @@ watch(
     if (t !== activeTab.value) {
       activeTab.value = t
       visited[t] = true
+      localCache.setCache(LAST_TAB_KEY, t)
     }
   }
 )

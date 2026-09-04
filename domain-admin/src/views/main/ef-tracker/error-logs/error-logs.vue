@@ -14,6 +14,7 @@
                   clearable
                   style="width: 260px"
                   @keyup.enter="handleSearch"
+                  @clear="handleSearch"
                 />
               </el-form-item>
               <el-form-item label="时区">
@@ -29,20 +30,13 @@
                   end-placeholder="结束日期"
                   clearable
                   style="width: 240px"
+                  @change="handleSearch"
                 />
               </el-form-item>
-              <el-form-item label="媒体ID">
-                <el-input v-model="filters.mid" placeholder="mid" clearable style="width: 110px" @keyup.enter="handleSearch" />
-              </el-form-item>
-              <el-form-item label="Tracker">
-                <el-input v-model="filters.tid" placeholder="tid" clearable style="width: 110px" @keyup.enter="handleSearch" />
-              </el-form-item>
-              <el-form-item label="HTTP状态">
-                <el-input v-model="filters.http_status" placeholder="如 500" clearable style="width: 120px" @keyup.enter="handleSearch" />
-              </el-form-item>
               <el-form-item label="排除错误码">
-                <el-input v-model="filters.exclude_error_code" placeholder="如 SYSTEM_CLICK_FORMAT_ERR" clearable style="width: 240px" @keyup.enter="handleSearch" />
+                <el-input v-model="filters.exclude_error_code" placeholder="如 SYSTEM_CLICK_FORMAT_ERR" clearable style="width: 240px" @keyup.enter="handleSearch" @clear="handleSearch" />
               </el-form-item>
+              <!-- mid/tid/http_status 的精确查询已集成到多级表头第二行，此处不再重复放输入框 -->
             </el-form>
           </div>
           <div class="filter-actions">
@@ -71,7 +65,7 @@
                     <span class="col-drag-handle" title="拖拽排序">
                       <svg class="grip-icon" viewBox="0 0 10 16"><circle cx="2.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></svg>
                     </span>
-                    <el-checkbox v-model="col.visible">{{ col.label }}</el-checkbox>
+                    <el-checkbox v-model="col.visible" @change="rebindHeaderDrag">{{ col.label }}</el-checkbox>
                   </li>
                 </ul>
               </div>
@@ -115,29 +109,53 @@
           :tooltip-options="{ popperClass: 'error-logs-overflow-tooltip' }"
           @selection-change="onSelectionChange"
         >
+          <!-- 勾选列也是两级表头（第二行空白），与其他列对齐 -->
           <el-table-column type="selection" width="48" />
           <template v-for="col in visibleColumns" :key="col.key">
-            <!-- 创建时间（格式化）-->
-            <el-table-column
-              v-if="col.type === 'time'"
-              :label="col.label"
-              :prop="col.prop"
-              :width="col.width"
-            >
-              <template #default="{ row }">
-                <span class="date-text">{{ fmtTime(row.created_at) }}</span>
-              </template>
+            <!-- 所有列统一两级表头：第一行列名、第二行过滤行——type=filter 列内嵌精确查询输入框，其余列空白 -->
+            <el-table-column :label="col.label" :align="col.align">
+              <!-- 创建时间（格式化）-->
+              <el-table-column
+                v-if="col.type === 'time'"
+                :prop="col.prop"
+                :width="col.width"
+              >
+                <template #default="{ row }">
+                  <span class="date-text">{{ fmtTime(row.created_at) }}</span>
+                </template>
+              </el-table-column>
+              <!-- 表头精确查询列（mid/tid/http_status）：第二行为只允许数字的输入框 -->
+              <el-table-column
+                v-else-if="col.type === 'filter'"
+                :prop="col.prop"
+                :width="col.width"
+                :min-width="col.minWidth"
+                :align="col.align"
+                :show-overflow-tooltip="col.overflow"
+              >
+                <template #header>
+                  <el-input
+                    v-model="filters[col.filterKey]"
+                    size="small"
+                    :placeholder="col.label"
+                    clearable
+                    class="header-filter-input"
+                    @input="(v) => onFilterInput(col, v)"
+                    @keyup.enter="handleSearch"
+                    @clear="handleSearch"
+                  />
+                </template>
+              </el-table-column>
+              <!-- 普通字段列 -->
+              <el-table-column
+                v-else
+                :prop="col.prop"
+                :width="col.width"
+                :min-width="col.minWidth"
+                :align="col.align"
+                :show-overflow-tooltip="col.overflow"
+              />
             </el-table-column>
-            <!-- 普通字段列 -->
-            <el-table-column
-              v-else
-              :label="col.label"
-              :prop="col.prop"
-              :width="col.width"
-              :min-width="col.minWidth"
-              :align="col.align"
-              :show-overflow-tooltip="col.overflow"
-            />
           </template>
           <template #empty>
             <el-empty description="暂无数据" />
@@ -316,7 +334,7 @@ function calcTableHeight() {
 }
 
 // ===== 列配置（数据驱动，齿轮面板做显隐 / 拖拽排序）=====
-// type：plain 纯字段 / time 时间格式化
+// type：plain 纯字段 / time 时间格式化 / filter 表头精确查询（第二行输入框，走专用查询串）
 // 不做持久化：组件每次重建（路由切换 / 刷新）都回到 DEFAULT_COLUMNS 的默认顺序与可见性
 // defaultHidden: true → 该列默认隐藏（可在齿轮面板里手动勾开）
 const DEFAULT_COLUMNS = [
@@ -324,15 +342,20 @@ const DEFAULT_COLUMNS = [
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
   { key: 'request_url', label: 'request_url', type: 'plain', prop: 'request_url', minWidth: 220, overflow: true },
   { key: 'error_code', label: 'error_code', type: 'plain', prop: 'error_code', width: 120, overflow: true },
-  { key: 'http_status', label: 'http状态', type: 'plain', prop: 'http_status', width: 90, align: 'center', defaultHidden: true },
+  { key: 'http_status', label: 'http状态', type: 'filter', prop: 'http_status', filterKey: 'http_status', width: 110, align: 'center' },
   { key: 'error_message', label: 'error_message', type: 'plain', prop: 'error_message', minWidth: 220, overflow: true },
   { key: 'error_reason', label: 'error_reason', type: 'plain', prop: 'error_reason', minWidth: 180, overflow: true },
   { key: 'endpoint', label: 'endpoint', type: 'plain', prop: 'endpoint', minWidth: 160, overflow: true },
   { key: 'method', label: 'method', type: 'plain', prop: 'request_method', width: 80, align: 'center' },
-  { key: 'mid', label: 'mid', type: 'plain', prop: 'mid', width: 70, align: 'center', defaultHidden: true },
-  { key: 'tid', label: 'tid', type: 'plain', prop: 'tid', width: 80, align: 'center', defaultHidden: true },
+  { key: 'mid', label: 'mid', type: 'filter', prop: 'mid', filterKey: 'mid', width: 110, align: 'center' },
+  { key: 'tid', label: 'tid', type: 'filter', prop: 'tid', filterKey: 'tid', width: 110, align: 'center' },
   { key: 'ip', label: 'ip', type: 'plain', prop: 'ip_address', width: 120, overflow: true }
 ]
+
+// 表头过滤输入框统一入口：数字列（mid/tid/http_status）只保留数字（接口对非数字返回 400）
+function onFilterInput(col, v) {
+  filters[col.filterKey] = String(v ?? '').replace(/\D/g, '')
+}
 
 const columns = ref(DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden })))
 const visibleColumns = computed(() => columns.value.filter((c) => c.visible))
@@ -376,9 +399,95 @@ function onPanelHidden() {
   }
 }
 
+// ===== 第一行表头（列名行）自定义列宽拖动（事件委托，同媒体点击/转化回传 Tab）=====
+// EP 的拖动只对叶子列表头生效，组表头（第一行）拖不了 → 直接监听表头容器：
+// 鼠标移到第一行某个 th 右缘 8px 内 → col-resize 光标；按下拖动 → 反查列配置，新宽度写回 col.width。
+// 勾选列在最前面，因此第一行 th 下标要比 visibleColumns 偏移 1。
+const colDrag = { col: null, startX: 0, startWidth: 0, active: false }
+let headerWrapEl = null
+
+// 反查：事件 target 所在的第一行 th → visibleColumns 中对应列（跳过 selection 列）
+function row1ColOf(e) {
+  const th = e.target?.closest?.('th')
+  if (!th || !headerWrapEl) return null
+  const thead = headerWrapEl.querySelector('thead')
+  if (!thead || th.parentElement !== thead.rows[0]) return null // 只处理第一行（组表头行）
+  const idx = Array.prototype.indexOf.call(th.parentElement.children, th)
+  return visibleColumns.value[idx - 1] || null
+}
+
+function onHeaderMouseMove(e) {
+  if (colDrag.active) return
+  const th = e.target?.closest?.('th')
+  const col = row1ColOf(e)
+  if (!th || !col) {
+    if (th) th.style.cursor = ''
+    colDrag.col = null
+    return
+  }
+  const rect = th.getBoundingClientRect()
+  const nearRight = rect.width > 12 && rect.right - e.clientX < 8
+  th.style.cursor = nearRight ? 'col-resize' : ''
+  colDrag.col = nearRight ? col : null
+  colDrag.startWidth = rect.width
+}
+
+function onHeaderMouseLeave() {
+  if (colDrag.active) return
+  if (headerWrapEl) {
+    headerWrapEl.querySelectorAll('th').forEach((th) => (th.style.cursor = ''))
+  }
+  colDrag.col = null
+}
+
+function onHeaderMouseDown(e) {
+  if (!colDrag.col) return
+  colDrag.active = true
+  colDrag.startX = e.clientX
+  e.preventDefault()
+
+  const onMove = (ev) => {
+    const w = Math.max(60, Math.round(colDrag.startWidth + ev.clientX - colDrag.startX))
+    colDrag.col.width = w
+  }
+  const onUp = () => {
+    colDrag.active = false
+    colDrag.col = null
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function bindHeaderDrag() {
+  unbindHeaderDrag()
+  headerWrapEl = tableRef.value?.$el?.querySelector('.el-table__header-wrapper')
+  if (!headerWrapEl) return
+  headerWrapEl.addEventListener('mousemove', onHeaderMouseMove)
+  headerWrapEl.addEventListener('mousedown', onHeaderMouseDown)
+  headerWrapEl.addEventListener('mouseleave', onHeaderMouseLeave)
+}
+
+function unbindHeaderDrag() {
+  if (!headerWrapEl) return
+  headerWrapEl.removeEventListener('mousemove', onHeaderMouseMove)
+  headerWrapEl.removeEventListener('mousedown', onHeaderMouseDown)
+  headerWrapEl.removeEventListener('mouseleave', onHeaderMouseLeave)
+  headerWrapEl = null
+}
+
+// 列显隐切换后表头 DOM 会重建，拖动监听要重新挂（绑定的是旧 DOM 会失效）
+function rebindHeaderDrag() {
+  nextTick(bindHeaderDrag)
+}
+
 onMounted(() => {
   loadData()
-  nextTick(calcTableHeight)
+  nextTick(() => {
+    calcTableHeight()
+    bindHeaderDrag()
+  })
   window.addEventListener('resize', calcTableHeight)
 })
 
@@ -404,6 +513,7 @@ onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
   window.removeEventListener('resize', calcTableHeight)
+  unbindHeaderDrag()
   if (sortableInstance) {
     sortableInstance.destroy()
     sortableInstance = null
@@ -554,6 +664,12 @@ onUnmounted(() => {
   border: none;
   font-family: 'Google Sans', Roboto, Arial, sans-serif;
 
+  // 省略号截断修复（同媒体点击/转化回传 Tab）：Element 的 .cell.el-tooltip 自带 min-width:50px
+  // （nowrap 长内容会把省略号顶出 td 边界），取消最小宽度让 .cell 能收缩到列宽内
+  .cell.el-tooltip {
+    min-width: 0 !important;
+  }
+
   .el-table__header-wrapper {
     th {
       background-color: #f1f3f4;
@@ -562,11 +678,27 @@ onUnmounted(() => {
       font-weight: 500;
       font-size: 13px;
       height: 44px;
-      padding: 0 14px;
+
+      .cell {
+        padding: 0 14px;
+        text-align: center !important; // 表头文字统一居中（覆盖各列 align 的继承）
+      }
+    }
+
+    // 多级表头第二行 = 精确查询输入行：白底、上下留白，与第一行（灰底列名）视觉分离（同媒体点击 Tab）
+    tr:nth-child(2) th {
+      background-color: #fff;
+      height: auto;
+      padding: 6px 10px;
 
       .cell {
         padding: 0;
       }
+    }
+
+    // 第一行列名是自定义拖动区域：禁止选中文字，拖动手感更干净
+    tr:first-child th .cell {
+      user-select: none;
     }
   }
 
@@ -586,10 +718,12 @@ onUnmounted(() => {
         color: #202124;
         font-size: 13px;
         height: 48px;
-        padding: 0 14px;
 
+        // 横向 padding 放在 .cell 上（Element 原生模式）而非 td 上：
+        // .cell 自带 overflow:hidden + ellipsis，padding 在其盒模型内部，
+        // 省略号在 .cell 内截断，绝不会越过 td 边界
         .cell {
-          padding: 0;
+          padding: 0 14px;
         }
       }
     }
@@ -604,6 +738,11 @@ onUnmounted(() => {
 .date-text {
   color: #5f6368;
   font-size: 13px;
+}
+
+/* 表头过滤输入框撑满列宽 */
+.header-filter-input {
+  width: 100%;
 }
 
 .pagination-wrapper {
