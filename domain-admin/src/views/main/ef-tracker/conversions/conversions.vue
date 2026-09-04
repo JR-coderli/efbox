@@ -49,7 +49,13 @@
 
       <!-- 表格 -->
       <div class="table-wrapper" ref="tableWrapperRef">
-        <el-table ref="tableRef" :data="tableData" v-loading="loading" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'conversions-overflow-tooltip' }">
+        <!-- 加载蒙版：只盖表体，每行行首一枚「圆环+Loading」动画（不受 td 宽度限制，表头不加蒙版） -->
+        <div v-if="loading" class="rows-loading-mask">
+          <div v-for="i in pagination.pageSize" :key="i" class="rows-loading-row">
+            <cell-loading />
+          </div>
+        </div>
+        <el-table ref="tableRef" :data="tableData" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'conversions-overflow-tooltip' }">
           <!-- 所有列统一两级表头：第一行列名、第二行过滤行——mid/tid 内嵌精确查询输入框，其余列空白，形似媒体点击 Tab。
                内层列 :width 绑定 colWidths（第一行表头拖动改的就是它）；null = 未拖过，走 min-width 弹性 -->
           <el-table-column label="ID" align="center">
@@ -193,6 +199,7 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getConversions } from '@/services/main/ef-tracker'
+import CellLoading from '../clicks/cell-loading.vue'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -354,6 +361,9 @@ function buildParams() {
 
 async function loadData() {
   loading.value = true
+  // 清掉旧数据：配合 rows-loading-mask 蒙版（行首 Loading 动画盖在表格上），
+  // 空表格 + 蒙版即「每页 N 行、每行行首一枚加载动画」的效果
+  tableData.value = []
   try {
     const result = await getConversions(buildParams())
     tableData.value = result?.list || []
@@ -530,6 +540,29 @@ onUnmounted(() => {
 
 .table-wrapper {
   overflow-x: auto;
+  position: relative;
+}
+
+/* 行级加载蒙版：只盖表格表体（每行行首一枚「圆环+Loading」）。从表头底部开始（两级表头 ~82px），
+   表头不加蒙版、完全可见可交互。行高对齐 td(48px) + 1px 分隔线（同媒体点击 Tab） */
+.rows-loading-mask {
+  position: absolute;
+  top: 82px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+
+.rows-loading-row {
+  height: 49px;
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  border-bottom: 1px solid #f1f3f4;
+  box-sizing: border-box;
 }
 
 :deep(.google-table) {
