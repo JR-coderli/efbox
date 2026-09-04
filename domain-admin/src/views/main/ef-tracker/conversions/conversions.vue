@@ -29,23 +29,19 @@
                   end-placeholder="结束日期"
                   clearable
                   style="width: 240px"
+                  @change="handleSearch"
                 />
               </el-form-item>
-              <el-form-item label="媒体ID">
-                <el-input v-model="filters.mid" placeholder="mid" clearable style="width: 110px" @keyup.enter="handleSearch" />
-              </el-form-item>
-              <el-form-item label="Tracker">
-                <el-input v-model="filters.tid" placeholder="tid" clearable style="width: 110px" @keyup.enter="handleSearch" />
-              </el-form-item>
               <el-form-item label="回传状态">
-                <el-input v-model="filters.http_status_code" placeholder="如 200" clearable style="width: 120px" @keyup.enter="handleSearch" />
+                <el-input v-model="filters.http_status_code" placeholder="如 200" clearable style="width: 120px" @keyup.enter="handleSearch" @clear="handleSearch" />
               </el-form-item>
               <el-form-item label="应回传">
-                <el-select v-model="filters.should_postback" clearable placeholder="全部" style="width: 110px">
+                <el-select v-model="filters.should_postback" clearable placeholder="全部" style="width: 110px" @change="handleSearch">
                   <el-option label="是" value="true" />
                   <el-option label="否" value="false" />
                 </el-select>
               </el-form-item>
+              <!-- mid/tid 的精确查询已集成到多级表头第二行，此处不再重复放输入框 -->
             </el-form>
           </div>
           <div class="filter-actions">
@@ -63,40 +59,96 @@
 
       <!-- 表格 -->
       <div class="table-wrapper" ref="tableWrapperRef">
-        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'conversions-overflow-tooltip' }">
-          <el-table-column label="ID" prop="id" width="80" align="center" />
-           <el-table-column label="上游回传时间" prop="created_at" width="200">
-            <template #default="{ row }">
-              <span class="date-text">{{ fmtTime(row.created_at) }}</span>
-            </template>
+        <el-table ref="tableRef" :data="tableData" v-loading="loading" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'conversions-overflow-tooltip' }">
+          <!-- 所有列统一两级表头：第一行列名、第二行过滤行——mid/tid 内嵌精确查询输入框，其余列空白，形似媒体点击 Tab。
+               内层列 :width 绑定 colWidths（第一行表头拖动改的就是它）；null = 未拖过，走 min-width 弹性 -->
+          <el-table-column label="ID" align="center">
+            <el-table-column prop="id" align="center" :width="colWidths.id" />
           </el-table-column>
-          <el-table-column label="system_click_id" prop="system_click_id" min-width="200" show-overflow-tooltip />
-          <el-table-column label="media_click_id" prop="media_click_id" min-width="160" show-overflow-tooltip />
-          <el-table-column label="mid" prop="mid" width="70" align="center" />
-          <el-table-column label="tid" prop="tid" width="80" align="center" />
-          <el-table-column label="媒体" prop="names.media" min-width="110" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span>{{ row.names?.media || '-' }}</span>
-            </template>
+          <el-table-column label="上游回传时间">
+            <el-table-column prop="created_at" :width="colWidths.created_at">
+              <template #default="{ row }">
+                <span class="date-text">{{ fmtTime(row.created_at) }}</span>
+              </template>
+            </el-table-column>
           </el-table-column>
-          <el-table-column label="Tracker" prop="names.tracker" min-width="110" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span>{{ row.names?.tracker || '-' }}</span>
-            </template>
+          <el-table-column label="system_click_id">
+            <el-table-column prop="system_click_id" :width="colWidths.system_click_id" min-width="200" show-overflow-tooltip />
           </el-table-column>
-          <el-table-column label="payout" prop="payout" width="80" align="right" class-name="col-money" />
-          <el-table-column label="应回传" prop="should_postback" width="80" align="center">
-            <template #default="{ row }">
-              <el-tag :type="row.should_postback ? 'success' : 'danger'" size="small">{{ row.should_postback ? '是' : '否' }}</el-tag>
-            </template>
+          <el-table-column label="media_click_id">
+            <el-table-column prop="media_click_id" :width="colWidths.media_click_id" min-width="160" show-overflow-tooltip />
           </el-table-column>
-          <el-table-column label="回传状态" prop="http_status_code" width="90" align="center" />
-          <el-table-column label="media_postback_url" prop="media_postback_url" min-width="200" show-overflow-tooltip />
-          <el-table-column label="response_body" prop="response_body" min-width="220" show-overflow-tooltip />
-          <el-table-column label="下发媒体时间" prop="posted_at" width="200">
-            <template #default="{ row }">
-              <span class="date-text">{{ fmtTime(row.posted_at) }}</span>
-            </template>
+          <el-table-column label="mid" align="center">
+            <el-table-column prop="mid" align="center" :width="colWidths.mid">
+              <template #header>
+                <el-input
+                  v-model="filters.mid"
+                  size="small"
+                  placeholder="mid"
+                  clearable
+                  class="header-filter-input"
+                  @input="(v) => (filters.mid = String(v ?? '').replace(/\D/g, ''))"
+                  @keyup.enter="handleSearch"
+                  @clear="handleSearch"
+                />
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="tid" align="center">
+            <el-table-column prop="tid" align="center" :width="colWidths.tid">
+              <template #header>
+                <el-input
+                  v-model="filters.tid"
+                  size="small"
+                  placeholder="tid"
+                  clearable
+                  class="header-filter-input"
+                  @input="(v) => (filters.tid = String(v ?? '').replace(/\D/g, ''))"
+                  @keyup.enter="handleSearch"
+                  @clear="handleSearch"
+                />
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="媒体">
+            <el-table-column prop="names.media" :width="colWidths.media" min-width="110" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.names?.media || '-' }}</span>
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="Tracker">
+            <el-table-column prop="names.tracker" :width="colWidths.tracker" min-width="110" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.names?.tracker || '-' }}</span>
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="payout" align="right">
+            <el-table-column prop="payout" align="right" class-name="col-money" :width="colWidths.payout" />
+          </el-table-column>
+          <el-table-column label="应回传" align="center">
+            <el-table-column prop="should_postback" align="center" :width="colWidths.should_postback">
+              <template #default="{ row }">
+                <el-tag :type="row.should_postback ? 'success' : 'danger'" size="small">{{ row.should_postback ? '是' : '否' }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="回传状态" align="center">
+            <el-table-column prop="http_status_code" align="center" :width="colWidths.http_status_code" />
+          </el-table-column>
+          <el-table-column label="media_postback_url">
+            <el-table-column prop="media_postback_url" :width="colWidths.media_postback_url" min-width="200" show-overflow-tooltip />
+          </el-table-column>
+          <el-table-column label="response_body">
+            <el-table-column prop="response_body" :width="colWidths.response_body" min-width="220" show-overflow-tooltip />
+          </el-table-column>
+          <el-table-column label="下发媒体时间">
+            <el-table-column prop="posted_at" :width="colWidths.posted_at">
+              <template #default="{ row }">
+                <span class="date-text">{{ fmtTime(row.posted_at) }}</span>
+              </template>
+            </el-table-column>
           </el-table-column>
           <template #empty>
             <el-empty description="暂无数据" />
@@ -122,7 +174,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getConversions } from '@/services/main/ef-tracker'
 
@@ -134,6 +186,92 @@ const pagination = reactive({
   page: 1,
   pageSize: 10
 })
+
+// ===== 列宽：默认值 + 第一行表头拖动（复制自媒体点击 Tab 的方案）=====
+// EP 的列宽拖动只对叶子列表头生效，组表头（第一行）拖不了 → 事件委托在表头容器上，
+// 鼠标移到第一行某个 th 右缘 8px 内 → col-resize 光标；按下拖动 → 反查列，新宽度写回 colWidths。
+// 列顺序（模板里的 el-table-column 顺序）与这里一一对应。
+const COLUMN_KEYS = [
+  'id', 'created_at', 'system_click_id', 'media_click_id', 'mid', 'tid',
+  'media', 'tracker', 'payout', 'should_postback', 'http_status_code',
+  'media_postback_url', 'response_body', 'posted_at'
+]
+const colWidths = reactive(Object.fromEntries(COLUMN_KEYS.map((k) => [k, null]))) // null = 未拖过，走各自 min-width
+
+const tableRef = ref(null)
+const colDrag = { col: null, startX: 0, startWidth: 0, active: false }
+let headerWrapEl = null
+
+// 反查：事件 target 所在的第一行 th → COLUMN_KEYS 中同下标的列 key
+function row1ColOf(e) {
+  const th = e.target?.closest?.('th')
+  if (!th || !headerWrapEl) return null
+  const thead = headerWrapEl.querySelector('thead')
+  if (!thead || th.parentElement !== thead.rows[0]) return null // 只处理第一行（组表头行）
+  const idx = Array.prototype.indexOf.call(th.parentElement.children, th)
+  return COLUMN_KEYS[idx] || null
+}
+
+function onHeaderMouseMove(e) {
+  if (colDrag.active) return
+  const th = e.target?.closest?.('th')
+  const col = row1ColOf(e)
+  if (!th || !col) {
+    if (th) th.style.cursor = ''
+    colDrag.col = null
+    return
+  }
+  const rect = th.getBoundingClientRect()
+  const nearRight = rect.width > 12 && rect.right - e.clientX < 8
+  th.style.cursor = nearRight ? 'col-resize' : ''
+  colDrag.col = nearRight ? col : null
+  colDrag.startWidth = rect.width
+}
+
+function onHeaderMouseLeave() {
+  if (colDrag.active) return
+  if (headerWrapEl) {
+    headerWrapEl.querySelectorAll('th').forEach((th) => (th.style.cursor = ''))
+  }
+  colDrag.col = null
+}
+
+function onHeaderMouseDown(e) {
+  if (!colDrag.col) return
+  colDrag.active = true
+  colDrag.startX = e.clientX
+  e.preventDefault()
+
+  const onMove = (ev) => {
+    const w = Math.max(60, Math.round(colDrag.startWidth + ev.clientX - colDrag.startX))
+    colWidths[colDrag.col] = w
+  }
+  const onUp = () => {
+    colDrag.active = false
+    colDrag.col = null
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function bindHeaderDrag() {
+  unbindHeaderDrag()
+  headerWrapEl = tableRef.value?.$el?.querySelector('.el-table__header-wrapper')
+  if (!headerWrapEl) return
+  headerWrapEl.addEventListener('mousemove', onHeaderMouseMove)
+  headerWrapEl.addEventListener('mousedown', onHeaderMouseDown)
+  headerWrapEl.addEventListener('mouseleave', onHeaderMouseLeave)
+}
+
+function unbindHeaderDrag() {
+  if (!headerWrapEl) return
+  headerWrapEl.removeEventListener('mousemove', onHeaderMouseMove)
+  headerWrapEl.removeEventListener('mousedown', onHeaderMouseDown)
+  headerWrapEl.removeEventListener('mouseleave', onHeaderMouseLeave)
+  headerWrapEl = null
+}
 
 // 表格高度自适应：动态测量表格 wrapper 顶部到视口底部的距离，表格恰好占满剩余页面高度
 // （表头吸顶、表体在表格内部滚动，页面本身不出滚动条）。能自动适应筛选区换行、Tab 栏等占位变化
@@ -151,13 +289,8 @@ function calcTableHeight() {
 const tz = ref(8)
 const tzOptions = [
   { label: 'UTC+8', value: 8 },
-  { label: 'UTC+7', value: 7 },
-  { label: 'UTC+5:30', value: 5.5 },
   { label: 'UTC+0', value: 0 },
-  { label: 'UTC-3', value: -3 },
-  { label: 'UTC-4', value: -4 },
-  { label: 'UTC-5', value: -5 },
-  { label: 'UTC-8', value: -8 }
+  { label: 'UTC-5', value: -5 }
 ]
 
 const filters = reactive({
@@ -244,7 +377,10 @@ function handleCurrentChange(page) {
 
 onMounted(() => {
   loadData()
-  nextTick(calcTableHeight) // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
+  nextTick(() => {
+    calcTableHeight() // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
+    bindHeaderDrag() // 同时机挂表头列宽拖动
+  })
   window.addEventListener('resize', calcTableHeight)
 })
 
@@ -270,6 +406,7 @@ onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
   window.removeEventListener('resize', calcTableHeight)
+  unbindHeaderDrag()
 })
 </script>
 
@@ -393,6 +530,12 @@ onUnmounted(() => {
   border: none;
   font-family: 'Google Sans', Roboto, Arial, sans-serif;
 
+  // 省略号截断修复（同媒体点击 Tab）：Element 的 .cell.el-tooltip 自带 min-width:50px
+  // （nowrap 长内容会把省略号顶出 td 边界），取消最小宽度让 .cell 能收缩到列宽内
+  .cell.el-tooltip {
+    min-width: 0 !important;
+  }
+
   .el-table__header-wrapper {
     th {
       background-color: #f1f3f4;
@@ -401,11 +544,27 @@ onUnmounted(() => {
       font-weight: 500;
       font-size: 13px;
       height: 44px;
-      padding: 0 14px;
+
+      .cell {
+        padding: 0 14px;
+        text-align: center !important; // 表头文字统一居中（覆盖各列 align 的继承）
+      }
+    }
+
+    // 多级表头第二行 = 精确查询输入行：白底、上下留白，与第一行（灰底列名）视觉分离（同媒体点击 Tab）
+    tr:nth-child(2) th {
+      background-color: #fff;
+      height: auto;
+      padding: 6px 10px;
 
       .cell {
         padding: 0;
       }
+    }
+
+    // 第一行列名是自定义拖动区域：禁止选中文字，拖动手感更干净
+    tr:first-child th .cell {
+      user-select: none;
     }
   }
 
@@ -425,10 +584,12 @@ onUnmounted(() => {
         color: #202124;
         font-size: 13px;
         height: 48px;
-        padding: 0 14px;
 
+        // 横向 padding 放在 .cell 上（Element 原生模式）而非 td 上：
+        // .cell 自带 overflow:hidden + ellipsis，padding 在其盒模型内部，
+        // 省略号在 .cell 内截断，绝不会越过 td 边界
         .cell {
-          padding: 0;
+          padding: 0 14px;
         }
       }
     }
@@ -443,6 +604,11 @@ onUnmounted(() => {
 .date-text {
   color: #5f6368;
   font-size: 13px;
+}
+
+/* 表头过滤输入框撑满列宽 */
+.header-filter-input {
+  width: 100%;
 }
 
 /* payout 金额列：等宽数字字体 + 表格数字对齐（与媒体点击 cost 列一致） */

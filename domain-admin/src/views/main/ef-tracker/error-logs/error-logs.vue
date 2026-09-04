@@ -181,13 +181,8 @@ const pagination = reactive({
 const tz = ref(8)
 const tzOptions = [
   { label: 'UTC+8', value: 8 },
-  { label: 'UTC+7', value: 7 },
-  { label: 'UTC+5:30', value: 5.5 },
   { label: 'UTC+0', value: 0 },
-  { label: 'UTC-3', value: -3 },
-  { label: 'UTC-4', value: -4 },
-  { label: 'UTC-5', value: -5 },
-  { label: 'UTC-8', value: -8 }
+  { label: 'UTC-5', value: -5 }
 ]
 
 const filters = reactive({
