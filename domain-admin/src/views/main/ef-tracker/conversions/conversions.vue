@@ -4,7 +4,7 @@
     <div class="page-header">
       <div class="header-left">
         <h1 class="page-title">转化回传</h1>
-        <p class="page-subtitle">system_conversions · 转化/媒体回传</p>
+        <!-- <p class="page-subtitle">system_conversions · 转化/媒体回传</p> -->
       </div>
       <div class="header-actions">
         <button class="google-btn google-btn-secondary" @click="handleRefresh" :disabled="loading || refreshCountdown > 0">

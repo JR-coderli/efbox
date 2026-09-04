@@ -114,7 +114,7 @@
 
       <!-- 表格 -->
       <div class="table-wrapper">
-        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'clicks-overflow-tooltip' }">
+        <el-table ref="tableRef" :data="tableData" v-loading="loading" class="google-table" border :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'clicks-overflow-tooltip' }">
           <template v-for="col in visibleColumns" :key="col.key">
             <!-- 所有列统一两级表头（多级表头）：第一行列名、第二行过滤行——type=filter 列内嵌精确查询输入框，其余列空白，形似 Clickflare -->
             <el-table-column :label="col.label" :align="col.align">
@@ -403,6 +403,89 @@ function onFilterInput(col, v) {
   filters[col.filterKey] = col.digits ? String(v ?? '').replace(/\D/g, '') : v
 }
 
+// ===== 第一行表头（列名行）自定义列宽拖动（事件委托实现）=====
+// EP 的拖动只对叶子列表头生效，组列表头（我们的第一行）拖不了；且组列的 #header 插槽渲染不可靠。
+// 改为直接给表头容器挂原生监听：鼠标移到第一行某个 th 右缘 8px 内 → col-resize 光标；
+// 按下拖动 → 按 th 在第一行中的位置反查列配置，新宽度写回 col.width（模板 :width 响应式生效）。
+const tableRef = ref(null)
+const colDrag = { col: null, startX: 0, startWidth: 0, active: false }
+let headerWrapEl = null
+
+// 反查：事件 target 所在的第一行 th → visibleColumns 中同下标的列配置
+function row1ColOf(e) {
+  const th = e.target?.closest?.('th')
+  if (!th || !headerWrapEl) return null
+  const thead = headerWrapEl.querySelector('thead')
+  if (!thead || th.parentElement !== thead.rows[0]) return null // 只处理第一行（组表头行）
+  const idx = Array.prototype.indexOf.call(th.parentElement.children, th)
+  return visibleColumns.value[idx] || null
+}
+
+function onHeaderMouseMove(e) {
+  if (colDrag.active) return
+  const th = e.target?.closest?.('th')
+  const col = row1ColOf(e)
+  if (!th || !col) {
+    if (th) th.style.cursor = ''
+    colDrag.col = null
+    return
+  }
+  const rect = th.getBoundingClientRect()
+  const nearRight = rect.width > 12 && rect.right - e.clientX < 8
+  th.style.cursor = nearRight ? 'col-resize' : ''
+  colDrag.col = nearRight ? col : null
+  colDrag.startWidth = rect.width
+}
+
+function onHeaderMouseLeave() {
+  if (colDrag.active) return
+  if (headerWrapEl) {
+    headerWrapEl.querySelectorAll('th').forEach((th) => (th.style.cursor = ''))
+  }
+  colDrag.col = null
+}
+
+function onHeaderMouseDown(e) {
+  if (!colDrag.col) return
+  colDrag.active = true
+  colDrag.startX = e.clientX
+  e.preventDefault()
+
+  const onMove = (ev) => {
+    const w = Math.max(60, Math.round(colDrag.startWidth + ev.clientX - colDrag.startX))
+    colDrag.col.width = w
+  }
+  const onUp = () => {
+    colDrag.active = false
+    colDrag.col = null
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function bindHeaderDrag() {
+  unbindHeaderDrag()
+  headerWrapEl = tableRef.value?.$el?.querySelector('.el-table__header-wrapper')
+  if (!headerWrapEl) return
+  headerWrapEl.addEventListener('mousemove', onHeaderMouseMove)
+  headerWrapEl.addEventListener('mousedown', onHeaderMouseDown)
+  headerWrapEl.addEventListener('mouseleave', onHeaderMouseLeave)
+}
+
+function unbindHeaderDrag() {
+  if (!headerWrapEl) return
+  headerWrapEl.removeEventListener('mousemove', onHeaderMouseMove)
+  headerWrapEl.removeEventListener('mousedown', onHeaderMouseDown)
+  headerWrapEl.removeEventListener('mouseleave', onHeaderMouseLeave)
+  headerWrapEl = null
+}
+
+onMounted(() => {
+  nextTick(bindHeaderDrag) // 等 el-table 渲染出表头 DOM 再挂委托监听
+})
+
 // 日期范围（el-date-picker daterange，元素为 Date 对象）
 const dateRange = ref([])
 
@@ -676,7 +759,7 @@ const DEFAULT_COLUMNS = [
   { key: 'names.tracker', label: 'Tracker_name', type: 'names', nameKey: 'tracker', prop: 'names.tracker', minWidth: 210, overflow: true },
   { key: 'names.lander', label: 'Lander_name', type: 'names', nameKey: 'lander', prop: 'names.lander', minWidth: 210, overflow: true },
   { key: 'names.offer', label: 'Offer_name', type: 'names', nameKey: 'offer', prop: 'names.offer', minWidth: 210, overflow: true },
-  { key: 'path_code', label: 'path_code', type: 'filter', prop: 'path_code', filterKey: 'path_code', width: 140, overflow: true, defaultHidden: true },
+  { key: 'path_code', label: 'code', type: 'filter', prop: 'path_code', filterKey: 'path_code', width: 180, overflow: true, defaultHidden: true },
   { key: 'campaign_name', label: 'campaign_name', type: 'plain', prop: 'campaign_name', minWidth: 160, overflow: true, defaultHidden: true },
   { key: 'campaign_id', label: 'campaign_id', type: 'plain', prop: 'campaign_id', minWidth: 120, overflow: true, defaultHidden: true },
   { key: 'adset_name', label: 'adset_name', type: 'plain', prop: 'adset_name', minWidth: 100, overflow: true, defaultHidden: true },
@@ -895,6 +978,7 @@ onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
   window.removeEventListener('resize', calcDetailHeight)
+  unbindHeaderDrag()
 })
 
 // 去重开关：按 media_click_id 只保留最新一条（unique=true）。分页时保留选中状态
@@ -1060,6 +1144,16 @@ function toggleUnique() {
   border: none;
   font-family: 'Google Sans', Roboto, Arial, sans-serif;
 
+  // border=true 仅为启用列宽拖动（EP 的拖动逻辑 gated 在 props.border 上）；
+  // 视觉上维持无边框谷歌风格：去掉 EP 外框与最右竖线
+  &.el-table--border {
+    border: none;
+
+    .el-table__inner-wrapper::after {
+      display: none;
+    }
+  }
+
   // 省略号截断修复：Element 的 .cell.el-tooltip 自带 min-width:50px（nowrap 长内容会把
   // 省略号顶出 td 边界），取消最小宽度让 .cell 能收缩到列宽内
   .cell.el-tooltip {
@@ -1136,6 +1230,11 @@ function toggleUnique() {
       .cell {
         padding: 0;
       }
+    }
+
+    // 第一行列名是自定义拖动区域：禁止选中文字，拖动手感更干净
+    tr:first-child th .cell {
+      user-select: none;
     }
   }
 }
