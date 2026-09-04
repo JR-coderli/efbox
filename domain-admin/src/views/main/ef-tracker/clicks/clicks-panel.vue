@@ -103,7 +103,7 @@
       </div>
 
       <!-- 表格 -->
-      <div class="table-wrapper">
+      <div class="table-wrapper" ref="tableWrapperRef">
         <el-table ref="tableRef" :data="tableData" v-loading="loading" class="google-table" border :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'clicks-overflow-tooltip' }">
           <template v-for="col in visibleColumns" :key="col.key">
             <!-- 所有列统一两级表头（多级表头）：第一行列名、第二行过滤行——type=filter 列内嵌精确查询输入框，其余列空白，形似 Clickflare -->
@@ -360,9 +360,17 @@ const pagination = reactive({
   pageSize: 10
 })
 
-// 表格限高：内容超过可视区域时表格内部滚动（表头吸顶、分页固定），与每页条数无关
-// 外层是合并页的 Tab 容器（约占 56px），比独立页面时多扣一块
-const tableMaxHeight = computed(() => 'calc(100vh - 360px)')
+// 表格高度自适应：动态测量表格 wrapper 顶部到视口底部的距离，表格恰好占满剩余页面高度
+// （表头吸顶、表体在表格内部滚动，页面本身不出滚动条）。能自动适应筛选区换行、Tab 栏等占位变化
+const tableWrapperRef = ref(null)
+const tableMaxHeight = ref(undefined) // undefined → 不限高，首帧避免收缩闪烁
+function calcTableHeight() {
+  const el = tableWrapperRef.value
+  if (!el) return
+  const top = el.getBoundingClientRect().top // 表格上方（Tab 栏 + 筛选区）实际占位
+  const bottomReserve = 60 // 分页栏 + 外边距
+  tableMaxHeight.value = Math.max(220, window.innerHeight - top - bottomReserve)
+}
 
 // 时区：默认 +8；切路由 / 刷新都会重建组件 → 回到 +8；分页不修改 tz → 保留当前选择
 const tz = ref(8)
@@ -925,7 +933,9 @@ onMounted(() => {
   loadData()
   loadColumns() // 异步加载库中列设置，回来后覆盖默认配置（不阻塞列表首屏）
   calcDetailHeight()
+  nextTick(calcTableHeight) // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
   window.addEventListener('resize', calcDetailHeight)
+  window.addEventListener('resize', calcTableHeight)
 })
 
 // 刷新按钮 5 秒倒计时（点击后禁用，防止频繁刷新）
@@ -950,6 +960,7 @@ onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
   window.removeEventListener('resize', calcDetailHeight)
+  window.removeEventListener('resize', calcTableHeight)
   unbindHeaderDrag()
 })
 

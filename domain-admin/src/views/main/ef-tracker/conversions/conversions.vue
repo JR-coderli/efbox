@@ -62,8 +62,8 @@
       </div>
 
       <!-- 表格 -->
-      <div class="table-wrapper">
-        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :tooltip-options="{ popperClass: 'conversions-overflow-tooltip' }">
+      <div class="table-wrapper" ref="tableWrapperRef">
+        <el-table :data="tableData" v-loading="loading" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'conversions-overflow-tooltip' }">
           <el-table-column label="ID" prop="id" width="80" align="center" />
            <el-table-column label="上游回传时间" prop="created_at" width="200">
             <template #default="{ row }">
@@ -122,7 +122,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getConversions } from '@/services/main/ef-tracker'
 
@@ -134,6 +134,18 @@ const pagination = reactive({
   page: 1,
   pageSize: 10
 })
+
+// 表格高度自适应：动态测量表格 wrapper 顶部到视口底部的距离，表格恰好占满剩余页面高度
+// （表头吸顶、表体在表格内部滚动，页面本身不出滚动条）。能自动适应筛选区换行、Tab 栏等占位变化
+const tableWrapperRef = ref(null)
+const tableMaxHeight = ref(undefined) // undefined → 不限高，首帧避免收缩闪烁
+function calcTableHeight() {
+  const el = tableWrapperRef.value
+  if (!el) return
+  const top = el.getBoundingClientRect().top // 表格上方（Tab 栏 + 筛选区）实际占位
+  const bottomReserve = 60 // 分页栏 + 外边距
+  tableMaxHeight.value = Math.max(220, window.innerHeight - top - bottomReserve)
+}
 
 // 时区：默认 +8；切路由 / 刷新都会重建组件 → 回到 +8；分页不修改 tz → 保留当前选择
 const tz = ref(8)
@@ -232,6 +244,8 @@ function handleCurrentChange(page) {
 
 onMounted(() => {
   loadData()
+  nextTick(calcTableHeight) // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
+  window.addEventListener('resize', calcTableHeight)
 })
 
 // 刷新按钮 5 秒倒计时（点击后禁用，防止频繁刷新）
@@ -255,6 +269,7 @@ function handleRefresh() {
 onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
+  window.removeEventListener('resize', calcTableHeight)
 })
 </script>
 
