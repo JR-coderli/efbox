@@ -68,11 +68,12 @@
               </template>
             </el-table-column>
           </el-table-column>
-          <!-- 广告主/客户名：oid → ab_offers.aid → ab_advertisers.name（oid=0 或未配 aid 时为空） -->
+          <!-- 广告主/客户名：oid → ab_offers.aid → ab_advertisers.name；按名称稳定散列到不同底色，
+               同一广告主在任何页码/刷新下颜色一致，肉眼快速区分客户 -->
           <el-table-column label="广告主">
             <el-table-column prop="names.advertiser" :width="colWidths.advertiser" min-width="110" show-overflow-tooltip>
               <template #default="{ row }">
-                <span>{{ row.names?.advertiser || '-' }}</span>
+                <span class="advertiser-chip" :class="advertiserColorClass(row.names?.advertiser)">{{ row.names?.advertiser || '-' }}</span>
               </template>
             </el-table-column>
           </el-table-column>
@@ -172,6 +173,10 @@
                   @clear="handleSearch"
                 />
               </template>
+              <!-- 按区间着色：2xx 绿 / 3xx 蓝 / 4xx 橙 / 5xx 红 / 空 灰（同错误日志 Tab） -->
+              <template #default="{ row }">
+                <span class="status-chip" :class="statusChipClass(row.http_status_code)">{{ row.http_status_code ?? '-' }}</span>
+              </template>
             </el-table-column>
           </el-table-column>
           <el-table-column label="media_postback_url">
@@ -228,7 +233,7 @@ const COLUMN_KEYS = [
   'media_postback_url', 'response_body'
 ]
 // 各列初始宽度：null = 未拖过，走各自 min-width；表头带过滤控件的列给足默认宽度，避免控件被挤压
-const DEFAULT_COL_WIDTHS = { created_at: 180, tracker: 200, should_postback: 120, http_status_code: 120, posted_at: 180 }
+const DEFAULT_COL_WIDTHS = { created_at: 180, media: 200, tracker: 200, should_postback: 120, http_status_code: 120, posted_at: 180 }
 const colWidths = reactive(Object.fromEntries(COLUMN_KEYS.map((k) => [k, DEFAULT_COL_WIDTHS[k] ?? null])))
 
 const tableRef = ref(null)
@@ -335,6 +340,28 @@ const filters = reactive({
 })
 
 const dateRange = ref([])
+
+// 下发状态胶囊配色：2xx 成功(绿) / 3xx 重定向(蓝) / 4xx 客户端错(橙) / 5xx 服务端错(红) / 空(灰)
+function statusChipClass(code) {
+  if (code == null || code === '') return 'sc-none'
+  const n = Number(code)
+  if (n >= 200 && n < 300) return 'sc-2xx'
+  if (n >= 300 && n < 400) return 'sc-3xx'
+  if (n >= 400 && n < 500) return 'sc-4xx'
+  if (n >= 500) return 'sc-5xx'
+  return 'sc-none'
+}
+
+// 广告主配色：对名称做稳定散列 → 8 组浅底深字（adv-c0 ~ adv-c7）。
+// 同一名称永远得到同一颜色（跨页码/刷新稳定）；空值不给色
+function advertiserColorClass(name) {
+  if (!name) return ''
+  let h = 0
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) >>> 0
+  }
+  return 'adv-c' + (h % 8)
+}
 
 function fmtTime(s) {
   if (!s) return '-'
@@ -689,6 +716,60 @@ onUnmounted(() => {
   font-weight: 700;
   font-family: 'Roboto Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
 }
+
+/* 代码型列（两个 click_id）：等宽字体，长 ID 串逐位比对友好 */
+:deep(.google-table td.col-mono .cell) {
+  font-family: 'Roboto Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+}
+
+/* 下发状态胶囊：按 HTTP 区间着色（样式体系同错误日志 Tab） */
+.status-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-family: 'Roboto Mono', 'Consolas', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.sc-2xx { background: #e6f4ea; color: #137333; }
+.sc-3xx { background: #e8f0fe; color: #1a73e8; }
+.sc-4xx { background: #fef7e0; color: #b06000; }
+.sc-5xx { background: #fce8e6; color: #c5221f; }
+.sc-none { background: #f1f3f4; color: #80868b; }
+
+/* 广告主名胶囊：形状与状态胶囊一致；底色按名称散列到 8 组浅底深字（互不冲突的柔和色板） */
+.advertiser-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  background: #f1f3f4;
+  color: #5f6368;
+}
+
+.adv-c0 { background: #e8f0fe; color: #1a73e8; } /* 蓝 */
+.adv-c1 { background: #e6f4ea; color: #137333; } /* 绿 */
+.adv-c2 { background: #fef7e0; color: #b06000; } /* 橙 */
+.adv-c3 { background: #fce8e6; color: #c5221f; } /* 红 */
+.adv-c4 { background: #f3e8fd; color: #7627bb; } /* 紫 */
+.adv-c5 { background: #e4f7fb; color: #007b83; } /* 青 */
+.adv-c6 { background: #feefc3; color: #8a6100; } /* 黄 */
+.adv-c7 { background: #e6ecf7; color: #3f51b5; } /* 靛 */
 
 .pagination-wrapper {
   padding: 12px 16px;
