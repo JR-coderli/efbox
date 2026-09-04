@@ -1,21 +1,5 @@
 <template>
   <div class="google-content">
-    <!-- 页面标题 -->
-    <div class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">转化回传</h1>
-        <!-- <p class="page-subtitle">system_conversions · 转化/媒体回传</p> -->
-      </div>
-      <div class="header-actions">
-        <button class="google-btn google-btn-secondary" @click="handleRefresh" :disabled="loading || refreshCountdown > 0">
-          <svg class="btn-icon" :class="{ 'is-loading': loading }" viewBox="0 0 24 24">
-            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-          </svg>
-          <span>{{ refreshCountdown > 0 ? `刷新中 ${refreshCountdown}s` : '刷新' }}</span>
-        </button>
-      </div>
-    </div>
-
     <!-- 内容卡片 -->
     <div class="content-card">
       <!-- 搜索栏 -->
@@ -67,6 +51,12 @@
           <div class="filter-actions">
             <button class="google-btn google-btn-primary" @click="handleSearch">搜索</button>
             <button class="google-btn google-btn-secondary" @click="handleReset">重置</button>
+            <button class="google-btn google-btn-secondary" @click="handleRefresh" :disabled="loading || refreshCountdown > 0">
+              <svg class="btn-icon" :class="{ 'is-loading': loading }" viewBox="0 0 24 24">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              <span>{{ refreshCountdown > 0 ? `刷新中 ${refreshCountdown}s` : '刷新' }}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -272,39 +262,6 @@ onUnmounted(() => {
 .google-content {
   padding: 8px;
   margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.header-left {
-  flex: 1;
-  min-width: 200px;
-}
-
-.page-title {
-  font-size: 20px;
-  font-weight: 500;
-  color: #202124;
-  margin: 0;
-}
-
-.page-subtitle {
-  font-size: 13px;
-  color: #5f6368;
-  margin: 4px 0 0 0;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 .content-card {
