@@ -9,6 +9,75 @@
       <span class="status-hint">{{ checkStatusText }}</span>
     </div>
 
+    <!-- 域名覆盖对比：Clickflare(本地 cf_landers) + ef-tracker(/query/landers) 两侧提取域名，
+         对照检测表找出未纳入检测的域名。默认折叠，展开才拉数据 -->
+    <div class="coverage-card">
+      <div class="coverage-header" @click="toggleCoverage">
+        <span class="coverage-arrow" :class="{ expanded: coverageVisible }">▶</span>
+        <span class="coverage-title">域名覆盖对比</span>
+        <template v-if="coverageSummary">
+          <span class="coverage-badge is-total">在用 {{ coverageSummary.total }} 个域名</span>
+          <span class="coverage-badge is-covered">已纳入 {{ coverageSummary.covered }}</span>
+          <span class="coverage-badge" :class="coverageSummary.uncovered > 0 ? 'is-uncovered' : 'is-covered'">未纳入 {{ coverageSummary.uncovered }}</span>
+        </template>
+        <span v-else class="coverage-hint">（展开查看 Clickflare / ef-tracker 在用域名是否都已纳入检测）</span>
+        <button class="coverage-refresh" @click.stop="loadCoverage" :disabled="coverageLoading" title="重新拉取对比数据">
+          {{ coverageLoading ? '拉取中...' : '刷新' }}
+        </button>
+      </div>
+
+      <div v-if="coverageVisible" class="coverage-body" v-loading="coverageLoading">
+        <div v-if="coverageData && !coverageLoading" class="coverage-content">
+          <div v-if="coverageData.ef_error" class="coverage-error-tip">⚠ ef-tracker 落地页列表拉取失败，当前仅展示 Clickflare 侧数据，可点刷新重试</div>
+          <div class="coverage-toolbar">
+            <el-switch v-model="showAllCoverage" active-text="显示全部" inactive-text="只看未纳入" />
+          </div>
+          <el-table :data="coverageFiltered" size="small" max-height="320" class="coverage-table">
+            <el-table-column label="域名" prop="domain" min-width="200" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span class="coverage-domain">{{ row.domain }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="来源" width="170" align="center">
+              <template #default="{ row }">
+                <span
+                  v-for="s in row.sources"
+                  :key="s"
+                  class="coverage-source"
+                  :class="s === 'clickflare' ? 'is-cf' : 'is-ef'"
+                >{{ s === 'clickflare' ? 'Clickflare' : 'ef-tracker' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Lander 数" prop="lander_count" width="90" align="center" />
+            <el-table-column label="检测状态" width="130" align="center">
+              <template #default="{ row }">
+                <span v-if="row.in_detection && row.is_important === 1" class="coverage-status is-ok">✓ 检测中</span>
+                <span v-else-if="row.in_detection" class="coverage-status is-registered">已登记非重要</span>
+                <span v-else class="coverage-status is-missing">⚠ 未纳入</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="用途" prop="purpose" min-width="120" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.purpose">{{ row.purpose }}</span>
+                <span v-else class="coverage-empty">-</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="110" align="center">
+              <template #default="{ row }">
+                <button v-if="!row.in_detection" class="coverage-add-btn" @click="handleAddToDetection(row)">添加到检测</button>
+                <span v-else class="coverage-empty">-</span>
+              </template>
+            </el-table-column>
+            <template #empty>
+              <div class="coverage-empty-tip">
+                {{ showAllCoverage ? '暂无数据' : '🎉 两个系统在用域名已全部纳入检测' }}
+              </div>
+            </template>
+          </el-table>
+        </div>
+      </div>
+    </div>
+
     <!-- 搜索区域 (同时搜索重要域名和黑名单域名) -->
     <div class="domains-search">
       <page-search
@@ -645,8 +714,58 @@ const checkStatusClass = computed(() => {
 })
 const checkStatusText = computed(() => {
   if (!lastCheckTime.value) return '（检测脚本未上报过）'
-  return checkStatusClass.value === 'is-running' ? '检测运行中' : '检测疑似停跑，请检查脚本'
+  return checkStatusClass.value === 'is-running' ? '检测脚本运行中' : '检测脚本疑似已停止, 请检查'
 })
+
+
+// ===== Clickflare 域名覆盖对比（只读 cf_landers 本地同步数据，不触发同步）=====
+const coverageVisible = ref(false)
+const coverageLoading = ref(false)
+const coverageData = ref(null) // { list, summary }
+const showAllCoverage = ref(false)
+
+const coverageSummary = computed(() => (coverageVisible.value || coverageData.value) ? coverageData.value?.summary : null)
+const coverageFiltered = computed(() => {
+  const list = coverageData.value?.list || []
+  return showAllCoverage.value ? list : list.filter((x) => !x.in_detection)
+})
+
+function toggleCoverage() {
+  coverageVisible.value = !coverageVisible.value
+  if (coverageVisible.value && !coverageData.value) {
+    loadCoverage() // 首次展开懒加载
+  }
+}
+
+async function loadCoverage() {
+  coverageLoading.value = true
+  try {
+    const res = await hyRequest.get({ url: '/domains/coverage' })
+    if (res.code === 0) {
+      coverageData.value = res.data
+    } else {
+      ElMessage.error(res.message || '获取覆盖对比失败')
+    }
+  } catch (error) {
+    console.error('获取覆盖对比失败:', error)
+    ElMessage.error('获取覆盖对比失败: ' + (error?.message || '网络错误'))
+  } finally {
+    coverageLoading.value = false
+  }
+}
+
+// 未纳入域名 → 打开现有新增弹窗并预填：域名 + 落地页地址（该域名的一条 lander URL）
+function handleAddToDetection(row) {
+  handleNewClick('import_list')
+  nextTick(() => {
+    if (modalRef.value?.formData) {
+      modalRef.value.formData.existing_domain = row.domain
+      if (row.sample_url) {
+        modalRef.value.formData.landing_page_url = row.sample_url
+      }
+    }
+  })
+}
 </script>
 
 <style lang="less" scoped>
@@ -703,6 +822,183 @@ const checkStatusText = computed(() => {
     color: #9aa0a6;
     font-size: 12px;
   }
+}
+
+/* Clickflare 域名覆盖对比卡片：与状态条同款卡片风格，可折叠 */
+.coverage-card {
+  background: #fff;
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.coverage-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    background: #f8f9fa;
+  }
+}
+
+.coverage-arrow {
+  font-size: 10px;
+  color: #5f6368;
+  transition: transform 0.2s;
+
+  &.expanded {
+    transform: rotate(90deg);
+  }
+}
+
+.coverage-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.coverage-badge {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+
+  &.is-total {
+    background: #f1f3f4;
+    color: #5f6368;
+  }
+
+  &.is-covered {
+    background: #e6f4ea;
+    color: #137333;
+  }
+
+  &.is-uncovered {
+    background: #fce8e6;
+    color: #c5221f;
+    font-weight: 500;
+  }
+}
+
+.coverage-hint {
+  color: #9aa0a6;
+  font-size: 12px;
+}
+
+.coverage-refresh {
+  margin-left: auto;
+  padding: 2px 12px;
+  height: 26px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: #fff;
+  color: #5f6368;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #f1f3f4;
+    color: #202124;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.coverage-body {
+  border-top: 1px solid #f1f3f4;
+  min-height: 60px;
+}
+
+.coverage-content {
+  padding: 10px 16px 14px;
+}
+
+.coverage-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.coverage-domain {
+  font-family: 'Roboto Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: #202124;
+}
+
+/* 来源徽章：Clickflare 蓝 / ef-tracker 紫，同一域名两侧都用时并排显示 */
+.coverage-source {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 9px;
+  font-size: 11px;
+  margin-right: 4px;
+
+  &.is-cf {
+    background: #e8f0fe;
+    color: #1a73e8;
+  }
+
+  &.is-ef {
+    background: #f3e8fd;
+    color: #7627bb;
+  }
+}
+
+.coverage-error-tip {
+  padding: 6px 12px;
+  margin-bottom: 8px;
+  background: #fef7e0;
+  color: #b06000;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.coverage-status {
+  font-size: 12px;
+
+  &.is-ok {
+    color: #137333;
+  }
+
+  &.is-registered {
+    color: #9aa0a6;
+  }
+
+  &.is-missing {
+    color: #c5221f;
+    font-weight: 500;
+  }
+}
+
+.coverage-empty {
+  color: #9aa0a6;
+}
+
+.coverage-add-btn {
+  padding: 3px 10px;
+  border: 1px solid #1a73e8;
+  border-radius: 4px;
+  background: #fff;
+  color: #1a73e8;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover {
+    background: #e8f0fe;
+  }
+}
+
+.coverage-empty-tip {
+  padding: 16px 0;
+  color: #5f6368;
+  font-size: 13px;
 }
 
 

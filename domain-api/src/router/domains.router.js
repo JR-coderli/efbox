@@ -1,5 +1,5 @@
 const KoaRouter = require('@koa/router')
-const { create, normal_list, import_list, remove, update, updateIsImportant, updateIsNormal, updateRemark, checkDomain, getReplacementDomain, dailyReportList, reportLastCheck, getLastCheck } = require('../controller/domains.controller')
+const { create, normal_list, import_list, remove, update, updateIsImportant, updateIsNormal, updateRemark, checkDomain, getReplacementDomain, dailyReportList, reportLastCheck, getLastCheck, coverage } = require('../controller/domains.controller')
 const { verifyAuth } = require('../middleware/login.middleware')
 
 
@@ -35,6 +35,8 @@ domainsRouter.get('/internal/daily_report_list', dailyReportList) // url_detecti
 domainsRouter.post('/internal/report_last_check', reportLastCheck) // url_detection_database 每轮检测完成打点(无鉴权, 仿 internal 惯例)
 
 domainsRouter.get('/last_check', verifyAuth, getLastCheck) // 前端域名检测页展示"最后检测时间"
+
+domainsRouter.get('/coverage', verifyAuth, coverage) // 前端域名检测页展示"Clickflare 域名覆盖对比"
 
 
 

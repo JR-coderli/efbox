@@ -214,6 +214,28 @@ class DomainsController {
   }
 
 
+  /**
+   * Clickflare 域名覆盖对比（前端域名检测页展示：哪些 Clickflare 在用域名未纳入检测）
+   */
+  async coverage(ctx, next) {
+    try {
+      const data = await domainsService.coverageList()
+      ctx.body = {
+        code: 0,
+        message: '获取成功',
+        data
+      }
+    } catch (error) {
+      console.log('获取域名覆盖对比失败:', error)
+      ctx.body = {
+        code: 1,
+        message: '获取失败: ' + error.message,
+        data: null
+      }
+    }
+  }
+
+
   async updateIsNormal(ctx, next) {
 
     const { id } = ctx.params

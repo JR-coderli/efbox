@@ -313,6 +313,107 @@ class DomainsService {
   }
 
 
+  /**
+   * Clickflare 域名覆盖对比：cf_landers（本地已同步的 Clickflare lander 表）提取全部域名，
+   * 对照 domains 检测表，找出未纳入检测的域名。
+   * 只读 cf_landers —— 不触碰任何同步/写入逻辑。
+   */
+  async coverageList() {
+    // 1) Clickflare 侧：只读查询 cf_landers 全部 url（lander-sync 定时任务维护的本地镜像）
+    const [rows] = await connection.execute(
+      `SELECT url FROM cf_landers WHERE url <> ''`
+    )
+
+    // 2) ef-tracker 侧：分页全量拉 /query/landers 的 url（只读对方接口，拉取失败不阻塞 Clickflare 侧对比）
+    const efUrls = []
+    let efError = false
+    try {
+      const efTrackerConfig = require('../config/ef-tracker')
+      const axios = require('axios')
+      const size = 100
+      let page = 1
+      let pages = 1
+      do {
+        const res = await axios.get(`${efTrackerConfig.baseURL}/query/landers`, {
+          params: { page, size },
+          timeout: 15000
+        })
+        const list = res?.data?.list || []
+        for (const item of list) {
+          if (item.url) efUrls.push(item.url)
+        }
+        pages = res?.data?.pages || Math.ceil((res?.data?.total || 0) / size) || 1
+        page++
+      } while (page <= pages)
+    } catch (err) {
+      efError = true
+      console.log('[域名覆盖对比] 拉取 ef-tracker 落地页列表失败:', err.message)
+    }
+
+    // 3) 提取 hostname 去重 + 按域名计数 lander 条数 + 记来源 + 记示例地址（域名 origin，预填落地页地址用）
+    const domainCount = new Map() // domain -> lander 数（两侧合计）
+    const sampleUrlMap = new Map() // domain -> 协议+域名（如 https://pro.xxx.com，不带路径）
+    const sourceMap = new Map()   // domain -> Set('clickflare' | 'eftracker')
+    const addUrl = (url, source) => {
+      try {
+        const u = new URL(url)
+        domainCount.set(u.hostname, (domainCount.get(u.hostname) || 0) + 1)
+        if (!sampleUrlMap.has(u.hostname)) sampleUrlMap.set(u.hostname, u.origin)
+        if (!sourceMap.has(u.hostname)) sourceMap.set(u.hostname, new Set())
+        sourceMap.get(u.hostname).add(source)
+      } catch {
+        // 非法 URL 跳过
+      }
+    }
+    for (const r of rows) addUrl(r.url, 'clickflare')
+    for (const url of efUrls) addUrl(url, 'eftracker')
+
+    const domains = [...domainCount.keys()]
+
+    // 4) 对照 domains 检测表（批量精确匹配 existing_domain）
+    const detectionMap = new Map() // domain -> { purpose, is_important }
+    if (domains.length > 0) {
+      // IN 占位符分批（防止域名过多超出 SQL 长度限制，1000 一批）
+      for (let i = 0; i < domains.length; i += 1000) {
+        const batch = domains.slice(i, i + 1000)
+        const placeholders = batch.map(() => '?').join(',')
+        const [dRows] = await connection.execute(
+          `SELECT existing_domain, purpose, is_important FROM domains WHERE existing_domain IN (${placeholders})`,
+          batch
+        )
+        for (const d of dRows) detectionMap.set(d.existing_domain, { purpose: d.purpose, is_important: d.is_important })
+      }
+    }
+
+    // 5) 组装：未覆盖优先，同组按域名字母序
+    const list = domains.map((d) => {
+      const hit = detectionMap.get(d)
+      return {
+        domain: d,
+        lander_count: domainCount.get(d),
+        sources: [...sourceMap.get(d)],      // 使用该域名的系统 ['clickflare'] / ['eftracker'] / 两侧
+        sample_url: sampleUrlMap.get(d) || '', // 域名 origin（前端预填落地页地址用）
+        in_detection: !!hit,               // 是否已登记在 domains 表
+        is_important: hit ? hit.is_important : null, // 1=检测中 0=已登记但非重要 null=未登记
+        purpose: hit ? hit.purpose : ''
+      }
+    }).sort((a, b) => {
+      if (a.in_detection !== b.in_detection) return a.in_detection ? 1 : -1 // 未覆盖排前面
+      return a.domain.localeCompare(b.domain)
+    })
+
+    const covered = list.filter((x) => x.in_detection).length
+    return {
+      list,
+      summary: {
+        total: list.length,          // 两侧在用域名总数（去重后）
+        covered,                     // 已纳入 domains 表
+        uncovered: list.length - covered // 未纳入（页面重点展示）
+      },
+      ef_error: efError // ef-tracker 拉取失败标记（前端提示，Clickflare 侧对比不受影响）
+    }
+  }
+
   async update(domainId, existing_domain, landing_page_url, is_important, is_normal, purpose, remark) {
 
     const updates = [];
