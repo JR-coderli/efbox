@@ -1,5 +1,14 @@
 <template>
   <div class="domains-page">
+    <!-- 检测状态条：最后检测时间来自 url_detection_database 脚本每轮检测完成的上报；
+         时间长期不推进 = 脚本没在跑（15 分钟一轮，留 5 分钟余量判"疑似停跑"） -->
+    <div class="check-status-bar">
+      <span class="status-dot" :class="checkStatusClass"></span>
+      <span class="status-label">最后检测时间：</span>
+      <span class="status-time">{{ lastCheckTime || '暂无检测记录' }}</span>
+      <span class="status-hint">{{ checkStatusText }}</span>
+    </div>
+
     <!-- 搜索区域 (同时搜索重要域名和黑名单域名) -->
     <div class="domains-search">
       <page-search
@@ -330,7 +339,7 @@ import hyRequest from '@/services/request'
 
 import usePageContent from '@/hooks/usePageContent';
 import usePageModal from '@/hooks/usePageModal'
-import { onMounted, ref, nextTick, reactive } from 'vue'
+import { onMounted, ref, nextTick, reactive, computed } from 'vue'
 import useSystemStore from '@/stores/main/system/system'
 import { ElMessage, ElNotification, ElMessageBox } from 'element-plus'
 
@@ -607,6 +616,36 @@ async function handleCheckDomain(row) {
 onMounted(() => {
   contentRefs.value = [importContentRef.value, normalContentRef.value]
   fetchPurposeOptions()
+  fetchLastCheckTime()
+})
+
+
+// ===== 最后检测时间（url_detection_database 脚本上报的打点）=====
+const lastCheckTime = ref('')
+
+async function fetchLastCheckTime() {
+  try {
+    const res = await hyRequest.get({ url: '/domains/last_check' })
+    if (res.code === 0) {
+      // 后端存的是服务器本地时间字符串(YYYY-MM-DD HH:mm:ss)，直接展示，不再做时区换算
+      lastCheckTime.value = res.data?.last_check_time || ''
+    }
+  } catch (error) {
+    console.error('获取最后检测时间失败:', error)
+  }
+}
+
+// 运行状态：距最后检测 ≤20 分钟视为运行中(绿)，超时视为疑似停跑(橙)；无记录为灰
+const CHECK_STALE_MS = 20 * 60 * 1000
+const checkStatusClass = computed(() => {
+  if (!lastCheckTime.value) return 'is-unknown'
+  return Date.now() - new Date(lastCheckTime.value.replace(/-/g, '/')).getTime() <= CHECK_STALE_MS
+    ? 'is-running'
+    : 'is-stalled'
+})
+const checkStatusText = computed(() => {
+  if (!lastCheckTime.value) return '（检测脚本未上报过）'
+  return checkStatusClass.value === 'is-running' ? '检测运行中' : '检测疑似停跑，请检查脚本'
 })
 </script>
 
@@ -615,6 +654,55 @@ onMounted(() => {
   padding: 10px;
   // max-width: 1600px;
   margin: 0 auto;
+}
+
+/* 检测状态条：与搜索栏同款卡片风格 */
+.check-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fff;
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+
+    &.is-running {
+      background: #34a853;
+      box-shadow: 0 0 0 3px rgba(52, 168, 83, 0.15);
+    }
+
+    &.is-stalled {
+      background: #ea8600;
+      box-shadow: 0 0 0 3px rgba(234, 134, 0, 0.15);
+    }
+
+    &.is-unknown {
+      background: #9aa0a6;
+    }
+  }
+
+  .status-label {
+    color: #5f6368;
+  }
+
+  .status-time {
+    color: #202124;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-hint {
+    color: #9aa0a6;
+    font-size: 12px;
+  }
 }
 
 

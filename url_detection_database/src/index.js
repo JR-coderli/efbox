@@ -1,5 +1,5 @@
 require('./utils/loadEnv')();
-const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, sendFeishuText, getDailyReportList } = require('./utils/api')
+const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, sendFeishuText, getDailyReportList, reportLastCheck } = require('./utils/api')
 const writeLog = require('./utils/writeLog')
 const sendMail = require('./utils/sendEmail')
 const checkSafeBrowsing = require('./utils/checkSafeBrowsing')
@@ -31,6 +31,7 @@ async function checkUrls(urlObjs, isComplete = false) {
 
   if (!urlObjs.length) {
     writeLog('没有可检测的URL')
+    reportLastCheck() // 空列表也算跑完一轮: 持续打点证明脚本活着
     return
   }
 
@@ -93,6 +94,9 @@ async function checkUrls(urlObjs, isComplete = false) {
     // 异常告警: 发邮件的同时触发飞书电话加急 (早上8点的日报只发邮件, 不打电话)
     await triggerUrgentPhoneCall(buildAlertText(filteredAlerts));
   }
+
+  // 本轮检测完成: 上报最后检测时间(前端域名检测页展示; 时间不推进=脚本没在跑)
+  reportLastCheck()
 }
 
 

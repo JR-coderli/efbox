@@ -30,6 +30,21 @@ async function getUrlsFromApi() {
 }
 
 
+// 上报"最后检测时间"—— 每轮检测完成时打点, 服务端记当前时间到 system_config。
+// 前端域名检测页据此展示最后检测时间; 时间长期不推进 = 检测脚本没在跑。
+// 失败只打日志, 不影响检测主流程。
+async function reportLastCheck() {
+  try {
+    const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
+    const res = await axios.post(`${baseUrl}/domains/internal/report_last_check`, {}, { timeout: 10000 })
+    return res?.data?.code === 0
+  } catch (err) {
+    console.log(`❌ 上报最后检测时间失败: ${err.message}`)
+    return false
+  }
+}
+
+
 // 将域名降级为非重要域名 (is_important = 0)
 // 供检测脚本在域名连续多轮异常后调用, 降级后该域名会移出 import_list 监控范围
 async function setDomainNotImportant(id) {  try {
@@ -282,5 +297,6 @@ module.exports = {
   sendFeishuText,
   replaceDangerousDomain,
   replaceEfTrackerDomain,
-  getDailyReportList
+  getDailyReportList,
+  reportLastCheck
 }

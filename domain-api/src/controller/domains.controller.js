@@ -1,4 +1,8 @@
 const domainsService = require('../service/domains.service')
+const systemConfigService = require('../service/system-config.service')
+
+// 检测脚本最后运行时间的 system_config 键
+const LAST_CHECK_KEY = 'domain_check.last_run_at'
 
 class DomainsController {
 
@@ -141,6 +145,56 @@ class DomainsController {
       }
     } catch (error) {
       console.log(error)
+      ctx.body = {
+        code: 1,
+        message: '获取失败: ' + error.message,
+        data: null
+      }
+    }
+  }
+
+
+  /**
+   * 上报"最后检测时间"(供 url_detection_database 每轮检测完成时打点)
+   * 时间取服务器当前时间(脚本时钟不可靠,不信任客户端传值),格式 YYYY-MM-DD HH:mm:ss
+   */
+  async reportLastCheck(ctx, next) {
+    try {
+      const now = new Date()
+      const pad = (n) => String(n).padStart(2, '0')
+      const timeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+
+      await systemConfigService.set(LAST_CHECK_KEY, timeStr)
+
+      ctx.body = {
+        code: 0,
+        message: '上报成功',
+        data: { last_check_time: timeStr }
+      }
+    } catch (error) {
+      console.log('上报最后检测时间失败:', error)
+      ctx.body = {
+        code: 1,
+        message: '上报失败: ' + error.message,
+        data: null
+      }
+    }
+  }
+
+  /**
+   * 查询"最后检测时间"(前端域名检测页展示用)
+   */
+  async getLastCheck(ctx, next) {
+    try {
+      const value = await systemConfigService.get(LAST_CHECK_KEY, null)
+
+      ctx.body = {
+        code: 0,
+        message: '获取成功',
+        data: { last_check_time: value }
+      }
+    } catch (error) {
+      console.log('获取最后检测时间失败:', error)
       ctx.body = {
         code: 1,
         message: '获取失败: ' + error.message,
