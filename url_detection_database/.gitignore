@@ -6,4 +6,6 @@ tmpclaude-*
 
 /logs/*.log
 
+src/logs/
+
 .env
