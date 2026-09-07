@@ -54,6 +54,11 @@
             </el-form>
           </div>
           <div class="filter-actions">
+            <!-- 漏斗步骤筛选指示：筛选中时显示在按钮区左侧（显眼位置），点 × 取消恢复全量 -->
+            <div v-if="funnelStepFilter" class="funnel-filter-tag">
+              已按漏斗筛选：<b>{{ funnelStepLabel }}</b>
+              <span class="funnel-filter-clear" @click="filterByFunnelStep(funnelStepFilter)">× 取消</span>
+            </div>
             <el-popover
               trigger="click"
               placement="bottom-end"
@@ -136,16 +141,16 @@
                     <span class="funnel-arrow">›</span>
                     <span
                       class="funnel-step"
-                      :class="[stepBoolClass(row.funnel.converted), { 'funnel-clickable': hasDetail('conversion', row.funnel) }]"
+                      :class="[stepBoolClass(row.funnel.converted), 'funnel-clickable']"
                       :data-tip="stepBoolTitle('转化', row.funnel.converted, row.funnel.converted_at)"
-                      @click="hasDetail('conversion', row.funnel) && openDetail('conversion', row)"
+                      @click="filterByFunnelStep('converted')"
                     >转化</span>
                     <span class="funnel-arrow">›</span>
                     <span
                       class="funnel-step"
-                      :class="[postbackClass(row.funnel.media_postback), { 'funnel-clickable': hasDetail('postback', row.funnel) }]"
+                      :class="[postbackClass(row.funnel.media_postback), 'funnel-clickable']"
                       :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)"
-                      @click="hasDetail('postback', row.funnel) && openDetail('conversion', row)"
+                      @click="filterByFunnelStep('postback')"
                     >下发</span>
                   </template>
                   <template v-else>
@@ -154,30 +159,30 @@
                     <span class="funnel-arrow">›</span>
                     <span
                       class="funnel-step"
-                      :class="[stepBoolClass(row.funnel.reached_lp), { 'funnel-clickable': hasDetail('lp_visit', row.funnel) }]"
+                      :class="[stepBoolClass(row.funnel.reached_lp), 'funnel-clickable']"
                       :data-tip="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)"
-                      @click="hasDetail('lp_visit', row.funnel) && openDetail('lp_visit', row)"
+                      @click="filterByFunnelStep('lp_visit')"
                     >LP展示</span>
                     <span class="funnel-arrow">›</span>
                     <span
                       class="funnel-step"
-                      :class="[stepBoolClass(row.funnel.lp_click), { 'funnel-clickable': hasDetail('lp_click', row.funnel) }]"
+                      :class="[stepBoolClass(row.funnel.lp_click), 'funnel-clickable']"
                       :data-tip="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)"
-                      @click="hasDetail('lp_click', row.funnel) && openDetail('lp_click', row)"
+                      @click="filterByFunnelStep('lp_click')"
                     >LP点击</span>
                     <span class="funnel-arrow">›</span>
                     <span
                       class="funnel-step"
-                      :class="[stepBoolClass(row.funnel.converted), { 'funnel-clickable': hasDetail('conversion', row.funnel) }]"
+                      :class="[stepBoolClass(row.funnel.converted), 'funnel-clickable']"
                       :data-tip="stepBoolTitle('转化', row.funnel.converted, row.funnel.converted_at)"
-                      @click="hasDetail('conversion', row.funnel) && openDetail('conversion', row)"
+                      @click="filterByFunnelStep('converted')"
                     >转化</span>
                     <span class="funnel-arrow">›</span>
                     <span
                       class="funnel-step"
-                      :class="[postbackClass(row.funnel.media_postback), { 'funnel-clickable': hasDetail('postback', row.funnel) }]"
+                      :class="[postbackClass(row.funnel.media_postback), 'funnel-clickable']"
                       :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)"
-                      @click="hasDetail('postback', row.funnel) && openDetail('conversion', row)"
+                      @click="filterByFunnelStep('postback')"
                     >下发</span>
                   </template>
                 </div>
@@ -303,32 +308,6 @@
     </div>
     <!-- 漏斗徽章悬浮提示（跟随鼠标的自定义浮层）-->
     <div v-if="tip.visible" class="funnel-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
-
-    <!-- 漏斗步骤详情弹窗 -->
-    <el-dialog
-      v-model="detailDialog.visible"
-      :title="detailDialog.title + (detailDialog.systemClickId ? ' · ' + detailDialog.systemClickId : '')"
-      class="funnel-detail-dialog"
-      append-to-body
-      destroy-on-close
-      align-center
-    >
-      <el-table :data="detailDialog.list" v-loading="detailDialog.loading" size="small" :height="detailTableMaxHeight" class="detail-table" border>
-        <el-table-column
-          v-for="col in detailDialog.columns"
-          :key="col.label"
-          :label="col.label"
-          :width="col.width"
-          :min-width="col.minWidth"
-          show-overflow-tooltip
-        >
-          <template #default="{ row }">{{ col.get(row) }}</template>
-        </el-table-column>
-        <template #empty>
-          <el-empty description="暂无数据" />
-        </template>
-      </el-table>
-    </el-dialog>
   </div>
 </template>
 
@@ -348,7 +327,7 @@ const KEYWORD_FIELDS = [
   'creative_name',
   'ip_address'
 ]
-import { getClicks, getLpVisitLogs, getLpClicks, getConversions, getEfLanderScreenshots } from '@/services/main/ef-tracker'
+import { getClicks, getEfLanderScreenshots } from '@/services/main/ef-tracker'
 import { BASE_URL } from '@/services/request/config'
 import SparkMD5 from 'spark-md5'
 import CellLoading from './cell-loading.vue'
@@ -646,97 +625,19 @@ function onStepOut(e) {
   }
 }
 
-// 漏斗徽章点击 → 弹窗查该步骤详情（用 system_click_id 跨表查）
-// 可点击判定按"有数据"：前三个看布尔；下发看 media_postback !== 'none'
-function hasDetail(step, f) {
-  if (!f) return false
-  if (step === 'lp_visit') return !!f.reached_lp
-  if (step === 'lp_click') return !!f.lp_click
-  if (step === 'conversion') return !!f.converted
-  if (step === 'postback') return !!f.media_postback && f.media_postback !== 'none'
-  return false
-}
+// 漏斗徽章点击 → 按该步骤筛选列表（走 /query/clicks 的 funnel_step 参数，2026-09-07 接口新增）。
+// 徽章与接口值的映射：LP展示→lp_visit、LP点击→lp_click、转化→converted、下发→postback(已实际下发,扣量/待发不算)。
+// 点击即筛选（回到第 1 页）；再点一次同步骤 = 取消筛选（恢复全量）。
+const funnelStepFilter = ref('') // '' = 不按漏斗步骤过滤
 
-// 各步骤：标题 + 查询函数 + 弹窗表格列（get 取值，兼容嵌套 names）。转化/下发共用 conversion 配置
-const STEP_CONFIG = {
-  lp_visit: {
-    title: 'LP 展示详情',
-    fetch: (id) => getLpVisitLogs({ keyword: id, size: 100, with_names: true, tz: tz.value }),
-    columns: [
-      { label: 'ID', width: 80, get: (r) => r.id },
-      { label: '时间', width: 180, get: (r) => fmtTime(r.created_at) },
-      { label: 'visitor_id', minWidth: 160, get: (r) => r.visitor_id || '-' },
-      { label: 'Lander', minWidth: 110, get: (r) => r.names?.lander || '-' },
-      { label: 'Tracker', minWidth: 110, get: (r) => r.names?.tracker || '-' },
-      { label: 'IP', width: 140, get: (r) => r.ip_address || '-' },
-      { label: 'User-Agent', minWidth: 220, get: (r) => r.user_agent || '-' }
-    ]
-  },
-  lp_click: {
-    title: 'LP 点击详情',
-    fetch: (id) => getLpClicks({ keyword: id, size: 100, with_names: true, tz: tz.value }),
-    columns: [
-      { label: 'ID', width: 80, get: (r) => r.id },
-      { label: '时间', width: 180, get: (r) => fmtTime(r.created_at) },
-      { label: '媒体', minWidth: 100, get: (r) => r.names?.media || '-' },
-      { label: 'Tracker', minWidth: 100, get: (r) => r.names?.tracker || '-' },
-      { label: 'Lander', minWidth: 100, get: (r) => r.names?.lander || '-' },
-      { label: 'Offer', minWidth: 100, get: (r) => r.names?.offer || '-' },
-      { label: 'path_code', width: 110, get: (r) => r.path_code || '-' },
-      { label: 'IP', width: 140, get: (r) => r.ip_address || '-' },
-      { label: 'referer', minWidth: 200, get: (r) => r.referer || '-' },
-      { label: 'offer_url', minWidth: 220, get: (r) => r.offer_url || '-' }
-    ]
-  },
-  conversion: {
-    title: '转化 / 回传详情',
-    fetch: (id) => getConversions({ keyword: id, size: 100, with_names: true, tz: tz.value }),
-    columns: [
-      { label: 'ID', width: 80, get: (r) => r.id },
-      { label: '转化时间', width: 180, get: (r) => fmtTime(r.created_at) },
-      { label: '回传时间', width: 180, get: (r) => fmtTime(r.posted_at) },
-      { label: 'payout', width: 90, get: (r) => r.payout ?? '-' },
-      { label: 'should_postback', width: 130, get: (r) => String(r.should_postback ?? '-') },
-      { label: 'HTTP', width: 80, get: (r) => r.http_status_code ?? '-' },
-      { label: '媒体', minWidth: 100, get: (r) => r.names?.media || '-' },
-      { label: '回传URL', minWidth: 220, get: (r) => r.media_postback_url || '-' },
-      { label: '响应', minWidth: 220, get: (r) => r.response_body || '-' }
-    ]
-  }
-}
+// 步骤值 → 中文标签（筛选指示条显示用）
+const FUNNEL_STEP_LABEL = { lp_visit: 'LP展示', lp_click: 'LP点击', converted: '转化', postback: '下发' }
+const funnelStepLabel = computed(() => FUNNEL_STEP_LABEL[funnelStepFilter.value] || funnelStepFilter.value)
 
-const detailDialog = reactive({
-  visible: false,
-  loading: false,
-  title: '',
-  systemClickId: '',
-  list: [],
-  columns: []
-})
-
-// 详情弹窗表格最大高度：按视口 62%，适配移动端（resize 时重算）
-const detailTableMaxHeight = ref(460)
-function calcDetailHeight() {
-  detailTableMaxHeight.value = Math.max(220, Math.floor(window.innerHeight * 0.62))
-}
-
-async function openDetail(step, row) {
-  const cfg = STEP_CONFIG[step]
-  if (!cfg) return
-  detailDialog.title = cfg.title
-  detailDialog.systemClickId = row.system_click_id
-  detailDialog.columns = cfg.columns
-  detailDialog.list = []
-  detailDialog.visible = true
-  detailDialog.loading = true
-  try {
-    const res = await cfg.fetch(row.system_click_id)
-    detailDialog.list = res?.list || []
-  } catch (error) {
-    ElMessage.error('详情加载失败: ' + (error?.response?.data?.error || error?.message || '网络错误'))
-  } finally {
-    detailDialog.loading = false
-  }
+function filterByFunnelStep(step) {
+  funnelStepFilter.value = funnelStepFilter.value === step ? '' : step
+  pagination.page = 1
+  loadData()
 }
 
 // ===== 列配置（数据驱动，配合齿轮面板做显隐 / 拖拽排序）=====
@@ -913,6 +814,7 @@ function buildParams() {
   p.with_names = true // 返回 mid/tid/oid/lid 对应的名称（names 字段）
   p.with_funnel = true // 返回归因漏斗（funnel：到达LP / 点击Offer / 转化 / 媒体下发）
   if (uniqueOnly.value) p.unique = true // 去重：按 media_click_id 只保留最新一条
+  if (funnelStepFilter.value) p.funnel_step = funnelStepFilter.value // 漏斗步骤筛选（点击漏斗徽章设置）
   Object.assign(p, rangeToParams(dateRange.value))
   return p
 }
@@ -953,9 +855,7 @@ function handleCurrentChange(page) {
 onMounted(() => {
   loadData()
   loadColumns() // 异步加载库中列设置，回来后覆盖默认配置（不阻塞列表首屏）
-  calcDetailHeight()
   nextTick(calcTableHeight) // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
-  window.addEventListener('resize', calcDetailHeight)
   window.addEventListener('resize', calcTableHeight)
 })
 
@@ -980,7 +880,6 @@ function handleRefresh() {
 onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
-  window.removeEventListener('resize', calcDetailHeight)
   window.removeEventListener('resize', calcTableHeight)
   unbindHeaderDrag()
 })
@@ -1347,6 +1246,36 @@ function toggleUnique() {
   &:hover {
     opacity: 0.85;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+}
+
+/* 漏斗步骤筛选指示条：筛选中显示在筛选栏按钮区左侧（显眼位置），点 × 取消恢复全量 */
+.funnel-filter-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 32px;
+  background: #e8f0fe;
+  color: #1a73e8;
+  border-radius: 4px;
+  font-size: 13px;
+  border: 1px solid #c6dafc;
+
+  b {
+    font-weight: 500;
+  }
+}
+
+.funnel-filter-clear {
+  cursor: pointer;
+  color: #5f6368;
+  padding: 0 2px;
+  font-size: 15px;
+  line-height: 1;
+
+  &:hover {
+    color: #c5221f;
   }
 }
 
