@@ -54,7 +54,17 @@ class DomainsController {
 
     const { existing_domain, landing_page_url, is_important, is_normal, purpose, remark } = ctx.request.body
 
-    await domainsService.update(domainId, existing_domain, landing_page_url, is_important, is_normal, purpose, remark)
+    const result = await domainsService.update(domainId, existing_domain, landing_page_url, is_important, is_normal, purpose, remark)
+
+    // 业务错误（如域名重复）→ 正常响应 code:1，前端弹提示，而不是抛异常挂掉请求
+    if (result && result.error) {
+      ctx.body = {
+        code: 1,
+        message: result.error,
+        data: null
+      }
+      return
+    }
 
     ctx.body = {
       code: 0,

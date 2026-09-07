@@ -193,6 +193,16 @@ const useSystemStore = defineStore('system', {
 
       const editResult = await editPageData(pageName, id, pageInfo)
 
+      // 业务错误（如域名改成已存在的值 → "域名已存在"）：弹错误提示并中止，
+      // 不再走"数据已更新"的成功流程（之前后端抛异常时前端会误判成登录失效）
+      if (!editResult || (editResult.code !== undefined && editResult.code !== 0)) {
+        ElNotification({
+          message: editResult?.message || '更新失败',
+          type: 'error'
+        })
+        return
+      }
+
 
 
 

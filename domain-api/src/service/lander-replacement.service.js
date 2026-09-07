@@ -148,13 +148,15 @@ class LanderReplacementService {
 
     replacementQueue.add(async () => {
       return this._executeReplacement(recordId, dangerousDomain, replacementDomain, landers, workspaceType)
-    }).catch(error => {
+    }).catch(async (error) => {
 
       console.error(`[Replace Domain] 任务 ${recordId} 队列执行失败:`, error)
-      connection.execute(
+      await connection.execute(
         `UPDATE cf_lander_url_replacements SET status = 'failed', error_message = ? WHERE id = ?`,
         [error.message, recordId]
       )
+      // 队列异常兜底的失败终态：同样触发两侧裁决（会发现本侧 failed → 放弃继承）
+      await domainPurposeInheritService.resolveAfterSideFinished(dangerousDomain)
     })
 
 
@@ -518,10 +520,21 @@ class LanderReplacementService {
 
     console.log(`[Replace Domain] 任务 ${recordId} 完成: 状态=${status}, 成功 ${successCount} 条，失败 ${failedCount} 条`)
 
-    // 替换有成功条目时：备用域名 purpose 继承危险域名 purpose 原文（如 s1-备用 -> s1-LP）。
-    // 独立服务，内部不抛错，继承失败只打日志，不影响替换主流程。
-    if (successCount > 0) {
-      await domainPurposeInheritService.inheritByRecordId(recordId)
+    // 替换终态（success/partial/failed 都汇到这里）：触发两侧裁决——
+    // 只有 ef-tracker 侧也全部成功/未使用，且本侧 status=success 时才继承 purpose；
+    // 本侧 partial/failed 或对侧失败 → 裁决放弃继承，purpose 保持原状。
+    // 注意 _finishTask 没有危险域名参数，从 replacements 之外的记录行取；
+    // 这里查记录行拿 dangerous_domain 再裁决。
+    try {
+      const [rows] = await connection.execute(
+        `SELECT dangerous_domain FROM cf_lander_url_replacements WHERE id = ?`,
+        [recordId]
+      )
+      if (rows[0]?.dangerous_domain) {
+        await domainPurposeInheritService.resolveAfterSideFinished(rows[0].dangerous_domain)
+      }
+    } catch (e) {
+      console.error(`[purpose继承] Clickflare 终态后裁决失败(记录 ${recordId}):`, e.message)
     }
   }
 

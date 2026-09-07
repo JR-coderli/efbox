@@ -102,9 +102,8 @@ class EfLanderReplacementService {
 
       console.log(`[ef-替换] 任务 ${recordId} 完成: ${dangerousDomain} -> ${replacementDomain}, 替换 ${affected} 条`)
 
-      // 替换成功后：备用域名 purpose 继承危险域名 purpose 原文（如 s1-备用 -> s1-LP）。
-      // 独立服务，内部不抛错，继承失败只打日志，不影响替换主流程。
-      await domainPurposeInheritService.inheritByRecordId(recordId)
+      // 替换终态(成功)：触发两侧裁决——只有 Clickflare 侧也全部成功/未使用时才继承 purpose
+      await domainPurposeInheritService.resolveAfterSideFinished(dangerousDomain)
 
       return { success: true, message: 'ef-tracker 批量替换任务已完成', data: { recordId, affectedCount: affected } }
     } catch (error) {
@@ -121,6 +120,10 @@ class EfLanderReplacementService {
          WHERE id = ?`,
         [progressInfo, recordId]
       )
+
+      // 替换终态(失败)：同样触发裁决——裁决会发现本侧 failed，放弃继承(purpose 保持原状)
+      await domainPurposeInheritService.resolveAfterSideFinished(dangerousDomain)
+
       return { success: false, message: `ef-tracker 替换失败: ${errorMsg}`, data: { recordId } }
     }
   }

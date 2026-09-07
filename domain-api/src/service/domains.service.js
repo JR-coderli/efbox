@@ -360,6 +360,11 @@ class DomainsService {
       return result;
     } catch (error) {
       console.error('Update failed:', error);
+      // existing_domain 有 UNIQUE 索引：改成已存在的域名 → ER_DUP_ENTRY。
+      // 转成业务错误返回（与 create 的"域名已存在"一致），而不是抛出去把请求搞挂
+      if (error.code === 'ER_DUP_ENTRY') {
+        return { error: '域名已存在，不能修改为重复的域名' }
+      }
       throw error;
     }
   }

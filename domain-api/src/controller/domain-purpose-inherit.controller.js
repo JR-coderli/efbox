@@ -37,6 +37,25 @@ class DomainPurposeInheritController {
     const result = await domainPurposeInheritService.inheritPurpose(dangerous_domain, replacement_domain)
     ctx.body = { code: result.success ? 0 : 500, message: result.message, data: result }
   }
+
+  /**
+   * 两侧终态裁决（幂等，可反复调）：按危险域名检查 Clickflare + ef-tracker 两侧替换记录，
+   * 两侧全部成功/未使用 → 继承 purpose；任一侧失败 → 放弃；还有在跑的 → 等待。
+   * 供 url_detection_database 在两侧替换流程发完后兜底调用（Clickflare 侧是异步队列，
+   * 若 ef 侧先完成时裁决发现对侧还在跑，就没人再触发了——脚本兜底这一次解决该空窗）。
+   * body: { dangerous_domain }
+   */
+  async resolve(ctx) {
+    const { dangerous_domain } = ctx.request.body
+
+    if (!dangerous_domain) {
+      ctx.body = { code: 400, message: 'dangerous_domain 不能为空', data: null }
+      return
+    }
+
+    const result = await domainPurposeInheritService.resolveAfterSideFinished(dangerous_domain)
+    ctx.body = { code: 0, message: result.message, data: result }
+  }
 }
 
 module.exports = new DomainPurposeInheritController()

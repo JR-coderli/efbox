@@ -45,6 +45,40 @@ async function reportLastCheck() {
 }
 
 
+// 两侧替换终态裁决（兜底）：Clickflare 侧是异步队列，ef 侧先完成触发的裁决会因对侧"还在跑"
+// 而等待且无人再触发。这里轮询裁决接口直到有终态结论（继承成功 / 放弃 / 超时）。
+// 幂等：两侧都已成功时立即继承；任一侧失败立即放弃。失败只打日志。
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+async function resolvePurposeInherit(dangerousDomain, { intervalMs = 10000, timeoutMs = 5 * 60 * 1000 } = {}) {
+  const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
+  const startAt = Date.now()
+  let lastMessage = ''
+  while (Date.now() - startAt < timeoutMs) {
+    try {
+      const res = await axios.post(`${baseUrl}/domain-purpose-inherit/resolve`, { dangerous_domain: dangerousDomain }, { timeout: 15000 })
+      const data = res?.data?.data || {}
+      lastMessage = res?.data?.message || ''
+      // success=true: 继承完成（含幂等"已是目标值"）
+      if (res?.data?.code === 0 && data?.success === true) {
+        console.log(`[替换流程] purpose 继承完成: ${dangerousDomain} — ${lastMessage}`)
+        return true
+      }
+      // message 含"等待"→ 两侧还没都到终态，继续轮询；其他（失败/放弃/无记录）为终态结论，停
+      if (!String(lastMessage).includes('等待')) {
+        console.log(`[替换流程] purpose 继承未执行(终态): ${dangerousDomain} — ${lastMessage}`)
+        return false
+      }
+    } catch (err) {
+      console.log(`❌ 裁决 purpose 继承失败: ${err.message}`)
+      return false
+    }
+    await sleep(intervalMs)
+  }
+  console.log(`[替换流程] purpose 继承裁决超时(${Math.round(timeoutMs / 60000)}分钟): ${dangerousDomain} — ${lastMessage}`)
+  return false
+}
+
+
 // 将域名降级为非重要域名 (is_important = 0)
 // 供检测脚本在域名连续多轮异常后调用, 降级后该域名会移出 import_list 监控范围
 async function setDomainNotImportant(id) {  try {
@@ -77,16 +111,22 @@ async function updateDomainStatus(id, isAccessible, isSafe, url) {
       try {
         const domain = extractDomain(url)
         if (domain) {
+          console.log(`[替换流程] 检测到异常域名 ${domain} (is_accessible=${isAccessible} is_safe=${isSafe})，开始查询备用域名`)
           // 一次检测事件只查询一次备用域名，两边共用同一个结果，
           // 保证 Clickflare / ef-tracker 替换到同一个备用域名上（避免两侧各自查询时备用池中途变化导致分歧）
           const replacementDomain = await getReplacementDomain(domain)
           if (!replacementDomain) {
-            console.log(`无法获取替换域名, 跳过替换操作`)
+            console.log(`[替换流程] 无法获取替换域名(备用池不满足条件或危险域名purpose无s编号), 跳过替换操作: ${domain}`)
             return
           }
+          console.log(`[替换流程] ${domain} -> ${replacementDomain}，开始两侧替换`)
           // 两边独立替换、互不影响：Clickflare 没在用不影响 ef-tracker 侧替换，反之亦然
           await replaceDangerousDomain(domain, replacementDomain)   // Clickflare 侧
           await replaceEfTrackerDomain(domain, replacementDomain)   // ef-tracker 侧
+          console.log(`[替换流程] ${domain} -> ${replacementDomain} 两侧替换请求已发出，开始兜底裁决 purpose 继承(轮询至两侧终态)`)
+          // 兜底：轮询直到两侧都到终态，决定是否把备用域名 purpose 改为危险域名的(s1-备用 -> s1-LP)。
+          // 任一侧失败则保持原状；两侧成功才继承。不阻塞太久(默认5分钟超时)，超时留给下次检测再裁决。
+          await resolvePurposeInherit(domain)
         }
       } catch (err) {
         console.log(`❌ 替换危险域名失败: ${err.message}`)
@@ -298,5 +338,6 @@ module.exports = {
   replaceDangerousDomain,
   replaceEfTrackerDomain,
   getDailyReportList,
-  reportLastCheck
+  reportLastCheck,
+  resolvePurposeInherit
 }
