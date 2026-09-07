@@ -370,18 +370,39 @@ class DomainsService {
 
     const domains = [...domainCount.keys()]
 
-    // 4) 对照 domains 检测表（批量精确匹配 existing_domain）
+    // 4) 对照 domains 检测表
+    //    existing_domain 存的是主域（genvirop.com），系统用的是子域（pro2.genvirop.com），
+    //    精确匹配对不上 → 除了按 existing_domain 精确匹配，还要按 landing_page_url 的主机名匹配
+    //    （落地页地址如 https://pro2.genvirop.com 的 hostname 与在用子域一致时即算纳入检测）
     const detectionMap = new Map() // domain -> { purpose, is_important }
     if (domains.length > 0) {
-      // IN 占位符分批（防止域名过多超出 SQL 长度限制，1000 一批）
-      for (let i = 0; i < domains.length; i += 1000) {
-        const batch = domains.slice(i, i + 1000)
-        const placeholders = batch.map(() => '?').join(',')
-        const [dRows] = await connection.execute(
-          `SELECT existing_domain, purpose, is_important FROM domains WHERE existing_domain IN (${placeholders})`,
-          batch
-        )
-        for (const d of dRows) detectionMap.set(d.existing_domain, { purpose: d.purpose, is_important: d.is_important })
+      // 一次性把 domains 表全量查出来（existing_domain + landing_page_url），在 JS 里做主机名匹配，
+      // 避免对每个在用域名发一条 SQL
+      const [allRows] = await connection.execute(
+        `SELECT existing_domain, landing_page_url, purpose, is_important FROM domains`
+      )
+
+      // 建两个索引：主域 -> 记录；落地页主机名 -> 记录
+      const byExistingDomain = new Map()
+      const byLandingHost = new Map()
+      for (const d of allRows) {
+        if (d.existing_domain) byExistingDomain.set(d.existing_domain, { purpose: d.purpose, is_important: d.is_important })
+        if (d.landing_page_url) {
+          try {
+            const host = new URL(d.landing_page_url).hostname
+            if (host && !byLandingHost.has(host)) {
+              byLandingHost.set(host, { purpose: d.purpose, is_important: d.is_important })
+            }
+          } catch {
+            // 非法落地页地址跳过
+          }
+        }
+      }
+
+      for (const d of domains) {
+        // 优先按 existing_domain 精确匹配（主域口径）；不中则按落地页主机名匹配（子域口径）
+        const hit = byExistingDomain.get(d) || byLandingHost.get(d)
+        if (hit) detectionMap.set(d, hit)
       }
     }
 
