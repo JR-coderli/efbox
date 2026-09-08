@@ -91,11 +91,11 @@
             </el-popover>
             <button
               class="google-btn"
-              :class="uniqueOnly ? 'google-btn-primary' : 'google-btn-secondary'"
-              @click="toggleUnique"
-              title="按 media_click_id 去重，仅保留最新一条"
+              :class="timelineVisible ? 'google-btn-primary' : 'google-btn-secondary'"
+              @click="toggleTimeline"
+              title="时间桶点击量统计：排查负载告警时用，看点击量按时间的分布"
             >
-              <span>{{ uniqueOnly ? '已去重' : '去重' }}</span>
+              <span>时间线</span>
             </button>
             <button class="google-btn google-btn-secondary" @click="handleRefresh" :disabled="loading || refreshCountdown > 0">
               <svg class="btn-icon" :class="{ 'is-loading': loading }" viewBox="0 0 24 24">
@@ -105,6 +105,25 @@
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- 时间桶点击量统计弹层（时间线按钮触发，排查负载告警用） -->
+      <div v-if="timelineVisible" class="timeline-panel" v-loading="timelineLoading">
+        <div class="timeline-header">
+          <span class="timeline-title">时间桶点击量统计</span>
+          <span class="timeline-meta" v-if="timelineData">{{ timelineData.start }} ~ {{ timelineData.end }} · 桶 {{ timelineData.bucket }}</span>
+          <div class="timeline-buckets">
+            <button
+              v-for="b in TIMELINE_BUCKETS"
+              :key="b"
+              class="timeline-bucket-btn"
+              :class="{ active: timelineBucket === b }"
+              @click="switchTimelineBucket(b)"
+            >{{ b }}</button>
+          </div>
+        </div>
+        <div ref="timelineChartRef" class="timeline-chart"></div>
+        <div class="timeline-hint">clicks 尖峰 + u_clicks 平 = 可疑流量（刷量/重试风暴）；两条同涨 = 真实流量上涨</div>
       </div>
 
       <!-- 表格 -->
@@ -327,10 +346,11 @@ const KEYWORD_FIELDS = [
   'creative_name',
   'ip_address'
 ]
-import { getClicks, getEfLanderScreenshots } from '@/services/main/ef-tracker'
+import { getClicks, getEfLanderScreenshots, getClicksTimeline } from '@/services/main/ef-tracker'
 import { BASE_URL } from '@/services/request/config'
 import SparkMD5 from 'spark-md5'
 import CellLoading from './cell-loading.vue'
+import * as echarts from 'echarts'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -813,7 +833,6 @@ function buildParams() {
   if (filters.ip_address) p.ip_address = filters.ip_address
   p.with_names = true // 返回 mid/tid/oid/lid 对应的名称（names 字段）
   p.with_funnel = true // 返回归因漏斗（funnel：到达LP / 点击Offer / 转化 / 媒体下发）
-  if (uniqueOnly.value) p.unique = true // 去重：按 media_click_id 只保留最新一条
   if (funnelStepFilter.value) p.funnel_step = funnelStepFilter.value // 漏斗步骤筛选（点击漏斗徽章设置）
   Object.assign(p, rangeToParams(dateRange.value))
   return p
@@ -882,15 +901,76 @@ onUnmounted(() => {
   refreshTimer = null
   window.removeEventListener('resize', calcTableHeight)
   unbindHeaderDrag()
+  if (timelineChart) {
+    timelineChart.dispose()
+    timelineChart = null
+  }
 })
 
-// 去重开关：按 media_click_id 只保留最新一条（unique=true）。分页时保留选中状态
-const uniqueOnly = ref(false)
+// ===== 时间桶点击量统计（/query/stats/timeline，排查负载告警用）=====
+// 弹层形式：双折线（clicks 总点击 / u_clicks 独立点击），默认近 1 小时 5m 一桶，桶粒度可切
+const timelineVisible = ref(false)
+const timelineLoading = ref(false)
+const timelineBucket = ref('5m')
+const timelineData = ref(null)
+const timelineChartRef = ref(null)
+let timelineChart = null
 
-function toggleUnique() {
-  uniqueOnly.value = !uniqueOnly.value
-  pagination.page = 1
-  loadData()
+const TIMELINE_BUCKETS = ['1m', '2m', '5m', '10m', '15m', '30m', '1h']
+
+function toggleTimeline() {
+  timelineVisible.value = !timelineVisible.value
+  if (timelineVisible.value && !timelineData.value) {
+    loadTimeline()
+  }
+}
+
+async function loadTimeline() {
+  timelineLoading.value = true
+  try {
+    const p = { bucket: timelineBucket.value, tz: tz.value }
+    // 带上当前筛选区的日期范围（有的话），否则接口默认近 1 小时
+    if (dateRange.value && dateRange.value.length === 2) {
+      const pad = (n) => String(n).padStart(2, '0')
+      const fmt = (dt) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} 00:00:00`
+      const end = new Date(dateRange.value[1].getTime())
+      end.setDate(end.getDate() + 1)
+      p.start = fmt(dateRange.value[0])
+      p.end = fmt(end)
+    }
+    const res = await getClicksTimeline(p)
+    timelineData.value = res
+    await nextTick()
+    renderTimelineChart()
+  } catch (error) {
+    ElMessage.error('时间线加载失败: ' + (error?.response?.data?.error || error?.message || '网络错误'))
+  } finally {
+    timelineLoading.value = false
+  }
+}
+
+function switchTimelineBucket(b) {
+  timelineBucket.value = b
+  loadTimeline()
+}
+
+function renderTimelineChart() {
+  if (!timelineChartRef.value) return
+  if (!timelineChart) {
+    timelineChart = echarts.init(timelineChartRef.value)
+  }
+  const list = timelineData.value?.list || []
+  timelineChart.setOption({
+    grid: { top: 30, bottom: 24, left: 40, right: 16, containLabel: true },
+    xAxis: { type: 'category', data: list.map(i => i.key), axisLabel: { fontSize: 11, color: '#5f6368' } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 11, color: '#5f6368' }, splitLine: { lineStyle: { color: '#f1f3f4' } } },
+    tooltip: { trigger: 'axis', backgroundColor: '#2c2c2c', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 } },
+    legend: { show: true, top: 0, right: 0, itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 12, color: '#5f6368' } },
+    series: [
+      { name: 'clicks（总点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.clicks), lineStyle: { color: '#1a73e8', width: 2 }, itemStyle: { color: '#1a73e8' } },
+      { name: 'u_clicks（独立点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.u_clicks), lineStyle: { color: '#1e8e3e', width: 2 }, itemStyle: { color: '#1e8e3e' } }
+    ]
+  }, true)
 }
 </script>
 
@@ -1009,6 +1089,72 @@ function toggleUnique() {
 .table-wrapper {
   overflow-x: auto;
   position: relative;
+}
+
+/* 时间桶统计弹层：卡片内嵌在筛选区与表格之间，与页面其他卡片风格一致 */
+.timeline-panel {
+  margin: 0 0 12px;
+  padding: 14px 16px 10px;
+  background: #fff;
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.timeline-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.timeline-meta {
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.timeline-buckets {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.timeline-bucket-btn {
+  padding: 0 10px;
+  height: 24px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: #fff;
+  color: #5f6368;
+  font-size: 11px;
+  cursor: pointer;
+
+  &:hover {
+    background: #f1f3f4;
+  }
+
+  &.active {
+    background: #1a73e8;
+    border-color: #1a73e8;
+    color: #fff;
+  }
+}
+
+.timeline-chart {
+  width: 100%;
+  height: 200px;
+}
+
+.timeline-hint {
+  font-size: 12px;
+  color: #9aa0a6;
+  margin-top: 4px;
 }
 
 /* 行级加载蒙版：只盖表格表体（第一行行首一枚「圆环+Loading」，组件来自 cell-loading.vue）。

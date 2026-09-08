@@ -96,6 +96,13 @@ export function getStatsBreakdown(params = {}) {
   return query('/query/stats/breakdown', params)
 }
 
+// 8. 时间桶点击量统计 —— /query/stats/timeline（排查负载告警用）
+// params: bucket(1m/2m/5m默认/10m/15m/30m/1h)、start/end 或 date、tz、mid/tid/oid/lid/path_code
+// 返回 { tz, bucket, start, end, filters, count, list:[{ key(桶起点), clicks, u_clicks }] }，无数据桶返回 0
+export function getClicksTimeline(params = {}) {
+  return query('/query/stats/timeline', params)
+}
+
 // 批量替换 LP url 子串（域名迁移/路径改写）。POST 到外部系统（与 /query 同 host）。
 // payload: { old(必填), new(可选,默认删除), ids(可选,默认全表), dry_run(可选,预演不写库) }
 // 预演返回 { dry_run, count, list:[{id,before,after}] }；正式执行返回 { dry_run:false, affected }
