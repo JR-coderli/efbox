@@ -340,7 +340,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
@@ -377,15 +377,17 @@ const pagination = reactive({
 })
 
 // 表格高度自适应：动态测量表格 wrapper 顶部到视口底部的距离，表格恰好占满剩余页面高度
-// （表头吸顶、表体在表格内部滚动，页面本身不出滚动条）。能自动适应筛选区换行、Tab 栏等占位变化
+// （表头吸顶、表体在表格内部滚动，页面本身不出滚动条）。能自动适应筛选区换行、Tab 栏等占位变化。
+// 时间线展开时不再压缩表格（保持 min 下限），页面整体超出视口允许出滚动条
 const tableWrapperRef = ref(null)
 const tableMaxHeight = ref(undefined) // undefined → 不限高，首帧避免收缩闪烁
+const TABLE_MIN_HEIGHT = 420 // 展开时间线后表格最低保留的高度（低于此表格太挤）
 function calcTableHeight() {
   const el = tableWrapperRef.value
   if (!el) return
-  const top = el.getBoundingClientRect().top // 表格上方（Tab 栏 + 筛选区）实际占位
+  const top = el.getBoundingClientRect().top // 表格上方（Tab 栏 + 筛选区 + 时间线弹层）实际占位
   const bottomReserve = 60 // 分页栏 + 外边距
-  tableMaxHeight.value = Math.max(220, window.innerHeight - top - bottomReserve)
+  tableMaxHeight.value = Math.max(TABLE_MIN_HEIGHT, window.innerHeight - top - bottomReserve)
 }
 
 // 时区：默认 +8；切路由 / 刷新都会重建组件 → 回到 +8；分页不修改 tz → 保留当前选择
@@ -885,6 +887,10 @@ onMounted(() => {
   loadColumns() // 异步加载库中列设置，回来后覆盖默认配置（不阻塞列表首屏）
   nextTick(calcTableHeight) // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
   window.addEventListener('resize', calcTableHeight)
+  // 时间线：用户上次是打开状态（或首次默认）→ 直接加载图表数据
+  if (timelineVisible.value) {
+    loadTimeline()
+  }
 })
 
 // 刷新按钮 5 秒倒计时（点击后禁用，防止频繁刷新）
@@ -918,14 +924,9 @@ onUnmounted(() => {
 
 // ===== 时间桶点击量统计（/query/stats/timeline，排查负载告警用）=====
 // 弹层形式：双折线（clicks 总点击 / u_clicks 独立点击）。
-// 默认：昨天此时~现在（近 24 小时）、UTC+8、30m 桶；时间范围四个预设，桶粒度随范围联动
-const timelineVisible = ref(false)
-const timelineLoading = ref(false)
-const timelineBucket = ref('30m') // 默认 30m
-const timelineRange = ref('24h') // 默认：昨天此时 ~ 现在
-const timelineData = ref(null)
-const timelineChartRef = ref(null)
-let timelineChart = null
+// 默认：昨天此时~现在（近 24 小时）、UTC+8、30m 桶；时间范围四个预设，桶粒度随范围联动。
+// 三个状态（是否打开 / 时间范围 / 时间桶）持久化到 localStorage，切走再切回保留
+const TIMELINE_STATE_KEY = 'ef_clicks_timeline'
 
 // 时间范围预设：key + 标签 + 该范围允许的桶粒度 + 默认桶（切到该范围时自动选中）
 const TIMELINE_RANGES = [
@@ -935,17 +936,57 @@ const TIMELINE_RANGES = [
   { key: '7d', label: '近 7 天', buckets: ['30m', '1h'], defaultBucket: '1h' }
 ]
 
+function readTimelineState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TIMELINE_STATE_KEY) || '{}')
+    return saved && typeof saved === 'object' ? saved : {}
+  } catch {
+    return {}
+  }
+}
+const savedTimeline = readTimelineState()
+const savedRange = TIMELINE_RANGES.find((r) => r.key === savedTimeline.range)?.key
+const savedBucket = savedRange
+  ? (TIMELINE_RANGES.find((r) => r.key === savedRange)?.buckets.includes(savedTimeline.bucket)
+      ? savedTimeline.bucket
+      : TIMELINE_RANGES.find((r) => r.key === savedRange)?.defaultBucket)
+  : null
+
+// visible 缺省（无存档）= false：时间线默认隐藏；用户打开后按记忆恢复
+const timelineVisible = ref(savedTimeline.visible === true)
+const timelineLoading = ref(false)
+const timelineBucket = ref(savedBucket || '30m') // 默认 30m
+const timelineRange = ref(savedRange || '24h') // 默认：昨天此时 ~ 现在
+const timelineData = ref(null)
+const timelineChartRef = ref(null)
+let timelineChart = null
+
 // 当前范围允许的桶粒度列表（模板 v-for 用）
 const timelineBuckets = computed(() => {
   return TIMELINE_RANGES.find((r) => r.key === timelineRange.value)?.buckets || []
 })
 
+function saveTimelineState() {
+  localStorage.setItem(TIMELINE_STATE_KEY, JSON.stringify({
+    visible: timelineVisible.value,
+    range: timelineRange.value,
+    bucket: timelineBucket.value
+  }))
+}
+
 function toggleTimeline() {
   timelineVisible.value = !timelineVisible.value
+  saveTimelineState()
   if (timelineVisible.value && !timelineData.value) {
     loadTimeline()
   }
 }
+
+// 时间线展开/收起 → 表格上方占位变化 → 重算表格高度（保持 TABLE_MIN_HEIGHT 下限，
+// 展开后表格不收缩，页面整体超出视口出滚动条）
+watch(timelineVisible, () => {
+  nextTick(calcTableHeight)
+})
 
 // 按预设范围算出 start/end（tz 墙钟字符串），start/end 半开区间 [start, end)
 function timelineWindow() {
@@ -984,6 +1025,7 @@ async function loadTimeline() {
 
 function switchTimelineBucket(b) {
   timelineBucket.value = b
+  saveTimelineState()
   loadTimeline()
 }
 
@@ -992,6 +1034,7 @@ function switchTimelineRange(r) {
   // 切范围时把桶粒度跳到该范围的默认桶（每个范围有自己的默认粒度）
   const def = TIMELINE_RANGES.find((x) => x.key === r)?.defaultBucket
   if (def) timelineBucket.value = def
+  saveTimelineState()
   loadTimeline()
 }
 
