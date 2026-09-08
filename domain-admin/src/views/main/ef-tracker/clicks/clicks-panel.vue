@@ -111,10 +111,19 @@
       <div v-if="timelineVisible" class="timeline-panel" v-loading="timelineLoading">
         <div class="timeline-header">
           <span class="timeline-title">时间桶点击量统计</span>
+          <div class="timeline-ranges">
+            <button
+              v-for="r in TIMELINE_RANGES"
+              :key="r.key"
+              class="timeline-range-btn"
+              :class="{ active: timelineRange === r.key }"
+              @click="switchTimelineRange(r.key)"
+            >{{ r.label }}</button>
+          </div>
           <span class="timeline-meta" v-if="timelineData">{{ timelineData.start }} ~ {{ timelineData.end }} · 桶 {{ timelineData.bucket }}</span>
           <div class="timeline-buckets">
             <button
-              v-for="b in TIMELINE_BUCKETS"
+              v-for="b in timelineBuckets"
               :key="b"
               class="timeline-bucket-btn"
               :class="{ active: timelineBucket === b }"
@@ -123,7 +132,7 @@
           </div>
         </div>
         <div ref="timelineChartRef" class="timeline-chart"></div>
-        <div class="timeline-hint">clicks 尖峰 + u_clicks 平 = 可疑流量（刷量/重试风暴）；两条同涨 = 真实流量上涨</div>
+        <div class="timeline-hint">clicks 尖峰 + u_clicks 平 = 可疑流量(刷量)；两条同涨 = 真实流量上涨</div>
       </div>
 
       <!-- 表格 -->
@@ -908,15 +917,28 @@ onUnmounted(() => {
 })
 
 // ===== 时间桶点击量统计（/query/stats/timeline，排查负载告警用）=====
-// 弹层形式：双折线（clicks 总点击 / u_clicks 独立点击），默认近 1 小时 5m 一桶，桶粒度可切
+// 弹层形式：双折线（clicks 总点击 / u_clicks 独立点击）。
+// 默认：昨天此时~现在（近 24 小时）、UTC+8、30m 桶；时间范围四个预设，桶粒度随范围联动
 const timelineVisible = ref(false)
 const timelineLoading = ref(false)
-const timelineBucket = ref('5m')
+const timelineBucket = ref('30m') // 默认 30m
+const timelineRange = ref('24h') // 默认：昨天此时 ~ 现在
 const timelineData = ref(null)
 const timelineChartRef = ref(null)
 let timelineChart = null
 
-const TIMELINE_BUCKETS = ['1m', '2m', '5m', '10m', '15m', '30m', '1h']
+// 时间范围预设：key + 标签 + 该范围允许的桶粒度 + 默认桶（切到该范围时自动选中）
+const TIMELINE_RANGES = [
+  { key: '1h', label: '近 1 小时', buckets: ['1m', '5m', '10m'], defaultBucket: '1m' },
+  { key: 'today', label: '今天零点 ~ 现在', buckets: ['5m', '10m', '30m', '1h'], defaultBucket: '30m' },
+  { key: '24h', label: '昨天此时 ~ 现在', buckets: ['10m', '30m', '1h'], defaultBucket: '30m' },
+  { key: '7d', label: '近 7 天', buckets: ['30m', '1h'], defaultBucket: '1h' }
+]
+
+// 当前范围允许的桶粒度列表（模板 v-for 用）
+const timelineBuckets = computed(() => {
+  return TIMELINE_RANGES.find((r) => r.key === timelineRange.value)?.buckets || []
+})
 
 function toggleTimeline() {
   timelineVisible.value = !timelineVisible.value
@@ -925,19 +947,30 @@ function toggleTimeline() {
   }
 }
 
+// 按预设范围算出 start/end（tz 墙钟字符串），start/end 半开区间 [start, end)
+function timelineWindow() {
+  const pad = (n) => String(n).padStart(2, '0')
+  const fmt = (dt) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
+  const now = new Date()
+  if (timelineRange.value === '1h') {
+    return { start: fmt(new Date(now.getTime() - 60 * 60 * 1000)), end: fmt(now) }
+  }
+  if (timelineRange.value === 'today') {
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    return { start: fmt(midnight), end: fmt(now) }
+  }
+  if (timelineRange.value === '7d') {
+    return { start: fmt(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)), end: fmt(now) }
+  }
+  // '24h'
+  return { start: fmt(new Date(now.getTime() - 24 * 60 * 60 * 1000)), end: fmt(now) }
+}
+
 async function loadTimeline() {
   timelineLoading.value = true
   try {
-    const p = { bucket: timelineBucket.value, tz: tz.value }
-    // 带上当前筛选区的日期范围（有的话），否则接口默认近 1 小时
-    if (dateRange.value && dateRange.value.length === 2) {
-      const pad = (n) => String(n).padStart(2, '0')
-      const fmt = (dt) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} 00:00:00`
-      const end = new Date(dateRange.value[1].getTime())
-      end.setDate(end.getDate() + 1)
-      p.start = fmt(dateRange.value[0])
-      p.end = fmt(end)
-    }
+    const { start, end } = timelineWindow()
+    const p = { bucket: timelineBucket.value, tz: 8, start, end } // 时间线固定 UTC+8，不随页面筛选区的 tz 走
     const res = await getClicksTimeline(p)
     timelineData.value = res
     await nextTick()
@@ -951,6 +984,14 @@ async function loadTimeline() {
 
 function switchTimelineBucket(b) {
   timelineBucket.value = b
+  loadTimeline()
+}
+
+function switchTimelineRange(r) {
+  timelineRange.value = r
+  // 切范围时把桶粒度跳到该范围的默认桶（每个范围有自己的默认粒度）
+  const def = TIMELINE_RANGES.find((x) => x.key === r)?.defaultBucket
+  if (def) timelineBucket.value = def
   loadTimeline()
 }
 
@@ -1123,6 +1164,33 @@ function renderTimelineChart() {
   display: flex;
   gap: 4px;
   margin-left: auto;
+}
+
+/* 时间范围预设按钮（与桶粒度同风格，浅底选中态） */
+.timeline-ranges {
+  display: flex;
+  gap: 4px;
+}
+
+.timeline-range-btn {
+  padding: 0 10px;
+  height: 24px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: #fff;
+  color: #5f6368;
+  font-size: 11px;
+  cursor: pointer;
+
+  &:hover {
+    background: #f1f3f4;
+  }
+
+  &.active {
+    background: #e8f0fe;
+    border-color: #1a73e8;
+    color: #1a73e8;
+  }
 }
 
 .timeline-bucket-btn {
