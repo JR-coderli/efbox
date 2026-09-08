@@ -38,8 +38,9 @@ class DomainsService {
 
     // 域名搜索：除子串匹配外，把搜索词剥掉一级子域（pro.quicksala2.com → quicksala2.com）
     // 再 OR 匹配，使搜索子域名时也能命中其主域记录；两级以上子域递归剥到主域为止
-    const domainConditions = ['existing_domain LIKE ?']
-    const domainParams = [`%${existing_domain ?? ''}%`]
+    // 落地页地址同样参与模糊匹配（如搜 pro2.genvirop.com 命中 landing_page_url=https://pro2.genvirop.com）
+    const domainConditions = ['existing_domain LIKE ?', 'landing_page_url LIKE ?']
+    const domainParams = [`%${existing_domain ?? ''}%`, `%${existing_domain ?? ''}%`]
     let stripped = String(existing_domain ?? '').trim()
     while (stripped.includes('.')) {
       stripped = stripped.slice(stripped.indexOf('.') + 1)
@@ -49,13 +50,12 @@ class DomainsService {
 
     const params = [
       ...domainParams,
-      `%${landing_page_url ?? ''}%`,
     ];
 
 
+    // 搜索条件：域名(含子域剥离) 或 落地页地址，任一命中即可（搜索词只需要满足一个字段）
     let whereClause = `
       (${domainConditions.join(' OR ')})
-      AND landing_page_url LIKE ?
     `;
 
 
@@ -123,13 +123,12 @@ class DomainsService {
 
     const params = [
       ...domainParams,
-      `%${landing_page_url ?? ''}%`,
     ];
 
 
+    // 搜索条件：域名(含子域剥离) 或 落地页地址，任一命中即可（搜索词只需要满足一个字段）
     let whereClause = `
       (${domainConditions.join(' OR ')})
-      AND landing_page_url LIKE ?
     `;
 
 
