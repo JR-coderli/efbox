@@ -165,6 +165,29 @@ class DomainsController {
 
 
   /**
+   * 备用域名池数量(供 url_detection_database 替换成功后发飞书提醒用)
+   * 返回 availableCount(可用: 安全+可访问+在监控) 与 totalCount(全部备用)
+   */
+  async backupPoolCount(ctx, next) {
+    try {
+      const data = await domainsService.getBackupPoolCount()
+      ctx.body = {
+        code: data.success ? 0 : 1,
+        message: data.success ? '获取成功' : (data.message || '获取失败'),
+        data: data.success ? data : null
+      }
+    } catch (error) {
+      console.log(error)
+      ctx.body = {
+        code: 1,
+        message: '获取失败: ' + error.message,
+        data: null
+      }
+    }
+  }
+
+
+  /**
    * 上报"最后检测时间"(供 url_detection_database 每轮检测完成时打点)
    * 时间取服务器当前时间(脚本时钟不可靠,不信任客户端传值),格式 YYYY-MM-DD HH:mm:ss
    */

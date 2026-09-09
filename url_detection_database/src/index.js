@@ -1,6 +1,7 @@
 require('./utils/loadEnv')();
-const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, sendFeishuText, getDailyReportList, reportLastCheck } = require('./utils/api')
-// 注: sendFeishuText 同时用于异常告警的"后续轮次降级提醒"和域名标签提醒
+const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, sendFeishuText, getDailyReportList, reportLastCheck, notifiedReplaced } = require('./utils/api')
+// 注: sendFeishuText 同时用于异常告警的"后续轮次降级提醒"、域名标签提醒、替换成功通知
+// notifiedReplaced: 已替换成功并通知过飞书的域名集合(见 api.js), 其中的域名不再发任何预警
 const writeLog = require('./utils/writeLog')
 const sendMail = require('./utils/sendEmail')
 const checkSafeBrowsing = require('./utils/checkSafeBrowsing')
@@ -38,6 +39,18 @@ async function checkUrls(urlObjs, isComplete = false) {
 
 
   const urls = urlObjs.map(item => item.url)
+
+  // 已替换成功并通知过飞书的域名: 状态照常检测更新, 但不再进入告警列表(电话/普通消息/邮件都不带它)
+  // (域名替换成功后通常还在监控列表里, 若不拦截, 第 2、3 轮还会继续重复预警"已处理完"的域名)
+  const urlToDomain = new Map(urlObjs.map(item => {
+    try { return [item.url, new URL(item.url).hostname] } catch { return [item.url, null] }
+  }))
+
+  // 静默名单按"本轮开始时的快照"判断, 而不是实时集合:
+  // 替换流程是在本轮 updateDomainStatus 内同步跑完的, 若读实时集合, 本轮刚替换成功的域名
+  // 会在预警发出前就被静默, 连第一轮电话预警都被吞掉。快照保证: 本轮新替换成功的照常预警
+  // (第一轮电话 + 替换完成通知都会发), 从下一轮起才静默。
+  const replacedBeforeRound = new Set(notifiedReplaced)
 
   const safeData = await checkSafeBrowsing(urls) // 检测安全性
 
@@ -85,6 +98,12 @@ async function checkUrls(urlObjs, isComplete = false) {
 
 
     if (isDanger || !accessible) {
+      // 本轮开始前已替换成功的域名不再预警(处理完的事项不再占用提醒轮次; 也不计入邮件告警表)
+      const domain = urlToDomain.get(url)
+      if (domain && replacedBeforeRound.has(domain)) {
+        writeLog(`域名已替换成功, 本轮跳过预警: ${url}`)
+        return null
+      }
       return { id, url, status, streak }
     }
     return null

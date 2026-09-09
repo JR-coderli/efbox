@@ -689,6 +689,32 @@ class DomainsService {
       }
     }
   }
+
+  /**
+   * 统计备用域名池当前"可用"数量（口径与 getReplacementDomain 选备用完全一致：
+   * is_safe=1、is_accessible=1、is_important=1 且 purpose 含"备用"）。
+   * 供检测脚本在替换成功后提醒用户剩余备用数、及时注册补充。
+   * 同时返回总备用数（只看 purpose 含"备用"，不看健康状态），便于对比。
+   */
+  async getBackupPoolCount() {
+    try {
+      const [rows] = await connection.execute(
+        `SELECT
+           SUM(CASE WHEN is_safe = 1 AND is_accessible = 1 AND is_important = 1 THEN 1 ELSE 0 END) AS available_count,
+           COUNT(*) AS total_count
+         FROM domains
+         WHERE purpose LIKE '%备用%'`
+      )
+      return {
+        success: true,
+        availableCount: Number(rows[0]?.available_count) || 0,
+        totalCount: Number(rows[0]?.total_count) || 0
+      }
+    } catch (error) {
+      console.error('统计备用域名数量失败:', error)
+      return { success: false, availableCount: 0, totalCount: 0, message: error.message }
+    }
+  }
 }
 
 module.exports = new DomainsService()

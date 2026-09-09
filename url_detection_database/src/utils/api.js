@@ -48,6 +48,7 @@ async function reportLastCheck() {
 // 两侧替换终态裁决（兜底）：Clickflare 侧是异步队列，ef 侧先完成触发的裁决会因对侧"还在跑"
 // 而等待且无人再触发。这里轮询裁决接口直到有终态结论（继承成功 / 放弃 / 超时）。
 // 幂等：两侧都已成功时立即继承；任一侧失败立即放弃。失败只打日志。
+// 返回: 'success'=两侧替换全部成功(含幂等"已是目标值") / 其他=未成功或超时
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function resolvePurposeInherit(dangerousDomain, { intervalMs = 10000, timeoutMs = 5 * 60 * 1000 } = {}) {
   const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
@@ -61,21 +62,21 @@ async function resolvePurposeInherit(dangerousDomain, { intervalMs = 10000, time
       // success=true: 继承完成（含幂等"已是目标值"）
       if (res?.data?.code === 0 && data?.success === true) {
         console.log(`[替换流程] purpose 继承完成: ${dangerousDomain} — ${lastMessage}`)
-        return true
+        return 'success'
       }
       // message 含"等待"→ 两侧还没都到终态，继续轮询；其他（失败/放弃/无记录）为终态结论，停
       if (!String(lastMessage).includes('等待')) {
         console.log(`[替换流程] purpose 继承未执行(终态): ${dangerousDomain} — ${lastMessage}`)
-        return false
+        return 'terminal'
       }
     } catch (err) {
       console.log(`❌ 裁决 purpose 继承失败: ${err.message}`)
-      return false
+      return 'error'
     }
     await sleep(intervalMs)
   }
   console.log(`[替换流程] purpose 继承裁决超时(${Math.round(timeoutMs / 60000)}分钟): ${dangerousDomain} — ${lastMessage}`)
-  return false
+  return 'timeout'
 }
 
 
@@ -126,7 +127,12 @@ async function updateDomainStatus(id, isAccessible, isSafe, url) {
           console.log(`[替换流程] ${domain} -> ${replacementDomain} 两侧替换请求已发出，开始兜底裁决 purpose 继承(轮询至两侧终态)`)
           // 兜底：轮询直到两侧都到终态，决定是否把备用域名 purpose 改为危险域名的(s1-备用 -> s1-LP)。
           // 任一侧失败则保持原状；两侧成功才继承。不阻塞太久(默认5分钟超时)，超时留给下次检测再裁决。
-          await resolvePurposeInherit(domain)
+          const verdict = await resolvePurposeInherit(domain)
+          // 两侧替换全部成功 → 飞书普通消息通知用户(不打电话不发邮件)，并停止该域名后续预警
+          if (verdict === 'success') {
+            notifiedReplaced.add(domain)
+            sendReplacementSuccessNotice(domain, replacementDomain)
+          }
         }
       } catch (err) {
         console.log(`❌ 替换危险域名失败: ${err.message}`)
@@ -329,6 +335,52 @@ async function getDailyReportList() {
 }
 
 
+// 已替换成功并通知过飞书的域名集合(内存态)。
+// 域名替换成功后加入: 之后该域名即使仍异常也不再发预警(电话/普通消息都不发),
+// 避免"已经处理完"的域名继续占用提醒轮次。脚本重启后集合清空——彼时域名通常已被
+// 降级移出监控或已恢复, 不会造成重复轰炸; 即使仍在监控中, 重新走满 3 轮告警也是合理兜底。
+const notifiedReplaced = new Set()
+
+// 拉取备用域名池数量(口径与后端选备用一致: 安全+可访问+在监控中的备用域名)
+async function getBackupPoolCount() {
+  try {
+    const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
+    const res = await axios.get(`${baseUrl}/domains/internal/backup_pool_count`, { timeout: 10000 })
+    if (res?.data?.code === 0 && res?.data?.data) {
+      return res.data.data  // { availableCount, totalCount }
+    }
+    console.log(`⚠️ 备用域名数量接口返回异常: ${res?.data?.message || '未知错误'}`)
+    return null
+  } catch (err) {
+    console.log(`❌ 拉取备用域名数量失败: ${err.message}`)
+    return null
+  }
+}
+
+// 替换成功后的飞书普通消息通知(不打电话、不发邮件):
+// 内容 = 被替换域名 -> 替换域名 + 备用池剩余数量提醒(数量拉取失败时不带这部分, 不阻塞通知)
+async function sendReplacementSuccessNotice(dangerousDomain, replacementDomain) {
+  try {
+    const time = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+    const lines = [
+      `【域名替换完成】${time}`,
+      `危险域名已自动替换成功：`,
+      `- ${dangerousDomain} -> ${replacementDomain}`,
+      `两侧系统(Clickflare / ef-tracker)均已替换完毕`
+    ]
+    const pool = await getBackupPoolCount()
+    if (pool) {
+      lines.push(``,
+        `- 备用域名池：当前可用 ${pool.availableCount} 个（备用总数 ${pool.totalCount} 个）`,
+        `- 请及时注册新域名补充备用池，保持备用域名数量充足`)
+    }
+    await sendFeishuText(lines.join('\n'))
+    console.log(`[替换流程] ✅ 替换成功通知已发送: ${dangerousDomain} -> ${replacementDomain}`)
+  } catch (err) {
+    console.log(`❌ 发送替换成功通知失败: ${err.message}`)
+  }
+}
+
 module.exports = {
   getUrlsFromApi,
   updateDomainStatus,
@@ -339,5 +391,6 @@ module.exports = {
   replaceEfTrackerDomain,
   getDailyReportList,
   reportLastCheck,
-  resolvePurposeInherit
+  resolvePurposeInherit,
+  notifiedReplaced
 }
