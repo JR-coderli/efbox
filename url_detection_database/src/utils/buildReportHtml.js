@@ -62,10 +62,11 @@ function buildDailyReportHtml(dailyReport, dailyCount) {
   `;
 }
 
-// 构建异常告警的纯文本摘要 (用于飞书电话加急的文本消息)
+// 构建异常告警的纯文本摘要 (用于飞书电话加急/普通消息)
+// streak: 该域名连续异常的轮数, 1=首次异常, 用于区分首次告警和后续重复告警
 function buildAlertText(alerts) {
   const time = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
-  const list = alerts.map(a => `- ${a.url}`).join('\n')
+  const list = alerts.map(a => `- ${a.url}${a.streak > 1 ? `(连续第 ${a.streak} 轮异常)` : ''}`).join('\n')
   return `【网页监控】异常告警 ${time}\n检测到 ${alerts.length} 个异常域名(无法访问或被标记为危险):\n${list}\n请尽快处理`
 }
 

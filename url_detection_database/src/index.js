@@ -1,5 +1,6 @@
 require('./utils/loadEnv')();
 const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, sendFeishuText, getDailyReportList, reportLastCheck } = require('./utils/api')
+// 注: sendFeishuText 同时用于异常告警的"后续轮次降级提醒"和域名标签提醒
 const writeLog = require('./utils/writeLog')
 const sendMail = require('./utils/sendEmail')
 const checkSafeBrowsing = require('./utils/checkSafeBrowsing')
@@ -53,6 +54,7 @@ async function checkUrls(urlObjs, isComplete = false) {
     dailyCount.set(url, (dailyCount.get(url) || 0) + 1);
 
 
+    let streak = 0  // 本轮结束时该域名连续异常的轮数, 用于告警分级(第1轮电话, 后续普通消息)
     try {
       if (!accessible || isDanger) {
 
@@ -60,7 +62,7 @@ async function checkUrls(urlObjs, isComplete = false) {
         abnormalUrls.add(url);
 
         // 连续异常轮数 +1; 连续 3 轮(约 45 分钟)仍异常则降级为非重要域名
-        const streak = (abnormalStreak.get(id) || 0) + 1
+        streak = (abnormalStreak.get(id) || 0) + 1
         abnormalStreak.set(id, streak)
         if (streak >= 3) {
           const ok = await setDomainNotImportant(id)
@@ -83,7 +85,7 @@ async function checkUrls(urlObjs, isComplete = false) {
 
 
     if (isDanger || !accessible) {
-      return { id, url, status }
+      return { id, url, status, streak }
     }
     return null
   }))
@@ -91,8 +93,12 @@ async function checkUrls(urlObjs, isComplete = false) {
   const filteredAlerts = alerts.filter(Boolean);
   if (filteredAlerts.length > 0) {
     await sendMail(buildNormalReportHtml(filteredAlerts));
-    // 异常告警: 发邮件的同时触发飞书电话加急 (早上8点的日报只发邮件, 不打电话)
-    await triggerUrgentPhoneCall(buildAlertText(filteredAlerts));
+    // 告警分级: 有域名是"首次异常"(streak=1)时打电话加急; 全是后续轮次(streak>=2)只发飞书普通消息, 不再打电话
+    if (filteredAlerts.some(a => a.streak <= 1)) {
+      await triggerUrgentPhoneCall(buildAlertText(filteredAlerts));
+    } else {
+      await sendFeishuText(buildAlertText(filteredAlerts));
+    }
   }
 
   // 本轮检测完成: 上报最后检测时间(前端域名检测页展示; 时间不推进=脚本没在跑)
