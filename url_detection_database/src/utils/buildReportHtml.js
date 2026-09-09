@@ -64,10 +64,25 @@ function buildDailyReportHtml(dailyReport, dailyCount) {
 
 // 构建异常告警的纯文本摘要 (用于飞书电话加急/普通消息)
 // streak: 该域名连续异常的轮数, 1=首次异常, 用于区分首次告警和后续重复告警
+// isDanger/accessible: 异常类型标志, 按下面分组展示(一个域名只进一个组, 危险优先):
+//   - 被标记为危险(无论是否可访问) → 危险组
+//   - 其余不可访问的 → 无法访问组
 function buildAlertText(alerts) {
   const time = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
-  const list = alerts.map(a => `- ${a.url}${a.streak > 1 ? `(连续第 ${a.streak} 轮异常)` : ''}`).join('\n')
-  return `【网页监控】异常告警 ${time}\n检测到 ${alerts.length} 个异常域名(无法访问或被标记为危险):\n${list}\n请尽快处理`
+  const line = (a) => `- ${a.url}${a.streak > 1 ? `(连续第 ${a.streak} 轮异常)` : ''}`
+
+  const sections = []
+  const dangerList = alerts.filter(a => a.isDanger)
+  const inaccessibleList = alerts.filter(a => !a.isDanger && !a.accessible)
+
+  if (dangerList.length > 0) {
+    sections.push(`被标记为危险 ${dangerList.length} 个:\n${dangerList.map(line).join('\n')}`)
+  }
+  if (inaccessibleList.length > 0) {
+    sections.push(`❌ 无法访问 ${inaccessibleList.length} 个:\n${inaccessibleList.map(line).join('\n')}`)
+  }
+
+  return `【网页监控】异常告警 ${time}\n检测到 ${alerts.length} 个异常域名:\n${sections.join('\n\n')}\n请尽快处理`
 }
 
 

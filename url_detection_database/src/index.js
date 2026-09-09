@@ -104,7 +104,8 @@ async function checkUrls(urlObjs, isComplete = false) {
         writeLog(`域名已替换成功, 本轮跳过预警: ${url}`)
         return null
       }
-      return { id, url, status, streak }
+      // 带上异常类型标志, 供告警文本按"无法访问 / 标记危险"分组展示
+      return { id, url, status, streak, isDanger, accessible }
     }
     return null
   }))

@@ -122,8 +122,8 @@ async function updateDomainStatus(id, isAccessible, isSafe, url) {
           }
           console.log(`[替换流程] ${domain} -> ${replacementDomain}，开始两侧替换`)
           // 两边独立替换、互不影响：Clickflare 没在用不影响 ef-tracker 侧替换，反之亦然
-          await replaceDangerousDomain(domain, replacementDomain)   // Clickflare 侧
-          await replaceEfTrackerDomain(domain, replacementDomain)   // ef-tracker 侧
+          const cfResult = await replaceDangerousDomain(domain, replacementDomain)      // Clickflare 侧
+          const efResult = await replaceEfTrackerDomain(domain, replacementDomain)      // ef-tracker 侧
           console.log(`[替换流程] ${domain} -> ${replacementDomain} 两侧替换请求已发出，开始兜底裁决 purpose 继承(轮询至两侧终态)`)
           // 兜底：轮询直到两侧都到终态，决定是否把备用域名 purpose 改为危险域名的(s1-备用 -> s1-LP)。
           // 任一侧失败则保持原状；两侧成功才继承。不阻塞太久(默认5分钟超时)，超时留给下次检测再裁决。
@@ -131,7 +131,7 @@ async function updateDomainStatus(id, isAccessible, isSafe, url) {
           // 两侧替换全部成功 → 飞书普通消息通知用户(不打电话不发邮件)，并停止该域名后续预警
           if (verdict === 'success') {
             notifiedReplaced.add(domain)
-            sendReplacementSuccessNotice(domain, replacementDomain)
+            sendReplacementSuccessNotice(domain, replacementDomain, { cfResult, efResult })
           }
         }
       } catch (err) {
@@ -161,9 +161,7 @@ async function checkLanderExists(domain) {
 
 
     const exists = Array.isArray(res.data) && res.data.length > 0
-    if (exists) {
-
-    } else {
+    if (!exists) {
       console.log(`⚠️  Lander 列表中未找到域名 ${domain} 的记录, 跳过替换操作`)
     }
     return exists
@@ -201,7 +199,7 @@ async function replaceDangerousDomain(domain, replacementDomain) {
     const landerExists = await checkLanderExists(domain)
     if (!landerExists) {
       console.log(`域名 ${domain} 在 Lander 列表中不存在, 跳过替换操作`)
-      return null
+      return { status: 'unused', affectedCount: 0 }
     }
 
 
@@ -220,14 +218,14 @@ async function replaceDangerousDomain(domain, replacementDomain) {
 
 
       console.log(`域名 ${domain} 替换任务已启动: 影响 ${data.affectedCount} 条 Lander`)
-      return data
+      return { status: 'replaced', affectedCount: data.affectedCount }
     } else {
       console.log(`❌ 替换失败: ${res?.data?.message || '未知错误'}`)
-      return null
+      return { status: 'failed', affectedCount: 0 }
     }
   } catch (err) {
     console.log(`❌ 替换接口调用失败: ${err.message}`)
-    return null
+    return { status: 'failed', affectedCount: 0 }
   }
 }
 
@@ -245,16 +243,18 @@ async function replaceEfTrackerDomain(domain, replacementDomain) {
     })
 
     if (res?.data?.code === 0) {
-      console.log(`域名 ${domain} ef-tracker 替换完成: 影响 ${res.data.data?.affectedCount ?? 0} 条 Lander`)
-      return res.data.data
+      const affected = res.data.data?.affectedCount ?? 0
+      console.log(`域名 ${domain} ef-tracker 替换完成: 影响 ${affected} 条 Lander`)
+      return { status: 'replaced', affectedCount: affected }
     } else {
       // code!==0 多数是"未使用该域名, 跳过替换"的正常情况, 打印 message 即可
       console.log(`ℹ️  ef-tracker 侧: ${res?.data?.message || '跳过替换'}`)
-      return null
+      const msg = String(res?.data?.message || '')
+      return { status: msg.includes('未使用') ? 'unused' : 'failed', affectedCount: 0 }
     }
   } catch (err) {
     console.log(`❌ ef-tracker 替换接口调用失败: ${err.message}`)
-    return null
+    return { status: 'failed', affectedCount: 0 }
   }
 }
 
@@ -358,21 +358,37 @@ async function getBackupPoolCount() {
 }
 
 // 替换成功后的飞书普通消息通知(不打电话、不发邮件):
-// 内容 = 被替换域名 -> 替换域名 + 备用池剩余数量提醒(数量拉取失败时不带这部分, 不阻塞通知)
-async function sendReplacementSuccessNotice(dangerousDomain, replacementDomain) {
+// 内容 = 被替换域名 -> 替换域名 + 各系统替换明细(哪侧替换了/哪侧未使用/影响条数)
+//       + 备用池分类数量提醒(按 s 编号逐类展示; 拉取失败时不带这部分, 不阻塞通知)
+// sides: { cfResult, efResult } —— 两侧替换函数的结构化返回 { status: replaced|unused|failed, affectedCount }
+function buildSideResultText(sideName, result) {
+  if (result?.status === 'replaced') {
+    return `- ${sideName}：已替换完毕（影响 ${result.affectedCount} 条 Lander）`
+  }
+  if (result?.status === 'unused') {
+    return `- ${sideName}：未使用该域名，无需替换`
+  }
+  return `⚠️ ${sideName}：替换未确认（${result?.status || '无结果'}，请到替换记录页核查）`
+}
+
+async function sendReplacementSuccessNotice(dangerousDomain, replacementDomain, { cfResult, efResult } = {}) {
   try {
     const time = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
     const lines = [
       `【域名替换完成】${time}`,
       `危险域名已自动替换成功：`,
       `- ${dangerousDomain} -> ${replacementDomain}`,
-      `两侧系统(Clickflare / ef-tracker)均已替换完毕`
+      buildSideResultText('Clickflare 侧', cfResult),
+      buildSideResultText('ef-tracker 侧', efResult)
     ]
     const pool = await getBackupPoolCount()
     if (pool) {
+      const catLines = (pool.categories || []).map(c =>
+        `- ${c.category}-备用域名：可用 ${c.availableCount} 个（共 ${c.totalCount} 个）`)
       lines.push(``,
         `- 备用域名池：当前可用 ${pool.availableCount} 个（备用总数 ${pool.totalCount} 个）`,
-        `- 请及时注册新域名补充备用池，保持备用域名数量充足`)
+        ...(catLines.length ? catLines : ['- 暂无分类备用域名']),
+        `⚠️ 请及时注册新域名补充备用池，保持备用域名数量充足`)
     }
     await sendFeishuText(lines.join('\n'))
     console.log(`[替换流程] ✅ 替换成功通知已发送: ${dangerousDomain} -> ${replacementDomain}`)

@@ -695,24 +695,44 @@ class DomainsService {
    * is_safe=1、is_accessible=1、is_important=1 且 purpose 含"备用"）。
    * 供检测脚本在替换成功后提醒用户剩余备用数、及时注册补充。
    * 同时返回总备用数（只看 purpose 含"备用"，不看健康状态），便于对比。
+   * categories: 按 s 编号分组统计(如 s1-备用域名 可用2个/共3个), 提醒信息里逐类展示。
+   *   s 编号取 purpose 中出现的 s+数字(与 getReplacementDomain 的 \b[s](\d+)\b 同口径)。
    */
   async getBackupPoolCount() {
     try {
       const [rows] = await connection.execute(
-        `SELECT
-           SUM(CASE WHEN is_safe = 1 AND is_accessible = 1 AND is_important = 1 THEN 1 ELSE 0 END) AS available_count,
-           COUNT(*) AS total_count
+        `SELECT purpose,
+           CASE WHEN is_safe = 1 AND is_accessible = 1 AND is_important = 1 THEN 1 ELSE 0 END AS is_available
          FROM domains
          WHERE purpose LIKE '%备用%'`
       )
+
+      let availableCount = 0
+      const byNumber = new Map()  // s编号(如"s1") -> { available, total }
+      for (const r of rows) {
+        if (r.is_available) availableCount++
+        const matches = String(r.purpose || '').toLowerCase().match(/\bs(\d+)\b/g) || []
+        for (const m of matches) {
+          if (!byNumber.has(m)) byNumber.set(m, { available: 0, total: 0 })
+          const c = byNumber.get(m)
+          c.total++
+          if (r.is_available) c.available++
+        }
+      }
+
+      const categories = Array.from(byNumber.entries())
+        .sort((a, b) => Number(a[0].slice(1)) - Number(b[0].slice(1)))  // 按 s1, s2, s3 数字升序
+        .map(([key, c]) => ({ category: key, availableCount: c.available, totalCount: c.total }))
+
       return {
         success: true,
-        availableCount: Number(rows[0]?.available_count) || 0,
-        totalCount: Number(rows[0]?.total_count) || 0
+        availableCount,
+        totalCount: rows.length,
+        categories
       }
     } catch (error) {
       console.error('统计备用域名数量失败:', error)
-      return { success: false, availableCount: 0, totalCount: 0, message: error.message }
+      return { success: false, availableCount: 0, totalCount: 0, categories: [], message: error.message }
     }
   }
 }
