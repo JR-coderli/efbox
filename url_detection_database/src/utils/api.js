@@ -368,7 +368,7 @@ function buildSideResultText(sideName, result) {
   if (result?.status === 'unused') {
     return `- ${sideName}：未使用该域名，无需替换`
   }
-  return `⚠️ ${sideName}：替换未确认（${result?.status || '无结果'}，请到替换记录页核查）`
+  return `- ${sideName}：替换未确认（${result?.status || '无结果'}，请到替换记录页核查）`
 }
 
 async function sendReplacementSuccessNotice(dangerousDomain, replacementDomain, { cfResult, efResult } = {}) {
@@ -388,7 +388,7 @@ async function sendReplacementSuccessNotice(dangerousDomain, replacementDomain, 
       lines.push(``,
         `- 备用域名池：当前可用 ${pool.availableCount} 个（备用总数 ${pool.totalCount} 个）`,
         ...(catLines.length ? catLines : ['- 暂无分类备用域名']),
-        `⚠️ 请及时注册新域名补充备用池，保持备用域名数量充足`)
+        `[提醒] 请及时注册新域名补充备用池，保持备用域名数量充足`)
     }
     await sendFeishuText(lines.join('\n'))
     console.log(`[替换流程] ✅ 替换成功通知已发送: ${dangerousDomain} -> ${replacementDomain}`)

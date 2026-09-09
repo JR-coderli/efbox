@@ -76,10 +76,10 @@ function buildAlertText(alerts) {
   const inaccessibleList = alerts.filter(a => !a.isDanger && !a.accessible)
 
   if (dangerList.length > 0) {
-    sections.push(`被标记为危险 ${dangerList.length} 个:\n${dangerList.map(line).join('\n')}`)
+    sections.push(`【被标记为危险】${dangerList.length} 个:\n${dangerList.map(line).join('\n')}`)
   }
   if (inaccessibleList.length > 0) {
-    sections.push(`❌ 无法访问 ${inaccessibleList.length} 个:\n${inaccessibleList.map(line).join('\n')}`)
+    sections.push(`【无法访问】${inaccessibleList.length} 个:\n${inaccessibleList.map(line).join('\n')}`)
   }
 
   return `【网页监控】异常告警 ${time}\n检测到 ${alerts.length} 个异常域名:\n${sections.join('\n\n')}\n请尽快处理`
