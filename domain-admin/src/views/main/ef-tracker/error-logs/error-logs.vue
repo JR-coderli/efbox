@@ -128,7 +128,8 @@
                   <span class="date-text">{{ fmtTime(row.created_at) }}</span>
                 </template>
               </el-table-column>
-              <!-- 表头精确查询列（mid/tid/http_status）：第二行为只允许数字的输入框 -->
+              <!-- 表头精确查询列（mid/tid/http_status/error_code）：第二行为查询输入框；digits 列只允许数字；
+                   error_code 列是"排除包含该串"的反向过滤（placeholder 说明） -->
               <el-table-column
                 v-else-if="col.type === 'filter'"
                 :prop="col.prop"
@@ -141,7 +142,7 @@
                   <el-input
                     v-model="filters[col.filterKey]"
                     size="small"
-                    :placeholder="col.label"
+                    :placeholder="col.placeholder || col.label"
                     clearable
                     class="header-filter-input"
                     @input="(v) => onFilterInput(col, v)"
@@ -153,17 +154,8 @@
                 <template v-if="col.key === 'http_status'" #default="{ row }">
                   <span class="status-chip" :class="statusChipClass(row.http_status)">{{ row.http_status ?? '-' }}</span>
                 </template>
-              </el-table-column>
-              <!-- error_code：徽章底色（等宽字体 + 圆角胶囊） -->
-              <el-table-column
-                v-else-if="col.key === 'error_code'"
-                :prop="col.prop"
-                :width="col.width"
-                :min-width="col.minWidth"
-                :align="col.align"
-                :show-overflow-tooltip="col.overflow"
-              >
-                <template #default="{ row }">
+                <!-- error_code：等宽字体圆角徽章 -->
+                <template v-if="col.key === 'error_code'" #default="{ row }">
                   <span class="code-chip">{{ row.error_code || '-' }}</span>
                 </template>
               </el-table-column>
@@ -256,7 +248,7 @@ const filters = reactive({
   mid: '',
   tid: '',
   http_status: '',
-  exclude_error_code: 'SYSTEM_CLICK_FORMAT_ERR' // 默认排除该错误码
+  exclude_error_code: '' // 排除包含该串的错误码（默认不排除任何错误）
 })
 
 const dateRange = ref([])
@@ -380,7 +372,7 @@ const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
   { key: 'request_url', label: 'request_url', type: 'plain', prop: 'request_url', minWidth: 220, overflow: true },
-  { key: 'error_code', label: 'error_code', type: 'plain', prop: 'error_code', width: 220, overflow: true },
+  { key: 'error_code', label: 'error_code', type: 'filter', prop: 'error_code', filterKey: 'exclude_error_code', width: 220, overflow: true, placeholder: '排除包含该串' },
   { key: 'http_status', label: 'http状态', type: 'filter', prop: 'http_status', filterKey: 'http_status', width: 110, align: 'center' },
   { key: 'error_message', label: 'error_message', type: 'plain', prop: 'error_message', minWidth: 220, overflow: true },
   { key: 'error_reason', label: 'error_reason', type: 'plain', prop: 'error_reason', minWidth: 180, overflow: true },
