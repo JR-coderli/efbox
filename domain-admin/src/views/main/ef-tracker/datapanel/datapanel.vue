@@ -175,8 +175,9 @@
         </div>
       </div>
 
-      <!-- 表格：嵌套展开(行首箭头点开下一维度,与 report 数据报表页一致) -->
-      <div class="table-wrapper" v-loading="loading">
+      <!-- 表格：嵌套展开(行首箭头点开下一维度,与 report 数据报表页一致)
+           加载反馈分两种:首次加载(无旧数据)用表内加载行;刷新/查询(有旧数据)用遮罩盖住旧表 -->
+      <div class="table-wrapper" v-loading="loading && tableRows.length > 0">
         <table class="nested-table">
           <thead>
             <tr>
@@ -189,6 +190,26 @@
                     <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
                   </svg>
                 </span>
+              </th>
+              <th class="nt-num nt-sortable" @click="toggleSort('lpClicks')">
+                <span class="nt-th-text">LP Clicks</span>
+                <span class="nt-sort-icon" :class="sortClass('lpClicks')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M4 18l4-4h12v4H4zm0-8l4-4h12v4H4z" opacity="0" />
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
+                <el-tooltip
+                  content="LP Clicks = 落地页按钮点击数(跟随「去重」开关切换独立/原始口径)"
+                  placement="top"
+                  :show-after="200"
+                >
+                  <span class="nt-help-icon" title="">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+                    </svg>
+                  </span>
+                </el-tooltip>
               </th>
               <th class="nt-num nt-sortable" @click="toggleSort('cost')">
                 <span class="nt-th-text">Cost</span>
@@ -205,6 +226,44 @@
                     <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
                   </svg>
                 </span>
+              </th>
+              <th class="nt-num nt-sortable" @click="toggleSort('conversions_deducted')">
+                <span class="nt-th-text">Deducted</span>
+                <span class="nt-sort-icon" :class="sortClass('conversions_deducted')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
+                <el-tooltip
+                  content="扣量 = 被扣下未回传的转化数"
+                  placement="top"
+                  :show-after="200"
+                >
+                  <span class="nt-help-icon" title="">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+                    </svg>
+                  </span>
+                </el-tooltip>
+              </th>
+              <th class="nt-num nt-sortable" @click="toggleSort('conversions_sent')">
+                <span class="nt-th-text">Sent</span>
+                <span class="nt-sort-icon" :class="sortClass('conversions_sent')">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M7 10l5-5 5 5H7zm0 4h10l-5 5-5-5z" />
+                  </svg>
+                </span>
+                <el-tooltip
+                  content="回传 = 实际回传给媒体的转化数（Conversions − Deducted）"
+                  placement="top"
+                  :show-after="200"
+                >
+                  <span class="nt-help-icon" title="">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+                    </svg>
+                  </span>
+                </el-tooltip>
               </th>
               <th class="nt-num nt-sortable" @click="toggleSort('revenue')">
                 <span class="nt-th-text">Revenue</span>
@@ -274,11 +333,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="row in tableRows"
-              :key="row.path"
-              :class="{ 'nt-expanded-row': isRowExpanded(row) }"
-            >
+            <template v-for="row in tableRows" :key="row.path">
+            <tr :class="{ 'nt-expanded-row': isRowExpanded(row) }">
               <td class="nt-dim">
                 <!-- 层级缩进:每层一条竖虚线引导,直观呈现父子层级 -->
                 <span
@@ -323,8 +379,11 @@
                 </a>
               </td>
               <td class="nt-num">{{ fmtNum(row.clicks) }}</td>
+              <td class="nt-num">{{ fmtNum(row.lpClicks) }}</td>
               <td class="nt-num">{{ fmtMoney(row.cost) }}</td>
               <td class="nt-num">{{ fmtNum(row.conversions) }}</td>
+              <td class="nt-num">{{ fmtNum(row.conversions_deducted) }}</td>
+              <td class="nt-num">{{ fmtNum(row.conversions_sent) }}</td>
               <td class="nt-num nt-revenue">{{ fmtMoney(row.revenue) }}</td>
               <td
                 class="nt-num nt-profit"
@@ -333,35 +392,40 @@
               <td class="nt-num">{{ fmtPct(row.cvr) }}</td>
               <td class="nt-num">{{ fmtRoi(row.roi) }}</td>
             </tr>
+            <!-- 展开加载中：子维度数据返回前，在父行下方显示一条带转圈的占位行 -->
+            <tr v-if="row.expanded && row.loading" class="nt-child-loading-row">
+              <td colspan="11">
+                <span class="nt-loading-spinner"></span>
+                <span>加载子维度数据中...</span>
+              </td>
+            </tr>
+            </template>
+            <!-- 首次加载：第一维度数据返回前显示加载行(与展开子维度的加载样式一致,靠左) -->
+            <tr v-if="loading && tableRows.length === 0" class="nt-child-loading-row">
+              <td colspan="11">
+                <span class="nt-loading-spinner"></span>
+                <span>加载数据中...</span>
+              </td>
+            </tr>
             <tr v-if="!loading && tableRows.length === 0">
-              <td colspan="8" class="nt-empty">暂无数据</td>
+              <td colspan="11" class="nt-empty">暂无数据</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <!-- 合计行：第一层全部分组合计(不受分页影响) -->
+      <!-- 合计行：第一层全部分组合计(stats/group 的 totals) -->
       <div v-if="totals" class="totals-bar">
         <span class="totals-label">合计: </span>
         <span class="totals-item">点击 <b>{{ fmtNum(totals.clicks) }}</b></span>
+        <span class="totals-item">LP点击 <b>{{ fmtNum(totals.lpClicks) }}</b></span>
         <span class="totals-item">花费 <b>{{ fmtMoney(totals.cost) }}</b></span>
         <span class="totals-item">转化 <b>{{ fmtNum(totals.conversions) }}</b></span>
+        <span class="totals-item">扣量 <b>{{ fmtNum(totals.conversions_deducted) }}</b></span>
+        <span class="totals-item">回传 <b>{{ fmtNum(totals.conversions_sent) }}</b></span>
         <span class="totals-item ti-revenue">收入 <b>{{ fmtMoney(totals.revenue) }}</b></span>
         <span class="totals-item" :class="totalProfit > 0 ? 'ti-profit-pos' : totalProfit < 0 ? 'ti-profit-neg' : ''">利润 <b>{{ fmtMoney(totalProfit) }}</b></span>
-      </div>
-
-      <!-- 分页：作用于第一层分组结果;展开的子层各自独立分页(记忆在行上) -->
-      <div class="pagination-wrapper">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="total"
-          layout="total, sizes, prev, pager, next"
-          class="google-pagination"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
+        <span class="totals-item">分组 <b>{{ fmtNum(total) }}</b></span>
       </div>
     </div>
   </div>
@@ -371,7 +435,7 @@
 import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import SparkMD5 from 'spark-md5'
-import { getStatsBreakdown, getLanders, getEfLanderScreenshots } from '@/services/main/ef-tracker'
+import { getStatsGroup, getLanders, getEfLanderScreenshots } from '@/services/main/ef-tracker'
 import { BASE_URL } from '@/services/request/config'
 
 // ===== 维度定义(与 QUERY_API.md 第12节一致) =====
@@ -388,7 +452,7 @@ const DIM_OPTIONS = [
   { value: 'creative', label: 'Creative', hint: '素材名' },
   { value: 'hour', label: 'Hour', hint: '0~23 档' }
 ]
-const MAX_DIMS = 5 // 接口硬校验上限
+const MAX_DIMS = 5 // 前端约束(旧 breakdown 接口的硬校验上限;新 stats/group 无此限制,保持 5 控制下钻深度)
 
 // 嵌套表格数据声明(在下方「嵌套展开状态」一节统一定义)
 const loading = ref(false)
@@ -396,9 +460,6 @@ const total = ref(0)
 const totals = ref(null)
 const rows = ref([])
 const tableRows = computed(() => rows.value)
-
-// 服务端分页(作用于第一层)：page 从 1 开始，size 上限 100
-const pagination = reactive({ page: 1, pageSize: 20 })
 
 // 时区：默认 +8,只保留 +8/+0/+5/+6 四档
 const tz = ref(-5) // 默认 UTC-5
@@ -454,7 +515,6 @@ function pickShortcut(value) {
   range.value = value
   calendarRange.value = null
   showRangePanel.value = false
-  pagination.page = 1
   loadData()
 }
 
@@ -464,7 +524,6 @@ watch(calendarRange, (val) => {
     range.value = 'custom'
     dateRange.value = val
     showRangePanel.value = false
-    pagination.page = 1
     loadData()
   }
 })
@@ -486,7 +545,6 @@ function addDim(value) {
   const found = DIM_OPTIONS.find((d) => d.value === value)
   if (found && !selectedDims.value.some((s) => s.value === found.value)) {
     selectedDims.value.push(found)
-    pagination.page = 1
     loadData() // 维度变了,展开状态随行数据一起重建
   }
   if (availableDims.value.length === 0 || selectedDims.value.length >= MAX_DIMS) {
@@ -500,7 +558,6 @@ function removeDim(value) {
     return
   }
   selectedDims.value = selectedDims.value.filter((d) => d.value !== value)
-  pagination.page = 1
   loadData()
 }
 
@@ -538,7 +595,6 @@ function handleDimDrop(event) {
   selectedDims.value = arr
 
   // 顺序变了,重新加载第一层(展开状态随行数据重建)
-  pagination.page = 1
   loadData()
 }
 
@@ -590,14 +646,12 @@ function handleDocMousedown(event) {
 }
 
 // ===== 嵌套展开逻辑 =====
-// rows(上方已声明): 扁平化嵌套行。子行分页状态记在行上(page/pageSize/total),展开过滤由行链(filtersOf)生成
+// rows(上方已声明): 扁平化嵌套行。展开过滤由行链(filtersOf)生成;
+// stats/group 无分页,每层一次返回全部分组,行上无需再记分页状态
 const dimValues = computed(() => selectedDims.value.map((d) => d.value))
 
-// 合计条利润 = 第一层全部分组的 Revenue - Cost(totals 不含 profit,前端算)
-const totalProfit = computed(() => {
-  if (!totals.value) return 0
-  return Number(totals.value.revenue) - Number(totals.value.cost)
-})
+// 合计条利润:直接用接口 totals.profit(= revenue - cost)
+const totalProfit = computed(() => totals.value?.profit ?? 0)
 
 function hasChildLevel(level) {
   return level < dimValues.value.length - 1
@@ -607,14 +661,44 @@ function isRowExpanded(row) {
   return !!row.expanded
 }
 
-// 派生指标：CVR = 转化/点击；ROI = 收入/花费(cost 为 0 时显示 -)；Profit = 收入-花费
+// 派生指标：Clicks/LP Clicks 按去重开关取原始/独立字段(tk_* / lp_*)；
+// CVR = 转化/点击；ROI = 收入/花费(cost 为 0 时显示 -)；Profit 直接用接口直算值(= revenue - cost)
 function decorate(list) {
   for (const row of list) {
-    row.cvr = row.clicks > 0 ? (Number(row.conversions) / Number(row.clicks)) * 100 : 0
-    row.roi = Number(row.cost) > 0 ? (Number(row.revenue) / Number(row.cost)) * 100 : null
-    row.profit = Number(row.revenue) - Number(row.cost)
+    row.clicks = uniqueOnly.value ? Number(row.tk_u_clicks ?? 0) : Number(row.tk_clicks ?? 0)
+    row.lpClicks = uniqueOnly.value ? Number(row.lp_u_clicks ?? 0) : Number(row.lp_clicks ?? 0)
+    row.conversions = Number(row.conversions ?? 0)
+    row.conversions_deducted = Number(row.conversions_deducted ?? 0)
+    row.conversions_sent = Number(row.conversions_sent ?? 0)
+    row.cost = Number(row.cost ?? 0)
+    row.revenue = Number(row.revenue ?? 0)
+    row.profit = Number(row.profit ?? 0)
+    row.cvr = row.clicks > 0 ? (row.conversions / row.clicks) * 100 : 0
+    row.roi = row.cost > 0 ? (row.revenue / row.cost) * 100 : null
   }
   return list
+}
+
+// stats/group 的 totals 与 list 字段同名(tk_clicks/tk_u_clicks...),按去重开关折算成页面口径
+function normalizeTotals(t) {
+  if (!t) return null
+  return {
+    clicks: uniqueOnly.value ? Number(t.tk_u_clicks ?? 0) : Number(t.tk_clicks ?? 0),
+    lpClicks: uniqueOnly.value ? Number(t.lp_u_clicks ?? 0) : Number(t.lp_clicks ?? 0),
+    cost: Number(t.cost ?? 0),
+    conversions: Number(t.conversions ?? 0),
+    conversions_deducted: Number(t.conversions_deducted ?? 0),
+    conversions_sent: Number(t.conversions_sent ?? 0),
+    revenue: Number(t.revenue ?? 0),
+    profit: Number(t.profit ?? 0)
+  }
+}
+
+// 分组数超过 1000 时接口只返回前 1000 组并带 truncated:true(不静默截断),提示用户缩小时间窗
+function warnTruncated(result) {
+  if (result?.truncated) {
+    ElMessage.warning('分组数超过 1000，仅显示前 1000 组，请缩小时间范围')
+  }
 }
 
 // ===== 列排序(前端本地排序;接口不支持排序参数) =====
@@ -763,11 +847,11 @@ function rangeToParams(r) {
   return { start: fmt(d1), end: fmt(end) }
 }
 
-function buildParams(page, size, filters) {
+// stats/group：单维度分组。by=当前层维度；下钻过滤(父行链锁定的维度值)直接作为同名 query 参数。
+// 去重不再传 unique 参数——接口同时返回 tk_clicks/tk_u_clicks,展示时按开关取字段(decorate)
+function buildParams(by, filters) {
   const p = {
-    dims: dimValues.value.join(','),
-    page,
-    size,
+    by,
     tz: tz.value
   }
   if (range.value === 'custom') {
@@ -775,8 +859,6 @@ function buildParams(page, size, filters) {
   } else if (range.value) {
     p.range = range.value
   }
-  if (uniqueOnly.value) p.unique = true
-  // 展开过滤：父行链上锁定的维度值
   Object.assign(p, filters || {})
   return p
 }
@@ -792,8 +874,9 @@ function filtersOf(row) {
   return fs
 }
 
-// 加载第一层(按维度顺序的第一个维度分组)
+// 加载第一层(按维度顺序的第一个维度分组);每次筛选变化都会经过这里,顺手把选择记入 localStorage
 async function loadData() {
+  persistFilters()
   if (!dimValues.value.length) {
     rows.value = []
     total.value = 0
@@ -802,7 +885,8 @@ async function loadData() {
   }
   loading.value = true
   try {
-    const result = await getStatsBreakdown(buildParams(pagination.page, pagination.pageSize))
+    const result = await getStatsGroup(buildParams(dimValues.value[0]))
+    warnTruncated(result)
     const list = decorate(result?.list || [])
     rows.value = list.map((item, idx) => ({
       ...item,
@@ -812,13 +896,10 @@ async function loadData() {
       parent: null,
       expanded: false,
       loading: false,
-      loaded: false,
-      page: 1,
-      pageSize: pagination.pageSize,
-      total: 0
+      loaded: true
     }))
-    total.value = result?.total ?? 0
-    totals.value = result?.totals ?? null
+    total.value = result?.count ?? 0
+    totals.value = normalizeTotals(result?.totals)
     prefetchLanderUrls() // lander 维度行预取 url(异步,不阻塞表格)
   } catch (error) {
     ElMessage.error('加载失败: ' + (error?.response?.data?.error || error?.message || '网络错误'))
@@ -851,9 +932,11 @@ async function loadChildren(row) {
   if (!nextDim) return
   row.loading = true
   try {
-    const result = await getStatsBreakdown(buildParams(row.page, row.pageSize, filtersOf(row)))
+    const result = await getStatsGroup(buildParams(nextDim, filtersOf(row)))
+    // 等待期间用户可能已收起该行——丢弃本次结果，不把子行再插回去
+    if (!row.expanded) return
+    warnTruncated(result)
     const list = decorate(result?.list || [])
-    row.total = result?.total ?? 0
     row.loaded = true
 
     // 先移除旧子行,再把新子行插到该行后面
@@ -862,16 +945,13 @@ async function loadChildren(row) {
     const idx = filtered.findIndex((r) => r.path === row.path)
     const children = list.map((item, i) => ({
       ...item,
-      path: `${row.path}-${(row.page - 1) * row.pageSize + i}`,
+      path: `${row.path}-${i}`,
       level: row.level + 1,
       dim: nextDim,
       parent: row,
       expanded: false,
       loading: false,
-      loaded: false,
-      page: 1,
-      pageSize: row.pageSize,
-      total: 0
+      loaded: true
     }))
     filtered.splice(idx + 1, 0, ...children)
     rows.value = filtered
@@ -891,7 +971,6 @@ function handleSearch() {
     return
   }
   showRangePanel.value = false
-  pagination.page = 1
   loadData()
 }
 
@@ -904,18 +983,6 @@ function handleReset() {
   uniqueOnly.value = false
   showDimensionPicker.value = false
   showRangePanel.value = false
-  pagination.page = 1
-  loadData()
-}
-
-function handleSizeChange(size) {
-  pagination.pageSize = size
-  pagination.page = 1
-  loadData()
-}
-
-function handleCurrentChange(page) {
-  pagination.page = page
   loadData()
 }
 
@@ -923,8 +990,70 @@ function handleCurrentChange(page) {
 const uniqueOnly = ref(true) // 默认开启去重(按 media_click_id)
 function toggleUnique() {
   uniqueOnly.value = !uniqueOnly.value
-  pagination.page = 1
   loadData()
+}
+
+// ===== 本地记忆：维度/时间范围/时区/去重开关 =====
+// localStorage 记住用户选择,刷新或重进页面自动恢复;点「重置」恢复默认并覆盖记忆。
+// 非法/过期的保存值(如维度名已不存在)自动回退默认,不让坏数据卡死页面。
+const STORAGE_KEY = 'ef-tracker:datapanel:filters'
+
+function applySavedFilters() {
+  let saved = null
+  try {
+    saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
+  } catch {
+    saved = null
+  }
+  if (!saved) return
+
+  // 维度:过滤非法值、去重、限量,保持保存的顺序;至少 1 个否则维持默认
+  if (Array.isArray(saved.dims) && saved.dims.length) {
+    const valid = [...new Set(saved.dims)]
+      .filter((v) => DIM_OPTIONS.some((d) => d.value === v))
+      .slice(0, MAX_DIMS)
+    if (valid.length) {
+      selectedDims.value = valid.map((v) => DIM_OPTIONS.find((d) => d.value === v)).filter(Boolean)
+    }
+  }
+  // 时间范围:自定义区间(时间戳恢复为 Date)或预设值
+  if (saved.range === 'custom' && Array.isArray(saved.dateRange) && saved.dateRange.length === 2) {
+    const [d1, d2] = saved.dateRange.map((n) => new Date(n))
+    if (!isNaN(d1.getTime()) && !isNaN(d2.getTime())) {
+      range.value = 'custom'
+      dateRange.value = [d1, d2]
+    }
+  } else if (saved.range && rangeOptions.some((o) => o.value === saved.range)) {
+    range.value = saved.range
+  }
+  // 时区
+  if (saved.tz !== undefined && tzOptions.some((o) => o.value === saved.tz)) {
+    tz.value = saved.tz
+  }
+  // 去重开关
+  if (typeof saved.uniqueOnly === 'boolean') {
+    uniqueOnly.value = saved.uniqueOnly
+  }
+}
+
+function persistFilters() {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        dims: dimValues.value,
+        range: range.value,
+        dateRange:
+          range.value === 'custom' && dateRange.value?.length === 2
+            ? dateRange.value.map((d) => d.getTime())
+            : [],
+        tz: tz.value,
+        uniqueOnly: uniqueOnly.value
+      })
+    )
+  } catch {
+    // localStorage 不可用(隐私模式等)忽略,不影响功能
+  }
 }
 
 // ===== 格式化 =====
@@ -964,6 +1093,7 @@ function handleRefresh() {
 }
 
 onMounted(() => {
+  applySavedFilters() // 先恢复用户上次的维度/时间/时区,再加载
   loadData()
   document.addEventListener('mousedown', handleDocMousedown)
 })
@@ -1664,6 +1794,32 @@ onUnmounted(() => {
   color: #5f6368;
 }
 
+// 展开子维度加载中的占位行(转圈 + 文案)——靠左显示,与维度列对齐
+.nt-child-loading-row td {
+  text-align: left;
+  padding: 14px 14px;
+  color: #5f6368;
+  font-size: 13px;
+}
+
+.nt-loading-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid #e8eaed;
+  border-top-color: #1a73e8;
+  border-radius: 50%;
+  animation: nt-spin 0.8s linear infinite;
+}
+
+@keyframes nt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 // ===== 合计条 =====
 .totals-bar {
   display: flex;
@@ -1699,39 +1855,6 @@ onUnmounted(() => {
 
 .totals-item.ti-profit-neg b {
   color: #d93025;
-}
-
-.pagination-wrapper {
-  padding: 12px 16px;
-  border-top: 1px solid #e8eaed;
-  display: flex;
-  justify-content: flex-end;
-}
-
-:deep(.google-pagination) {
-  .el-pagination__total {
-    color: #5f6368;
-    font-size: 13px;
-  }
-
-  .el-pager li {
-    border-radius: 4px;
-    margin: 0 2px;
-    color: #5f6368;
-    font-weight: 500;
-    min-width: 32px;
-    height: 32px;
-    line-height: 30px;
-
-    &:hover {
-      background-color: #f1f3f4;
-    }
-
-    &.is-active {
-      background-color: #1a73e8;
-      color: #fff;
-    }
-  }
 }
 
 :deep(.el-loading-mask) {

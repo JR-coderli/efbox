@@ -88,12 +88,15 @@ export function getLanders(params = {}) {
   return query('/query/landers', params)
 }
 
-// 7. 可变维度下钻聚合报表 —— /query/stats/breakdown
-// params: dims(必填,逗号分隔维度,顺序=下钻顺序,最多5个)、range|start/end、tz、page、size、unique、
-//         以及下钻过滤(已展开的上层维度传具体值,如 lander=10)
-// 返回分页信封 + { dim, filters, totals }；list[].{ key, name, clicks, cost, conversions, revenue }
-export function getStatsBreakdown(params = {}) {
-  return query('/query/stats/breakdown', params)
+// 7. 单维度分组聚合报表 —— /query/stats/group(2026-09-03 上线,替代已废弃的 /query/stats/breakdown)
+// params: by(必填,本次分组维度,如 lander)、range|start/end、tz、
+//         以及下钻过滤(已展开的上层维度传具体值,如 lander=10、date=2026-09-03)
+// 无分页,一次返回全部分组(>1000 组只返前 1000 并带 truncated:true);相同参数有 60s 进程缓存
+// 返回 { tz, dim, filters, count, list, totals }；list[].{ key, name, tk_clicks, tk_u_clicks, lp_clicks,
+//        lp_u_clicks, lp_visits, lp_u_visits, conversions, conversions_deducted, conversions_sent,
+//        cost, revenue, profit }
+export function getStatsGroup(params = {}) {
+  return query('/query/stats/group', params)
 }
 
 // 8. 时间桶点击量统计 —— /query/stats/timeline（排查负载告警用）
