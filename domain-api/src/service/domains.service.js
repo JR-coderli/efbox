@@ -4,6 +4,17 @@ const axios = require('axios')
 
 const SAFE_BROWSING_API_KEY = process.env.SAFE_BROWSING_API_KEY || 'AIzaSyD9vj6yRGGHqFsmD10BuwcgkooNoV8-XP0'
 
+
+// 搜索词归一化：去掉协议头、路径、端口，让 https://pro.gardecho.com / pro.gardecho.com/
+// pro.gardecho / gardecho.com / gardecho 这些写法都以"裸域名"形态参与 LIKE 匹配
+function normalizeDomainKeyword(input) {
+  let s = String(input ?? '').trim()
+  s = s.replace(/^https?:\/\//i, '')
+  const slash = s.indexOf('/')
+  if (slash > -1) s = s.slice(0, slash)
+  return s.replace(/:\d+$/, '')
+}
+
 class DomainsService {
 
   async create(domains_info) {
@@ -36,12 +47,14 @@ class DomainsService {
   async normal_list(offset, size, createAtStart, createAtEnd, existing_domain, landing_page_url, is_normal) {
 
 
-    // 域名搜索：除子串匹配外，把搜索词剥掉一级子域（pro.quicksala2.com → quicksala2.com）
-    // 再 OR 匹配，使搜索子域名时也能命中其主域记录；两级以上子域递归剥到主域为止
+    // 域名搜索：搜索词先归一化(去协议/路径/端口)，再除子串匹配外把搜索词剥掉一级子域
+    // (pro.quicksala2.com → quicksala2.com) OR 匹配，使搜索子域名时也能命中其主域记录；
+    // 两级以上子域递归剥到主域为止。
     // 落地页地址同样参与模糊匹配（如搜 pro2.genvirop.com 命中 landing_page_url=https://pro2.genvirop.com）
+    const keyword = normalizeDomainKeyword(existing_domain)
     const domainConditions = ['existing_domain LIKE ?', 'landing_page_url LIKE ?']
-    const domainParams = [`%${existing_domain ?? ''}%`, `%${existing_domain ?? ''}%`]
-    let stripped = String(existing_domain ?? '').trim()
+    const domainParams = [`%${keyword}%`, `%${keyword}%`]
+    let stripped = keyword
     while (stripped.includes('.')) {
       stripped = stripped.slice(stripped.indexOf('.') + 1)
       domainConditions.push('existing_domain LIKE ?')
@@ -111,10 +124,13 @@ class DomainsService {
   async import_list(offset, size, createAtStart, createAtEnd, existing_domain, landing_page_url, is_normal) {
 
 
-    // 与 normal_list 相同的子域剥离搜索：搜子域名时也命中主域记录
-    const domainConditions = ['existing_domain LIKE ?']
-    const domainParams = [`%${existing_domain ?? ''}%`]
-    let stripped = String(existing_domain ?? '').trim()
+    // 与 normal_list 相同的搜索口径：搜索词归一化(去协议/路径/端口) + 子域剥离 + 落地页地址模糊匹配
+    // （此前只匹配 existing_domain，重要域名页搜 landing_page_url 里的子域时搜不到，
+    //   如 landing_page_url=https://pro.gardecho.com 搜 gardecho.com / pro.gardecho.com / 带协议全址）
+    const keyword = normalizeDomainKeyword(existing_domain)
+    const domainConditions = ['existing_domain LIKE ?', 'landing_page_url LIKE ?']
+    const domainParams = [`%${keyword}%`, `%${keyword}%`]
+    let stripped = keyword
     while (stripped.includes('.')) {
       stripped = stripped.slice(stripped.indexOf('.') + 1)
       domainConditions.push('existing_domain LIKE ?')
@@ -197,8 +213,11 @@ class DomainsService {
    */
   async dailyReportList() {
     // 备用域名 + 被替换启用次数(LEFT JOIN 聚合,没被用过计 0)
-    // 注: cf_lander_url_replacements 是 utf8mb4_0900_ai_ci、domains 是 utf8mb4_general_ci,
-    // JOIN 比较需显式统一排序规则,否则 Illegal mix of collations (本地库踩过的坑)
+    // 注1: cf_lander_url_replacements 是 utf8mb4_0900_ai_ci、domains 是 utf8mb4_general_ci,
+    //      JOIN 比较需显式统一排序规则,否则 Illegal mix of collations (本地库踩过的坑)
+    // 注2: replacement_domain 存的是替换时从 landing_page_url 提取的子域 hostname(如 pro2.kervalix.com),
+    //      而 existing_domain 存主域(如 kervalix.com),只按 existing_domain 精确 JOIN 会 miss——
+    //      补一条从 landing_page_url 提取 hostname 的等值比较(与 domain-purpose-inherit 同口径)
     const [backup] = await connection.execute(
       `SELECT d.id, d.purpose, d.landing_page_url,
               IFNULL(r.used_count, 0) AS used_count
@@ -208,17 +227,22 @@ class DomainsService {
          FROM cf_lander_url_replacements
          GROUP BY replacement_domain
        ) r ON r.replacement_domain COLLATE utf8mb4_general_ci = d.existing_domain
+          OR r.replacement_domain COLLATE utf8mb4_general_ci =
+             SUBSTRING_INDEX(SUBSTRING_INDEX(d.landing_page_url, '//', -1), '/', 1)
        WHERE d.purpose LIKE '%备用%'
        ORDER BY d.id ASC`
     )
 
     // 备用域名被启用后"标签迟迟未改"清单(供飞书普通消息提醒):
     // 条件 = purpose 仍含"备用" + 最近一次被替换启用发生在 24 小时之前(留足人工改标签时间,避免刚换完就误报)
+    // JOIN 口径同上: replacement_domain 是子域 hostname,补 landing_page_url 提取 hostname 的等值比较
     const [mislabelBackup] = await connection.execute(
       `SELECT d.existing_domain, d.purpose, MAX(t.updated_at) AS last_used_at
        FROM domains d
        INNER JOIN cf_lander_url_replacements t
          ON t.replacement_domain COLLATE utf8mb4_general_ci = d.existing_domain
+         OR t.replacement_domain COLLATE utf8mb4_general_ci =
+            SUBSTRING_INDEX(SUBSTRING_INDEX(d.landing_page_url, '//', -1), '/', 1)
        WHERE d.purpose LIKE '%备用%'
          AND t.updated_at < NOW() - INTERVAL 24 HOUR
        GROUP BY d.existing_domain, d.purpose

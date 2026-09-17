@@ -146,14 +146,22 @@ class DomainPurposeInheritService {
       }
 
       // 2. 幂等检查：替换域名当前 purpose 已是目标值则不重复更新
-      //    ⚠️ 只按 existing_domain 精确匹配——备用记录若只在 landing_page_url 里会查不到
+      //    查找口径与选备用时互逆：getReplacementDomain 是从 landing_page_url 提取 hostname，
+      //    这里就从 landing_page_url 提取 hostname 反查（existing_domain 存的是主域如 funmatch.bid，
+      //    替换操作的是子域如 s2.funmatch.bid，只按 existing_domain 精确匹配会 miss——线上已踩过）。
+      //    hostname 提取用 SUBSTRING_INDEX 两段截取（兼容 https://x.com、https://x.com/a、x.com/a 三种格式），
+      //    比 LIKE '%域名%' 精确（不会误匹配 xpro2.kervalix.com 这类前缀兄弟域名）。
       const [replacementRecords] = await connection.execute(
-        `SELECT id, purpose FROM domains WHERE existing_domain = ? LIMIT 1`,
-        [replacementDomain]
+        `SELECT id, purpose FROM domains
+         WHERE existing_domain = ?
+            OR SUBSTRING_INDEX(SUBSTRING_INDEX(landing_page_url, '//', -1), '/', 1) = ?
+         ORDER BY existing_domain = ? DESC, id ASC
+         LIMIT 1`,
+        [replacementDomain, replacementDomain, replacementDomain]
       )
 
       if (replacementRecords.length === 0) {
-        console.log(`[purpose继承] ❌ 替换域名 ${replacementDomain} 按 existing_domain 精确匹配查不到（existing_domain 存的是主域而替换的是子域时会miss），跳过`)
+        console.log(`[purpose继承] ❌ 替换域名 ${replacementDomain} 按 existing_domain 精确 + landing_page_url 提取 hostname 都查不到，跳过`)
         return { success: false, message: `替换域名 ${replacementDomain} 在 domains 表中不存在，跳过 purpose 继承` }
       }
 
@@ -165,10 +173,11 @@ class DomainPurposeInheritService {
       }
 
       // 3. 更新替换域名 purpose 为危险域名 purpose 原文（危险域名自身标签保持不变）
+      //    按第 2 步定位到的记录 id 更新（该记录可能不是按 existing_domain 精确匹配到的）
       const oldPurpose = replacementRecords[0].purpose
       const [updateResult] = await connection.execute(
-        `UPDATE domains SET purpose = ? WHERE existing_domain = ?`,
-        [dangerousPurpose, replacementDomain]
+        `UPDATE domains SET purpose = ? WHERE id = ?`,
+        [dangerousPurpose, replacementRecords[0].id]
       )
       console.log(`[purpose继承] UPDATE 影响行数: ${updateResult.affectedRows}`)
 
