@@ -109,41 +109,54 @@ async function updateDomainStatus(id, isAccessible, isSafe, url) {
 
 
     if ((isSafe === 0 || isAccessible === 0) && url) {
-      try {
-        const domain = extractDomain(url)
-        // 已替换成功过的域名不再重复走替换流程：替换成功后域名通常仍异常（Safe Browsing 标记未消），
-        // 第 2、3 轮会再次触发本流程，但 lander 里已无该域名，两侧只会空跑"未使用"，
-        // 且裁决幂等返回 success 后会再发一条"替换成功"飞书通知（每轮一条，直到 3 轮降级）。
-        // 替换失败过的域名不在 notifiedReplaced 集合中，下一轮仍会照常重试。
-        if (domain && !notifiedReplaced.has(domain)) {
-          console.log(`[替换流程] 检测到异常域名 ${domain} (is_accessible=${isAccessible} is_safe=${isSafe})，开始查询备用域名`)
-          // 一次检测事件只查询一次备用域名，两边共用同一个结果，
-          // 保证 Clickflare / ef-tracker 替换到同一个备用域名上（避免两侧各自查询时备用池中途变化导致分歧）
-          const replacementDomain = await getReplacementDomain(domain)
-          if (!replacementDomain) {
-            console.log(`[替换流程] 无法获取替换域名(备用池不满足条件或危险域名purpose无s编号), 跳过替换操作: ${domain}`)
-            return
-          }
-          console.log(`[替换流程] ${domain} -> ${replacementDomain}，开始两侧替换`)
-          // 两边独立替换、互不影响：Clickflare 没在用不影响 ef-tracker 侧替换，反之亦然
-          const cfResult = await replaceDangerousDomain(domain, replacementDomain)      // Clickflare 侧
-          const efResult = await replaceEfTrackerDomain(domain, replacementDomain)      // ef-tracker 侧
-          console.log(`[替换流程] ${domain} -> ${replacementDomain} 两侧替换请求已发出，开始兜底裁决 purpose 继承(轮询至两侧终态)`)
-          // 兜底：轮询直到两侧都到终态，决定是否把备用域名 purpose 改为危险域名的(s1-备用 -> s1-LP)。
-          // 任一侧失败则保持原状；两侧成功才继承。不阻塞太久(默认5分钟超时)，超时留给下次检测再裁决。
-          const verdict = await resolvePurposeInherit(domain)
-          // 两侧替换全部成功 → 飞书普通消息通知用户(不打电话不发邮件)，并停止该域名后续预警
-          if (verdict === 'success') {
-            notifiedReplaced.add(domain)
-            sendReplacementSuccessNotice(domain, replacementDomain, { cfResult, efResult })
-          }
-        }
-      } catch (err) {
-        console.log(`❌ 替换危险域名失败: ${err.message}`)
+      const domain = extractDomain(url)
+      // 已替换成功过的域名不再重复走替换流程：替换成功后域名通常仍异常（Safe Browsing 标记未消），
+      // 第 2、3 轮会再次触发本流程，但 lander 里已无该域名，两侧只会空跑"未使用"，
+      // 且裁决幂等返回 success 后会再发一条"替换成功"飞书通知（每轮一条，直到 3 轮降级）。
+      // 替换失败过的域名不在 notifiedReplaced 集合中，下一轮仍会照常重试。
+      if (domain && !notifiedReplaced.has(domain)) {
+        // ⚠️ 不 await：替换流程含裁决轮询最长约 5-6 分钟，若在这里等待会阻塞本轮收尾，
+        // 导致预警(电话/飞书/邮件)等到替换结束才发、和"替换完成"通知挤在一起且顺序颠倒。
+        // 预警必须立即发；替换结果通知由后台流程完成后自行发送。内部自捕获错误，不会产生未处理 rejection。
+        runAutoReplacement(domain, isAccessible, isSafe)
       }
     }
   } catch (err) {
     console.log(`❌ 更新域名状态失败 id=${id}: ${err.message}`);
+  }
+}
+
+/**
+ * 自动替换后台流程（从 updateDomainStatus 拆出，后台执行不阻塞调用方）：
+ * 选备用 → 两侧替换 → 轮询裁决 purpose 继承 → 两侧成功后发飞书"替换完成"通知并把域名加入静默集合。
+ * 整个函数体 try/catch，任何失败只打日志不上抛。
+ * 时长上限约 6 分钟（< 15 分钟检测间隔），跨轮不会堆积重叠。
+ */
+async function runAutoReplacement(domain, isAccessible, isSafe) {
+  try {
+    console.log(`[替换流程] 检测到异常域名 ${domain} (is_accessible=${isAccessible} is_safe=${isSafe})，开始查询备用域名`)
+    // 一次检测事件只查询一次备用域名，两边共用同一个结果，
+    // 保证 Clickflare / ef-tracker 替换到同一个备用域名上（避免两侧各自查询时备用池中途变化导致分歧）
+    const replacementDomain = await getReplacementDomain(domain)
+    if (!replacementDomain) {
+      console.log(`[替换流程] 无法获取替换域名(备用池不满足条件或危险域名purpose无s编号), 跳过替换操作: ${domain}`)
+      return
+    }
+    console.log(`[替换流程] ${domain} -> ${replacementDomain}，开始两侧替换`)
+    // 两边独立替换、互不影响：Clickflare 没在用不影响 ef-tracker 侧替换，反之亦然
+    const cfResult = await replaceDangerousDomain(domain, replacementDomain)      // Clickflare 侧
+    const efResult = await replaceEfTrackerDomain(domain, replacementDomain)      // ef-tracker 侧
+    console.log(`[替换流程] ${domain} -> ${replacementDomain} 两侧替换请求已发出，开始兜底裁决 purpose 继承(轮询至两侧终态)`)
+    // 兜底：轮询直到两侧都到终态，决定是否把备用域名 purpose 改为危险域名的(s1-备用 -> s1-LP)。
+    // 任一侧失败则保持原状；两侧成功才继承。不阻塞太久(默认5分钟超时)，超时留给下次检测再裁决。
+    const verdict = await resolvePurposeInherit(domain)
+    // 两侧替换全部成功 → 飞书普通消息通知用户(不打电话不发邮件)，并停止该域名后续预警
+    if (verdict === 'success') {
+      notifiedReplaced.add(domain)
+      sendReplacementSuccessNotice(domain, replacementDomain, { cfResult, efResult })
+    }
+  } catch (err) {
+    console.log(`❌ 替换危险域名失败: ${err.message}`)
   }
 }
 
