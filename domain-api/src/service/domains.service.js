@@ -51,12 +51,15 @@ class DomainsService {
     // (pro.quicksala2.com → quicksala2.com) OR 匹配，使搜索子域名时也能命中其主域记录；
     // 两级以上子域递归剥到主域为止。
     // 落地页地址同样参与模糊匹配（如搜 pro2.genvirop.com 命中 landing_page_url=https://pro2.genvirop.com）
+    // ⚠️ 剥到只剩裸 TLD(如 douyin.com → com)必须停：OR 上 %com% 会命中所有 .com 域名，
+    //    等于没有筛选条件（搜 douyin.com 返回全表就是这个原因）
     const keyword = normalizeDomainKeyword(existing_domain)
     const domainConditions = ['existing_domain LIKE ?', 'landing_page_url LIKE ?']
     const domainParams = [`%${keyword}%`, `%${keyword}%`]
     let stripped = keyword
     while (stripped.includes('.')) {
       stripped = stripped.slice(stripped.indexOf('.') + 1)
+      if (!stripped.includes('.')) break // 只剩 TLD(无点)就不再参与 OR 匹配
       domainConditions.push('existing_domain LIKE ?')
       domainParams.push(`%${stripped}%`)
     }
@@ -127,12 +130,14 @@ class DomainsService {
     // 与 normal_list 相同的搜索口径：搜索词归一化(去协议/路径/端口) + 子域剥离 + 落地页地址模糊匹配
     // （此前只匹配 existing_domain，重要域名页搜 landing_page_url 里的子域时搜不到，
     //   如 landing_page_url=https://pro.gardecho.com 搜 gardecho.com / pro.gardecho.com / 带协议全址）
+    // ⚠️ 同 normal_list：剥到只剩裸 TLD 就停，OR 上 %com% 等于没有筛选条件
     const keyword = normalizeDomainKeyword(existing_domain)
     const domainConditions = ['existing_domain LIKE ?', 'landing_page_url LIKE ?']
     const domainParams = [`%${keyword}%`, `%${keyword}%`]
     let stripped = keyword
     while (stripped.includes('.')) {
       stripped = stripped.slice(stripped.indexOf('.') + 1)
+      if (!stripped.includes('.')) break // 只剩 TLD(无点)就不再参与 OR 匹配
       domainConditions.push('existing_domain LIKE ?')
       domainParams.push(`%${stripped}%`)
     }
@@ -620,9 +625,16 @@ class DomainsService {
   async getReplacementDomain(dangerousDomain) {
     try {
 
+      // 危险域名查 purpose：existing_domain 精确 + landing_page_url 提取 hostname 等值（与 purpose 继承同口径）。
+      // 不能用 LIKE '%域名%'——会误匹配 xpro2.kervalix.com 这类前缀兄弟域名且无排序，
+      // 兄弟记录先返回会拿错 purpose、从错误的 s 编号备用池选备用。
       const [dangerousRecords] = await connection.execute(
-        `SELECT id, existing_domain, purpose FROM domains WHERE landing_page_url LIKE ?`,
-        [`%${dangerousDomain}%`]
+        `SELECT id, existing_domain, purpose FROM domains
+         WHERE existing_domain = ?
+            OR SUBSTRING_INDEX(SUBSTRING_INDEX(landing_page_url, '//', -1), '/', 1) = ?
+         ORDER BY existing_domain = ? DESC, id ASC
+         LIMIT 1`,
+        [dangerousDomain, dangerousDomain, dangerousDomain]
       )
 
       if (dangerousRecords.length === 0) {

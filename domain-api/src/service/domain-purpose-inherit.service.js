@@ -125,16 +125,20 @@ class DomainPurposeInheritService {
     try {
       console.log(`[purpose继承] 开始: 危险域名=${dangerousDomain} 替换域名=${replacementDomain}`)
       // 1. 查危险域名的 purpose 原文
-      //    existing_domain 精确匹配优先，landing_page_url 模糊匹配兜底
-      //    （与 getReplacementDomain 的查找口径保持一致）
+      //    与第 2 步同口径：existing_domain 精确匹配 + landing_page_url 提取 hostname 等值比较，
+      //    精确匹配优先排序。不能用 landing_page_url LIKE '%域名%' 兜底——会误匹配
+      //    xpro2.kervalix.com 这类前缀兄弟域名，且无 ORDER BY 时兄弟记录可能先返回，继承错 purpose。
       const [dangerousRecords] = await connection.execute(
         `SELECT id, existing_domain, purpose FROM domains
-         WHERE existing_domain = ? OR landing_page_url LIKE ? LIMIT 1`,
-        [dangerousDomain, `%${dangerousDomain}%`]
+         WHERE existing_domain = ?
+            OR SUBSTRING_INDEX(SUBSTRING_INDEX(landing_page_url, '//', -1), '/', 1) = ?
+         ORDER BY existing_domain = ? DESC, id ASC
+         LIMIT 1`,
+        [dangerousDomain, dangerousDomain, dangerousDomain]
       )
 
       if (dangerousRecords.length === 0) {
-        console.log(`[purpose继承] ❌ 危险域名 ${dangerousDomain} 在 domains 表中不存在（按 existing_domain 精确 + landing_page_url 模糊都没查到），跳过`)
+        console.log(`[purpose继承] ❌ 危险域名 ${dangerousDomain} 在 domains 表中不存在（按 existing_domain 精确 + landing_page_url 提取 hostname 都没查到），跳过`)
         return { success: false, message: `危险域名 ${dangerousDomain} 在 domains 表中不存在，跳过 purpose 继承` }
       }
 

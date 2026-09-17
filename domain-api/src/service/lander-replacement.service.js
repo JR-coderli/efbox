@@ -101,8 +101,10 @@ class LanderReplacementService {
    */
   async replaceDangerousDomainAsync(dangerousDomain, replacementDomain, workspaceType = 'all') {
 
-    const conditions = ['url LIKE ?']
-    const params = [`%${dangerousDomain}%`]
+    // 只选 URL hostname 恰好等于危险域名的 Lander（SUBSTRING_INDEX 两段截取，与 purpose 继承同口径）。
+    // 不能用 url LIKE '%域名%'——xpro2.kervalix.com 这类前缀兄弟域名的 URL 也含该子串，会被误选中错误替换。
+    const conditions = ["SUBSTRING_INDEX(SUBSTRING_INDEX(url, '//', -1), '/', 1) = ?"]
+    const params = [dangerousDomain]
 
 
     if (workspaceType === 'public') {
@@ -277,8 +279,9 @@ class LanderReplacementService {
    * 查询本地数据库中仍包含指定危险域名的 Lander
    */
   async _queryAffectedLanders(dangerousDomain, workspaceType) {
-    const conditions = ['url LIKE ?']
-    const params = [`%${dangerousDomain}%`]
+    // hostname 精确匹配（与 replaceDangerousDomainAsync 同口径），排除兄弟域名/路径包含的误命中
+    const conditions = ["SUBSTRING_INDEX(SUBSTRING_INDEX(url, '//', -1), '/', 1) = ?"]
+    const params = [dangerousDomain]
 
     if (workspaceType === 'public') {
       conditions.push('workspace_id IS NULL')
@@ -702,8 +705,9 @@ class LanderReplacementService {
       }
     }
 
-    const conditions = ['url LIKE ?']
-    const params = [`%${dangerousDomain}%`]
+    // hostname 精确匹配（与 replaceDangerousDomainAsync 同口径），预览结果与实际执行范围一致
+    const conditions = ["SUBSTRING_INDEX(SUBSTRING_INDEX(url, '//', -1), '/', 1) = ?"]
+    const params = [dangerousDomain]
 
     if (workspaceType === 'public') {
       conditions.push('workspace_id IS NULL')

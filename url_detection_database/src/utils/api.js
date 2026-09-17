@@ -111,7 +111,11 @@ async function updateDomainStatus(id, isAccessible, isSafe, url) {
     if ((isSafe === 0 || isAccessible === 0) && url) {
       try {
         const domain = extractDomain(url)
-        if (domain) {
+        // 已替换成功过的域名不再重复走替换流程：替换成功后域名通常仍异常（Safe Browsing 标记未消），
+        // 第 2、3 轮会再次触发本流程，但 lander 里已无该域名，两侧只会空跑"未使用"，
+        // 且裁决幂等返回 success 后会再发一条"替换成功"飞书通知（每轮一条，直到 3 轮降级）。
+        // 替换失败过的域名不在 notifiedReplaced 集合中，下一轮仍会照常重试。
+        if (domain && !notifiedReplaced.has(domain)) {
           console.log(`[替换流程] 检测到异常域名 ${domain} (is_accessible=${isAccessible} is_safe=${isSafe})，开始查询备用域名`)
           // 一次检测事件只查询一次备用域名，两边共用同一个结果，
           // 保证 Clickflare / ef-tracker 替换到同一个备用域名上（避免两侧各自查询时备用池中途变化导致分歧）

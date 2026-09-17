@@ -47,11 +47,29 @@ class EfLanderReplacementService {
       return { success: false, message: `ef-tracker 预演失败: ${error.message}` }
     }
 
-    const matched = preview?.data?.list || []
-    const count = preview?.data?.count ?? matched.length
+    // 1.5 过滤：对方接口是 REPLACE(url, old, new) 子串替换（WHERE url LIKE '%old%'），
+    //     xpro2.kervalix.com 这类前缀兄弟域名的 URL 也包含危险域名子串，全量替换会把它们
+    //     改成 "https://x<新域名>" 的损坏 URL。只保留 URL hostname 恰好等于危险域名的行，
+    //     正式执行时用 ids 限定只改这些行（对方接口支持 ids 白名单，见 QUERY_API.md）。
+    const allMatched = preview?.data?.list || []
+    if ((preview?.data?.count ?? allMatched.length) > allMatched.length) {
+      console.log(`[ef-替换] ⚠️ 预演返回行数(${allMatched.length})少于命中总数(${preview?.data?.count})，列表可能被截断，注意核查替换记录`)
+    }
+    const matched = allMatched.filter(item => {
+      try {
+        return new URL(item.before).hostname === dangerousDomain
+      } catch {
+        return false
+      }
+    })
+    const count = matched.length
+    const skipped = allMatched.length - count
+    if (skipped > 0) {
+      console.log(`[ef-替换] ⚠️ 预演命中 ${allMatched.length} 行，其中 ${skipped} 行 hostname ≠ ${dangerousDomain}（兄弟域名/路径包含），已排除不替换`)
+    }
 
     if (count === 0) {
-      console.log(`[ef-替换] ef-tracker 未使用域名 ${dangerousDomain}，跳过替换`)
+      console.log(`[ef-替换] ef-tracker 未使用域名 ${dangerousDomain}（hostname 精确匹配 0 行），跳过替换`)
       return { success: false, message: `ef-tracker 未使用域名 ${dangerousDomain}，跳过替换` }
     }
 
@@ -71,7 +89,8 @@ class EfLanderReplacementService {
     try {
       const run = await axios.post(
         `${efTrackerConfig.baseURL}${efTrackerConfig.endpoints.replaceUrl}`,
-        { old: dangerousDomain, new: replacementDomain },
+        // ids 限定只替换 hostname 精确匹配的行（见 1.5 步过滤说明）
+        { old: dangerousDomain, new: replacementDomain, ids: matched.map(item => item.id) },
         { timeout: 60000 }
       )
       const affected = run?.data?.affected ?? count
