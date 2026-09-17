@@ -150,13 +150,12 @@
                     @clear="handleSearch"
                   />
                 </template>
-                <!-- http状态：按区间着色（2xx 绿 / 3xx 蓝 / 4xx 橙 / 5xx 红 / 空 灰） -->
-                <template v-if="col.key === 'http_status'" #default="{ row }">
-                  <span class="status-chip" :class="statusChipClass(row.http_status)">{{ row.http_status ?? '-' }}</span>
-                </template>
-                <!-- error_code：等宽字体圆角徽章 -->
-                <template v-if="col.key === 'error_code'" #default="{ row }">
-                  <span class="code-chip">{{ row.error_code || '-' }}</span>
+                <!-- 单一 default 插槽内按列分支渲染（同一列下多个条件 #default 会触发 Duplicate slot names）：
+                     http_status 状态胶囊 / error_code 徽章 / 其余(mid/tid) 原样输出 -->
+                <template #default="{ row }">
+                  <span v-if="col.key === 'http_status'" class="status-chip" :class="statusChipClass(row.http_status)">{{ row.http_status ?? '-' }}</span>
+                  <span v-else-if="col.key === 'error_code'" class="code-chip">{{ row.error_code || '-' }}</span>
+                  <template v-else>{{ row[col.prop] }}</template>
                 </template>
               </el-table-column>
               <!-- method：请求方法徽章（GET 蓝 / POST 绿 / 其他灰） -->
