@@ -1,5 +1,13 @@
 const connection = require('../app/database')
 
+// 替换记录的终态集合：只有这三种状态算"替换已结束"，
+// 其余（queued / initial_sync / round1_replacing / mid_sync / round2_replacing / final_sync）
+// 一律视为进行中——完整过程状态名单见 lander-replacement.service.js 的 resetStuckReplacements。
+// ⚠️ 必须用"终态白名单"而不是枚举过程状态：以后新增过程状态不改这里也自动算"在跑"；
+//    此前只认 queued/pending，任务一进入 initial_sync / round1_replacing 等干活状态就被误判
+//    "没有在跑的任务"，导致替换进行中就继承 purpose 并提前发"替换完成"飞书通知。
+const TERMINAL_REPLACEMENT_STATUSES = ['success', 'failed', 'partial']
+
 /**
  * 域名 purpose 继承服务（独立模块，与检测预警 + 自动替换主流程解耦）。
  *
@@ -11,7 +19,7 @@ const connection = require('../app/database')
  * 裁决规则（resolveAfterSideFinished，两侧终态判定）：
  * - 按危险域名查 cf_lander_url_replacements 里 Clickflare 与 ef-tracker 两侧的记录；
  * - 某侧**没有记录** = 该系统未使用此域名（两侧替换入口都有"未使用不建记录"的预检）→ 视为通过；
- * - 某侧有记录但还有 queued/pending 状态（任务还在跑）→ **等**，本次不改 purpose；
+ * - 某侧有记录但还没到终态（排队/同步/替换中等进行中状态）→ **等**，本次不改 purpose；
  * - 某侧最新记录 status=success → 通过；
  * - 某侧存在 failed/partial 记录 → **永久放弃**本次继承（purpose 保持原状，
  *   避免备用域名在一侧仍挂着危险域名时被误标为 s1-LP）；
@@ -54,11 +62,12 @@ class DomainPurposeInheritService {
         }
       }
 
-      // 任一侧还有在跑的任务（queued/pending）→ 等待，本次不动
+      // 任一侧还有在跑的任务（状态未到终态）→ 等待，本次不动
       for (const side of ['clickflare', 'eftracker']) {
-        const running = bySide[side].filter(r => r.status === 'queued' || r.status === 'pending')
+        const running = bySide[side].filter(r => !TERMINAL_REPLACEMENT_STATUSES.includes(r.status))
         if (running.length > 0) {
-          console.log(`[purpose继承] ⏳ ${dangerousDomain} 的 ${side} 侧还有 ${running.length} 条任务在跑，等待两侧全部完成后再裁决`)
+          const current = running[running.length - 1].status
+          console.log(`[purpose继承] ⏳ ${dangerousDomain} 的 ${side} 侧还有 ${running.length} 条任务在跑（当前状态=${current}），等待两侧全部完成后再裁决`)
           return { success: false, message: `${side} 侧替换仍在进行中，等待中` }
         }
       }
