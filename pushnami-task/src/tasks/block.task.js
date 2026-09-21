@@ -167,7 +167,7 @@ class BlockTask {
     if (TEST_MODE) {
       try {
         const checked = await this.page.evaluate((rowIndex) => {
-          const trs = [...document.querySelectorAll('tbody tr')]
+          const trs = [...document.querySelectorAll('tbody tr, tr.cdk-row')]
           if (rowIndex >= trs.length) return { success: false, message: '行不存在' }
 
           const tr = trs[rowIndex]
@@ -212,7 +212,7 @@ class BlockTask {
 
     try {
       const blocked = await this.page.evaluate((rowIndex) => {
-        const trs = [...document.querySelectorAll('tbody tr')]
+        const trs = [...document.querySelectorAll('tbody tr, tr.cdk-row')]
         if (rowIndex >= trs.length) return { success: false, message: '行不存在' }
 
         const tr = trs[rowIndex]

@@ -409,6 +409,13 @@ class BidAdjustTask {
    */
   async _adjustBid(source, rule) {
 
+    // 脏数据防护：currentBid 无效（0/空）时不动页面——
+    // TEST_MODE 会把 0 当"原值"保存回去，真实模式会把 bid 改成错误值
+    if (!source.currentBid || source.currentBid <= 0) {
+      log.warning(`  [防护] Source ${source.id} 的当前 Bid 无效 (${source.currentBid})，疑似脏数据，跳过本次调整`)
+      return false
+    }
+
     if (DRY_RUN) {
       logger.dryRunAction('调整 Bid', {
         sourceId: source.id,
@@ -430,7 +437,7 @@ class BidAdjustTask {
 
 
         const buttonClicked = await this.page.evaluate((rowIndex) => {
-          const trs = [...document.querySelectorAll('tbody tr')]
+          const trs = [...document.querySelectorAll('tbody tr, tr.cdk-row')]
           if (rowIndex >= trs.length) return { success: false }
 
           const tr = trs[rowIndex]
@@ -514,7 +521,7 @@ class BidAdjustTask {
     try {
 
       const buttonClicked = await this.page.evaluate((rowIndex) => {
-        const trs = [...document.querySelectorAll('tbody tr')]
+        const trs = [...document.querySelectorAll('tbody tr, tr.cdk-row')]
         if (rowIndex >= trs.length) return { success: false }
 
         const tr = trs[rowIndex]

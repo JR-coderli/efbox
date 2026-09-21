@@ -9,33 +9,97 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 class PageParser {
   /**
+   * 等待表格数据真正加载完成
+   * 表头/排序按钮先渲染、数据行后到（Angular 异步拉取），只看按钮会误判已加载
+   * @param {Page} page - Puppeteer Page 对象
+   * @param {number} timeout - 超时时间（毫秒）
+   * @param {string} keyword - 空状态关键词（campaign / source）
+   * @returns {Promise<{state: 'rows'|'empty'|'timeout', rowCount: number, message?: string}>}
+   *   rows    - 有数据行
+   *   empty   - 页面明确显示空状态（如 "No campaigns found"），真的没有数据
+   *   timeout - 超时仍未出现数据行或空状态
+   */
+  static async waitForTableDataLoaded(page, timeout = 30000, keyword = 'campaign') {
+    const startTime = Date.now()
+
+    while (Date.now() - startTime < timeout) {
+      const result = await page.evaluate((kw) => {
+        const rowCount = document.querySelectorAll('tbody tr, tr.cdk-row').length
+
+        if (rowCount > 0) {
+          return { state: 'rows', rowCount }
+        }
+
+        // 明确的空状态提示（如 "No campaigns found" / "No sources found"）
+        const notFoundElement = document.querySelector('pn-not-found')
+        if (notFoundElement && notFoundElement.offsetParent !== null) {
+          const message = notFoundElement.querySelector('.message')?.textContent
+            || notFoundElement.textContent || ''
+          const lower = message.toLowerCase()
+          if (lower.includes('no') && lower.includes(kw)) {
+            return { state: 'empty', rowCount: 0, message: message.trim() }
+          }
+        }
+
+        return { state: 'waiting', rowCount: 0 }
+      }, keyword)
+
+      if (result.state === 'rows' || result.state === 'empty') {
+        return result
+      }
+
+      await sleep(500)
+    }
+
+    return { state: 'timeout', rowCount: 0 }
+  }
+
+  /**
    * 获取当前 Campaign 列表页的数据
    * @param {Page} page - Puppeteer Page 对象
    * @returns {Promise<Array>} Campaign 列表
    */
   static async getCampaignList(page) {
     const campaigns = await page.evaluate(() => {
-      const trs = [...document.querySelectorAll('tbody tr')]
+      const trs = [...document.querySelectorAll('tbody tr, tr.cdk-row')]
       return trs.map((tr, index) => {
         const tds = tr.querySelectorAll('td')
 
 
-        const getName = () => tds[1]?.textContent?.trim() || ''
-
-
-        const getColumnIndex = (headerClass) => {
+        // 列定位：优先按表头类名（旧版 DataTable），类名不在时按表头文字兜底（新版 TreeGrid）
+        const getColumnIndex = (headerClass, headerKeywords) => {
           const ths = document.querySelectorAll('th')
-          for (let i = 0; i < ths.length; i++) {
-            if (ths[i].classList.contains(headerClass)) {
-              return i
+          if (headerClass) {
+            for (let i = 0; i < ths.length; i++) {
+              if (ths[i].classList.contains(headerClass)) {
+                return i
+              }
+            }
+          }
+          const keywords = Array.isArray(headerKeywords) ? headerKeywords : (headerKeywords ? [headerKeywords] : [])
+          for (const keyword of keywords) {
+            for (let i = 0; i < ths.length; i++) {
+              const text = ths[i].textContent.trim().toLowerCase()
+              if (text && text.includes(keyword)) {
+                return i
+              }
             }
           }
           return -1
         }
 
 
+        const getName = () => {
+          const nameIndex = getColumnIndex(null, 'campaign')
+          if (nameIndex >= 0 && tds[nameIndex]) {
+            return tds[nameIndex].textContent?.trim() || ''
+          }
+          return tds[1]?.textContent?.trim() || ''
+        }
+
+
         const getSpent = () => {
-          const spentIndex = getColumnIndex('nb-column-spent')
+          const spentIndex = getColumnIndex('nb-column-spent', ['spent', 'spend', 'cost'])
           if (spentIndex >= 0 && tds[spentIndex]) {
             const text = tds[spentIndex].textContent.trim()
             return parseFloat(text.replace(/[$,]/g, '')) || 0
@@ -45,7 +109,7 @@ class PageParser {
 
 
         const getCpa = () => {
-          const cpaIndex = getColumnIndex('nb-column-cpa')
+          const cpaIndex = getColumnIndex('nb-column-cpa', 'cpa')
           if (cpaIndex >= 0 && tds[cpaIndex]) {
             const text = tds[cpaIndex].textContent.trim()
             return parseFloat(text.replace(/[$,]/g, '')) || 0
@@ -55,7 +119,7 @@ class PageParser {
 
 
         const getConversions = () => {
-          const convIndex = getColumnIndex('nb-column-conversions')
+          const convIndex = getColumnIndex('nb-column-conversions', 'conversion')
           if (convIndex >= 0 && tds[convIndex]) {
             const text = tds[convIndex].textContent.trim()
             return parseInt(text) || 0
@@ -90,7 +154,7 @@ class PageParser {
    */
   static async _getSourceListInner(page) {
     const sources = await page.evaluate(() => {
-      const trs = [...document.querySelectorAll('tbody tr')]
+      const trs = [...document.querySelectorAll('tbody tr, tr.cdk-row')]
       return trs.map((tr, index) => {
         const tds = tr.querySelectorAll('td')
 
@@ -235,6 +299,16 @@ class PageParser {
         }
       })
     })
+
+    // 脏数据防护：整页没有一个真实 S 编号（全是行号兜底）且 Bid 全为 0，
+    // 说明当前页面大概率不是正常的 Source 列表（如点击进入失败后停留的残留页面）。
+    // 抛专用错误交给上层跳过该 Campaign，避免基于残留页面做规则判断和误操作
+    const isDirty = sources.length > 0 &&
+      sources.every(s => /^source_\d+$/.test(s.id)) &&
+      sources.every(s => !s.currentBid || s.currentBid === 0)
+    if (isDirty) {
+      throw new Error('SOURCE_PAGE_DIRTY')
+    }
 
     return sources
   }
@@ -388,7 +462,7 @@ class PageParser {
 
     const getDataSnapshot = async () => {
       return await page.evaluate(() => {
-        const rows = [...document.querySelectorAll('tbody tr')]
+        const rows = [...document.querySelectorAll('tbody tr, tr.cdk-row')]
         return rows.map(row => {
           const cells = row.querySelectorAll('td')
 
@@ -763,9 +837,13 @@ class PageParser {
    * @param {Page} page
    */
   static async refreshPage(page) {
-    await page.evaluate(() => {
-      window.location.reload()
-    })
+    // 用 page.reload 等待新文档就绪。不要在 evaluate 里执行 location.reload()——
+    // 导航会销毁执行上下文，紧随其后的筛选操作会报 "Execution context was destroyed"
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 })
+    } catch (e) {
+      // reload 超时也继续，由后续的数据等待逻辑兜底
+    }
     await sleep(3000)
   }
 }

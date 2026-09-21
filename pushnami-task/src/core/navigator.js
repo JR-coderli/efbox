@@ -50,9 +50,24 @@ class Navigator {
       logger.warning(`状态验证未完全通过，但继续执行: Active=${confirmedState.isActive}, Today=${confirmedState.isToday}`)
     }
 
+
+    // 等待第一页数据真正加载（表头先渲染、数据行后到，避免网慢时误判为 0 个 Campaign）
+    const dataReady = await this._waitForCampaignDataReady()
+    if (!dataReady.ok) {
+      await this._saveFailureScreenshot('campaign-list-timeout')
+      throw new Error(dataReady.reason)
+    }
+
     let currentPageNum = 1
+    const maxPages = 100 // 硬上限，防止分页按钮状态异常导致无限翻页
 
     while (true) {
+      if (currentPageNum > maxPages) {
+        logger.warning(`已翻至第 ${currentPageNum} 页，超过安全上限 ${maxPages}，强制结束遍历（分页按钮状态可能异常）`)
+        stats.errors++
+        break
+      }
+
       logger.info(`\n--- 第 ${currentPageNum} 页 ---`)
 
 
@@ -116,7 +131,15 @@ class Navigator {
       if (hasNext) {
         logger.info(`\n翻页到第 ${currentPageNum + 1} 页...`)
         await PageParser.clickNextPage(this.page)
-        await this.sleep(3000)
+
+
+        // 等待新一页数据加载完成，避免翻页后数据未到误读为 0 行
+        const nextPage = await PageParser.waitForTableDataLoaded(this.page, 30000, 'campaign')
+        if (nextPage.state === 'timeout') {
+          await this._saveFailureScreenshot(`campaign-page${currentPageNum + 1}-timeout`)
+          throw new Error(`第 ${currentPageNum + 1} 页 Campaign 数据加载超时，中止任务以避免漏跑后续 Campaign`)
+        }
+        await this.sleep(500)
         currentPageNum++
       } else {
         logger.info('\n所有 Campaign 遍历完成')
@@ -163,12 +186,38 @@ class Navigator {
 
     let currentPageNum = 1
     let shouldStopAll = false  // 全局停止标志
+    const maxPages = 100 // 硬上限，防止分页按钮状态异常导致无限翻页
 
     while (true) {
+      if (currentPageNum > maxPages) {
+        logger.warning(`  已翻至第 ${currentPageNum} 页，超过安全上限 ${maxPages}，强制结束 Source 遍历（分页按钮状态可能异常）`)
+        stats.errors++
+        break
+      }
+
       logger.info(`  --- Source 第 ${currentPageNum} 页 ---`)
 
 
-      const sources = await PageParser.getSourceList(this.page)
+      // 等待当前页数据加载完成（首次进入或翻页后数据未到时，避免误读为 0 行）
+      const sourcePage = await PageParser.waitForTableDataLoaded(this.page, 15000, 'source')
+      if (sourcePage.state === 'timeout') {
+        logger.warning(`  第 ${currentPageNum} 页 Source 数据加载超时，跳过该 Campaign 剩余 Source`)
+        stats.errors++
+        break
+      }
+
+
+      let sources
+      try {
+        sources = await PageParser.getSourceList(this.page)
+      } catch (e) {
+        if (e.message === 'SOURCE_PAGE_DIRTY') {
+          logger.warning(`  第 ${currentPageNum} 页 Source 数据异常（无真实 Source ID 且 Bid 全为 0），疑似页面未正确加载或停留在残留页面，跳过该 Campaign 剩余 Source`)
+          stats.errors++
+          break
+        }
+        throw e
+      }
       stats.totalSources += sources.length
       stats.totalPages = currentPageNum
 
@@ -330,6 +379,65 @@ class Navigator {
   }
 
   /**
+   * 等待 Campaign 列表第一页数据就绪
+   * 就绪 = 出现数据行，或页面明确显示空状态（真的没有 Campaign）
+   * 超时则刷新页面并重新应用筛选后重试，最多 3 轮
+   * 全部超时返回 ok: false，由调用方中止任务（而不是把"未加载"当成"0 个 Campaign"跑完）
+   * @returns {Promise<{ok: boolean, reason?: string}>}
+   */
+  async _waitForCampaignDataReady() {
+    const maxAttempts = 3
+    const waitTimeout = 30000
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const result = await PageParser.waitForTableDataLoaded(this.page, waitTimeout, 'campaign')
+
+      if (result.state === 'rows') {
+        if (attempt > 1) {
+          logger.success(`Campaign 数据已加载（第 ${attempt} 次尝试后）: ${result.rowCount} 行`)
+        }
+        return { ok: true }
+      }
+
+      if (result.state === 'empty') {
+        logger.warning(`页面显示空状态: ${result.message || '未发现任何 Campaign'}，按 0 个 Campaign 继续执行`)
+        return { ok: true }
+      }
+
+
+      logger.warning(`等待 Campaign 数据加载超时 (${waitTimeout}ms)，第 ${attempt}/${maxAttempts} 次尝试`)
+
+      if (attempt < maxAttempts) {
+        logger.info('刷新页面并重新应用筛选条件后重试...')
+        await PageParser.refreshPage(this.page)
+        await this._applyCampaignFilters()
+      }
+    }
+
+    return {
+      ok: false,
+      reason: `Campaign 列表数据加载超时（已刷新重试 ${maxAttempts} 次），可能网络过慢或页面结构变化，中止任务以避免误判为 0 个 Campaign`
+    }
+  }
+
+  /**
+   * 保存异常现场截图（用于排查页面未加载等问题）
+   */
+  async _saveFailureScreenshot(name) {
+    try {
+      const fs = require('fs')
+      const path = require('path')
+      const dir = path.join(__dirname, '..', '..', 'logs', 'screenshots')
+      fs.mkdirSync(dir, { recursive: true })
+      const file = path.join(dir, `${name}-${Date.now()}.png`)
+      await this.page.screenshot({ path: file, fullPage: false })
+      logger.warning(`已保存现场截图: ${file}`)
+    } catch (e) {
+      logger.warning(`保存截图失败: ${e.message}`)
+    }
+  }
+
+  /**
    * 进入 Campaign 详情页
    * 等待页面加载完成后再返回
    * 返回值：{ hasNoSources: boolean } - 如果 hasNoSources 为 true 表示该 Campaign 没有 Source
@@ -338,15 +446,25 @@ class Navigator {
     await this.sleep(1000)
 
     await this.page.evaluate((idx) => {
-      const trs = [...document.querySelectorAll('tbody tr')]
+      const trs = [...document.querySelectorAll('tbody tr, tr.cdk-row')]
       if (idx >= trs.length) return false
 
       const tr = trs[idx]
       const tds = tr.querySelectorAll('td')
 
 
-      if (tds.length > 1) {
-        tds[1].click()
+      // 点击 Campaign 名称所在列（按表头定位，防列顺序变化），兜底第 2 列
+      let clickIndex = 1
+      const ths = document.querySelectorAll('th')
+      for (let i = 0; i < ths.length; i++) {
+        if (ths[i].textContent.trim().toLowerCase().includes('campaign')) {
+          clickIndex = i
+          break
+        }
+      }
+
+      if (tds.length > clickIndex) {
+        tds[clickIndex].click()
         return true
       }
       return false
