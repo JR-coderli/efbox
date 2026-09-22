@@ -16,7 +16,11 @@ async function getUrlsFromApi() {
       .filter(item => item.landing_page_url)  // 过滤掉没有 URL 的
       .map(item => ({
         id: item.id,
-        url: item.landing_page_url
+        url: item.landing_page_url,
+        // 数据库当前状态: 供检测循环判断"本轮正常但库里仍是异常"时立即恢复(不依赖进程内存,
+        // 进程重启后的第一轮就能把历史遗留的 不可访问/危险 状态改回来)
+        is_accessible: item.is_accessible,
+        is_safe: item.is_safe
       }))
 
 
@@ -48,15 +52,21 @@ async function reportLastCheck() {
 // 两侧替换终态裁决（兜底）：Clickflare 侧是异步队列，ef 侧先完成触发的裁决会因对侧"还在跑"
 // 而等待且无人再触发。这里轮询裁决接口直到有终态结论（继承成功 / 放弃 / 超时）。
 // 幂等：两侧都已成功时立即继承；任一侧失败立即放弃。失败只打日志。
+// 只裁决本轮(replacementDomain)记录；unusedSides 传"本轮已实时核实未使用"的一侧，
+// 该侧直接通过——历史轮次的 failed/partial 记录不再永久封杀该域名的 purpose 继承。
 // 返回: 'success'=两侧替换全部成功(含幂等"已是目标值") / 其他=未成功或超时
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-async function resolvePurposeInherit(dangerousDomain, { intervalMs = 10000, timeoutMs = 5 * 60 * 1000 } = {}) {
+async function resolvePurposeInherit(dangerousDomain, { intervalMs = 10000, timeoutMs = 5 * 60 * 1000, replacementDomain = null, unusedSides = [] } = {}) {
   const baseUrl = process.env.API_BASE_URL || 'http://localhost:8001'
   const startAt = Date.now()
   let lastMessage = ''
   while (Date.now() - startAt < timeoutMs) {
     try {
-      const res = await axios.post(`${baseUrl}/domain-purpose-inherit/resolve`, { dangerous_domain: dangerousDomain }, { timeout: 15000 })
+      const res = await axios.post(`${baseUrl}/domain-purpose-inherit/resolve`, {
+        dangerous_domain: dangerousDomain,
+        replacement_domain: replacementDomain || undefined,
+        unused_sides: unusedSides
+      }, { timeout: 15000 })
       const data = res?.data?.data || {}
       lastMessage = res?.data?.message || ''
       // success=true: 继承完成（含幂等"已是目标值"）
@@ -146,10 +156,16 @@ async function runAutoReplacement(domain, isAccessible, isSafe) {
     // 两边独立替换、互不影响：Clickflare 没在用不影响 ef-tracker 侧替换，反之亦然
     const cfResult = await replaceDangerousDomain(domain, replacementDomain)      // Clickflare 侧
     const efResult = await replaceEfTrackerDomain(domain, replacementDomain)      // ef-tracker 侧
+    // 本轮已实时核实"未使用该域名"的一侧（查询成功且确认无记录），裁决时直接通过，
+    // 避免 cf_lander_url_replacements 里历史轮次的 failed/partial 记录误伤本轮判决
+    const unusedSides = [
+      ...(cfResult.status === 'unused' ? ['clickflare'] : []),
+      ...(efResult.status === 'unused' ? ['eftracker'] : [])
+    ]
     console.log(`[替换流程] ${domain} -> ${replacementDomain} 两侧替换请求已发出，开始兜底裁决 purpose 继承(轮询至两侧终态)`)
     // 兜底：轮询直到两侧都到终态，决定是否把备用域名 purpose 改为危险域名的(s1-备用 -> s1-LP)。
     // 任一侧失败则保持原状；两侧成功才继承。不阻塞太久(默认5分钟超时)，超时留给下次检测再裁决。
-    const verdict = await resolvePurposeInherit(domain)
+    const verdict = await resolvePurposeInherit(domain, { replacementDomain, unusedSides })
     // 两侧替换全部成功 → 飞书普通消息通知用户(不打电话不发邮件)，并停止该域名后续预警
     if (verdict === 'success') {
       notifiedReplaced.add(domain)
@@ -161,6 +177,9 @@ async function runAutoReplacement(domain, isAccessible, isSafe) {
 }
 
 
+// 三态返回：'exists' = 在用 / 'not_used' = 确认未使用 / 'error' = 查询失败(网络等，使用情况未知)
+// ⚠️ 查询失败绝不能当"未使用"返回——否则 Clickflare 侧会静默跳过替换，裁决也会放行，
+// 备用域名可能在一侧还挂着危险域名时就被标成 s1-LP
 async function checkLanderExists(domain) {
   try {
     const landerApiUrl = process.env.API_BASE_URL || 'https://efbox.work/api'
@@ -179,13 +198,12 @@ async function checkLanderExists(domain) {
 
     const exists = Array.isArray(res.data) && res.data.length > 0
     if (!exists) {
-      console.log(`⚠️  Lander 列表中未找到域名 ${domain} 的记录, 跳过替换操作`)
+      console.log(`⚠️  Lander 列表中未找到域名 ${domain} 的记录`)
     }
-    return exists
+    return exists ? 'exists' : 'not_used'
   } catch (err) {
-    console.log(`❌ 查询 Lander 列表失败: ${err.message}`)
-
-    return false
+    console.log(`❌ 查询 Lander 列表失败(使用情况未知, 本轮不当作"未使用"): ${err.message}`)
+    return 'error'
   }
 }
 
@@ -213,10 +231,16 @@ async function getReplacementDomain(dangerousDomain) {
 async function replaceDangerousDomain(domain, replacementDomain) {
   try {
 
-    const landerExists = await checkLanderExists(domain)
-    if (!landerExists) {
+    const landerState = await checkLanderExists(domain)
+    if (landerState === 'not_used') {
       console.log(`域名 ${domain} 在 Lander 列表中不存在, 跳过替换操作`)
       return { status: 'unused', affectedCount: 0 }
+    }
+    if (landerState === 'error') {
+      // 查询失败 = 使用情况未知：不能当 unused（裁决会放行），也不能盲发替换请求。
+      // 按 failed 返回：不进 unusedSides → 裁决侧等不到本轮记录会一直"等待"→超时，下一轮重试
+      console.log(`❌ 无法核实域名 ${domain} 的 Lander 使用情况, 本轮跳过 Clickflare 侧替换, 等下一轮重试`)
+      return { status: 'failed', affectedCount: 0 }
     }
 
 

@@ -54,7 +54,7 @@ async function checkUrls(urlObjs, isComplete = false) {
 
   const safeData = await checkSafeBrowsing(urls) // 检测安全性
 
-  const alerts = await Promise.all(urlObjs.map(async ({ id, url }) => {
+  const alerts = await Promise.all(urlObjs.map(async ({ id, url, is_accessible, is_safe }) => {
     const isDanger = safeData.matches?.some(m => m.threat.url === url) || false;
     const accessible = await checkAccessible(url, 2, 10000)
 
@@ -85,12 +85,17 @@ async function checkUrls(urlObjs, isComplete = false) {
           }
           // 降级失败则保留计数, 下一轮继续重试 (streak 仍 >= 3)
         }
-      } else if (abnormalUrls.has(url)) {
-
-        console.log('恢复')
-        await updateDomainStatus(id, 1, 1, url);
-        abnormalUrls.delete(url);
-        abnormalStreak.delete(id)  // 恢复正常, 清空连续异常计数
+      } else {
+        // 恢复上报不依赖进程内存: 本轮检测正常, 且数据库状态仍是异常(可能是进程刚启动的第一轮、
+        // 或上个进程遗留的误报状态) → 立即改回 可访问+安全。
+        // 此前只认 abnormalUrls(内存集合), 脚本重启后第一轮永远无法恢复历史异常状态。
+        const dbAbnormal = is_accessible === 0 || is_safe === 0
+        if (abnormalUrls.has(url) || dbAbnormal) {
+          console.log('恢复')
+          await updateDomainStatus(id, 1, 1, url);
+          abnormalUrls.delete(url);
+          abnormalStreak.delete(id)  // 恢复正常, 清空连续异常计数
+        }
       }
     } catch (err) {
       writeLog(`❌ 调用状态更新接口失败 ${url}: ${err.message}`);

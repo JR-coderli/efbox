@@ -18,11 +18,15 @@ const TERMINAL_REPLACEMENT_STATUSES = ['success', 'failed', 'partial']
  *
  * 裁决规则（resolveAfterSideFinished，两侧终态判定）：
  * - 按危险域名查 cf_lander_url_replacements 里 Clickflare 与 ef-tracker 两侧的记录；
- * - 某侧**没有记录** = 该系统未使用此域名（两侧替换入口都有"未使用不建记录"的预检）→ 视为通过；
+ * - **只裁决"本轮"记录**（默认以最新一条记录的 replacement_domain 界定轮次）——
+ *   历史轮次的 failed/partial 记录不再永久封杀后续轮次的继承（此前按 dangerous_domain
+ *   全量查，一条陈年 partial 会让该域名今后每次替换都被判失败）；
+ * - 某侧**本轮没有记录** = 该系统本轮未使用/未开始 → 等待（脚本兜底轮询会再裁决）；
  * - 某侧有记录但还没到终态（排队/同步/替换中等进行中状态）→ **等**，本次不改 purpose；
- * - 某侧最新记录 status=success → 通过；
- * - 某侧存在 failed/partial 记录 → **永久放弃**本次继承（purpose 保持原状，
- *   避免备用域名在一侧仍挂着危险域名时被误标为 s1-LP）；
+ * - 某侧**最新一条**记录 status=success → 通过（同侧重试成功可覆盖旧失败）；
+ * - 某侧**最新一条**记录 failed/partial → 放弃**本次**继承（purpose 保持原状，
+ *   避免备用域名在一侧仍挂着危险域名时被误标为 s1-LP；下一轮重试不受影响）；
+ * - 脚本兜底调用可传 unusedSides：本轮已实时核实"未使用该域名"的一侧直接通过；
  * - 两侧都通过 → 执行继承（幂等）。
  *
  * 设计原则：
@@ -35,9 +39,13 @@ class DomainPurposeInheritService {
    * 两侧终态裁决入口：任一侧替换到达终态（成功/失败/确认未使用）后调用。
    * 两侧全部成功（或确认未使用）才执行继承；有失败则放弃；还有在跑的则等待。
    * @param {string} dangerousDomain 危险域名（hostname）
+   * @param {object} [opts]
+   * @param {string} [opts.replacementDomain] 本轮替换域名（不传则以最新一条记录的界定本轮）
+   * @param {string[]} [opts.unusedSides] 已实时核实"未使用该域名"的一侧名单（'clickflare'/'eftracker'），
+   *   该侧直接通过、忽略其全部记录（历史 failed/partial 与本轮无关）
    * @returns {Promise<{success:boolean, message:string}>}
    */
-  async resolveAfterSideFinished(dangerousDomain) {
+  async resolveAfterSideFinished(dangerousDomain, opts = {}) {
     try {
       const [records] = await connection.execute(
         `SELECT id, replacement_domain, target_system, status
@@ -47,40 +55,53 @@ class DomainPurposeInheritService {
         [dangerousDomain]
       )
 
-      // 按侧分组：clickflare / eftracker
-      const bySide = { clickflare: [], eftracker: [] }
-      for (const r of records) {
-        if (bySide[r.target_system]) bySide[r.target_system].push(r)
-      }
-
-      // 任一侧存在失败记录 → 永久放弃继承（只打日志，不改 purpose）
-      for (const side of ['clickflare', 'eftracker']) {
-        const failed = bySide[side].filter(r => r.status === 'failed' || r.status === 'partial')
-        if (failed.length > 0) {
-          console.log(`[purpose继承] ⛔ ${dangerousDomain} 的 ${side} 侧存在失败记录(共${failed.length}条, 最新状态=${failed[failed.length - 1].status})，放弃 purpose 继承，保持原状`)
-          return { success: false, message: `${side} 侧替换失败，保持备用域名 purpose 原状` }
-        }
-      }
-
-      // 任一侧还有在跑的任务（状态未到终态）→ 等待，本次不动
-      for (const side of ['clickflare', 'eftracker']) {
-        const running = bySide[side].filter(r => !TERMINAL_REPLACEMENT_STATUSES.includes(r.status))
-        if (running.length > 0) {
-          const current = running[running.length - 1].status
-          console.log(`[purpose继承] ⏳ ${dangerousDomain} 的 ${side} 侧还有 ${running.length} 条任务在跑（当前状态=${current}），等待两侧全部完成后再裁决`)
-          return { success: false, message: `${side} 侧替换仍在进行中，等待中` }
-        }
-      }
-
-      // 到这里：两侧要么没记录（未使用该域名），要么全是 success
-      const replacementDomain = records[0]?.replacement_domain
+      // 本轮替换域名：优先用调用方指定的，否则取最新一条记录的（= 最近发起的那轮替换）
+      const replacementDomain = opts.replacementDomain || records[records.length - 1]?.replacement_domain
       if (!replacementDomain) {
         // 两侧都没有记录 = 两侧都没用这个域名（理论上不会走到替换流程）
         console.log(`[purpose继承] ⚠️ ${dangerousDomain} 两侧均无替换记录（两侧都未使用），无需继承`)
         return { success: false, message: '两侧均未使用该域名，无需继承' }
       }
 
-      console.log(`[purpose继承] ✅ ${dangerousDomain} 两侧替换均已完成(clickflare:${bySide.clickflare.length}条记录 / eftracker:${bySide.eftracker.length}条记录)，执行继承 -> ${replacementDomain}`)
+      const unusedSides = Array.isArray(opts.unusedSides) ? opts.unusedSides : []
+
+      // 只收集"本轮"（replacement_domain 相同）的记录，按侧分组
+      const bySide = { clickflare: [], eftracker: [] }
+      for (const r of records) {
+        if (r.replacement_domain === replacementDomain && bySide[r.target_system]) {
+          bySide[r.target_system].push(r)
+        }
+      }
+
+      for (const side of ['clickflare', 'eftracker']) {
+        // 检测脚本本轮已实时核实"未使用该域名"（查询成功且确认无记录）→ 直接通过
+        if (unusedSides.includes(side)) {
+          console.log(`[purpose继承] ✅ ${dangerousDomain} 的 ${side} 侧已由检测脚本核实未使用该域名，视为通过`)
+          continue
+        }
+
+        const sideRecords = bySide[side]
+
+        // 该侧本轮没有任何记录：可能对侧先完成时它还没跑 → 等待（脚本兜底轮询会再裁决）
+        if (sideRecords.length === 0) {
+          console.log(`[purpose继承] ⏳ ${dangerousDomain} 的 ${side} 侧本轮(${replacementDomain})暂无替换记录，等待`)
+          return { success: false, message: `${side} 侧替换仍在进行中，等待中` }
+        }
+
+        // 该侧只看最新一条：重试成功可覆盖旧失败；还在跑则等待
+        const latest = sideRecords[sideRecords.length - 1]
+        if (!TERMINAL_REPLACEMENT_STATUSES.includes(latest.status)) {
+          console.log(`[purpose继承] ⏳ ${dangerousDomain} 的 ${side} 侧任务在跑（记录#${latest.id} 状态=${latest.status}），等待两侧全部完成后再裁决`)
+          return { success: false, message: `${side} 侧替换仍在进行中，等待中` }
+        }
+
+        if (latest.status === 'failed' || latest.status === 'partial') {
+          console.log(`[purpose继承] ⛔ ${dangerousDomain} 的 ${side} 侧本轮替换${latest.status === 'partial' ? '部分成功' : '失败'}(记录#${latest.id})，放弃本次 purpose 继承，保持原状（不影响下一轮重试）`)
+          return { success: false, message: `${side} 侧替换失败，保持备用域名 purpose 原状` }
+        }
+      }
+
+      console.log(`[purpose继承] ✅ ${dangerousDomain} 两侧替换均已通过(clickflare:${bySide.clickflare.length}条 / eftracker:${bySide.eftracker.length}条, 本轮=${replacementDomain})，执行继承`)
       return await this.inheritPurpose(dangerousDomain, replacementDomain)
     } catch (error) {
       console.error(`[purpose继承] 两侧裁决失败(${dangerousDomain}):`, error.message)
