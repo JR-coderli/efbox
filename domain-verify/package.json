@@ -1,0 +1,18 @@
+{
+  "name": "domain-verify",
+  "version": "1.0.0",
+  "description": "域名可访问性/安全性二次核验服务 - 部署在与主检测脚本不同的服务器上, 提供异地视角的检测结果",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@koa/router": "^12.0.1",
+    "dotenv": "^16.4.5",
+    "koa": "^2.15.3",
+    "koa-bodyparser": "^4.4.1"
+  }
+}
