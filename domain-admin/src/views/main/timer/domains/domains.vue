@@ -16,20 +16,21 @@
          (替换/复核/异地核验/告警/移出监控, 不只结果也有过程) -->
     <div v-if="logsVisible" class="status-logs-panel" v-loading="logsLoading">
       <div class="coverage-toolbar">
+        <el-switch v-model="showLatestRoundOnly" active-text="只看最新一轮" inactive-text="显示全部" />
         <el-input
           v-model="logsDomainFilter"
           placeholder="按域名过滤, 如 pro.xxx.com"
           clearable
           size="small"
-          style="width: 260px"
+          style="width: 260px; margin-left: 14px"
           @keyup.enter="loadLogs"
           @clear="loadLogs"
         />
-        <span v-if="logsData.length" style="margin-left: 10px; color: #909399; font-size: 12px">
-          共 {{ logsData.length }} 条（新事件在前）
+        <span v-if="logsTableData.length" style="margin-left: 10px; color: #909399; font-size: 12px">
+          共 {{ logsTableData.length }} 条（新事件在前）
         </span>
       </div>
-      <el-table :data="logsData" size="small" max-height="420" class="coverage-table">
+      <el-table :data="logsTableData" size="small" max-height="420" class="coverage-table">
         <el-table-column label="时间" width="150" align="center">
           <template #default="{ row }">{{ row.created_at }}</template>
         </el-table-column>
@@ -39,15 +40,36 @@
           </template>
         </el-table-column>
         <el-table-column label="轮次" width="60" align="center">
-          <template #default="{ row }">{{ row.round || '-' }}</template>
+          <template #default="{ row }">
+            <span v-if="row.round" class="log-round-chip" :style="{ backgroundColor: roundBgColor(row.round) }">{{ row.round }}</span>
+            <span v-else class="coverage-empty">-</span>
+          </template>
         </el-table-column>
         <el-table-column label="事件" width="140" align="center">
           <template #default="{ row }">
             <span>{{ logEventLabel(row.event) }}<span v-if="logEventDone(row)" class="log-done-check"> ✓</span></span>
           </template>
         </el-table-column>
-        <el-table-column label="详情" min-width="320" show-overflow-tooltip>
-          <template #default="{ row }">{{ formatLogDetail(row.detail) }}</template>
+        <el-table-column label="详情" min-width="320">
+          <template #default="{ row }">
+            <!-- 自定义 tooltip 限宽换行(popper 挂 body, 样式在全局 style 块),
+                 替代 show-overflow-tooltip 的原生黑框——长内容会撑出屏幕 -->
+            <!-- popper-options strategy=fixed: 弹出层脱离文档流, 滚动时悬停触发也不会把页面撑出水平滚动条 -->
+            <el-tooltip
+              placement="top"
+              popper-class="log-detail-tooltip"
+              :show-after="150"
+              :popper-options="{ strategy: 'fixed' }"
+            >
+              <template #content>{{ formatLogDetail(row.detail) }}</template>
+              <span class="log-detail-text">
+                <!-- 发送了飞书/邮件的通知类记录: 开头显示铃铛图标 -->
+                <svg v-if="isNotifyEvent(row.event)" class="log-notify-icon" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                  <path fill="currentColor" d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+                </svg>{{ formatLogDetail(row.detail) }}
+              </span>
+            </el-tooltip>
+          </template>
         </el-table-column>
         <template #empty>
           <div class="coverage-empty-tip">暂无替换日志（域名替换 / 复核 / 告警时会记录在这里）</div>
@@ -844,6 +866,17 @@ function logEventLabel(event) {
   return LOG_EVENT_MAP[event] || event
 }
 
+// 轮次背景色: 轮次越高越"红"(异常持续升级的视觉暗示)
+function roundBgColor(round) {
+  const map = { 1: '#dcebfd', 2: '#fdeccd', 3: '#fbdddd' }
+  return map[round] || '#eceff1'
+}
+
+// 是否为"发送了飞书通知或邮件"的事件(详情开头显示铃铛图标)
+function isNotifyEvent(event) {
+  return ['notice', 'alert_sent', 'daily_report', 'auto_demoted', 'manual_demoted'].includes(event)
+}
+
 // 域名背景色: 按域名哈希生成稳定的浅色, 不同域名不同色, 多域名日志一眼可分。
 // 系统级事件(domain 为 (system))固定灰色。
 function domainBgColor(domain) {
@@ -895,6 +928,21 @@ function toggleLogs() {
     loadLogs() // 首次展开懒加载
   }
 }
+
+// 只看最新一轮(默认开): 每个域名只保留它"最新一轮"的事件, 历史轮次的重复过程日志隐藏;
+// 系统级事件(轮次为空, 如日报/谷歌检测)不受影响全保留。关掉开关则显示全部。
+const showLatestRoundOnly = ref(true)
+const logsTableData = computed(() => {
+  const list = logsData.value
+  if (!showLatestRoundOnly.value) return list
+  const maxRoundByDomain = new Map()
+  for (const row of list) {
+    if (row.round == null) continue
+    const cur = maxRoundByDomain.get(row.domain) || 0
+    if (row.round > cur) maxRoundByDomain.set(row.domain, row.round)
+  }
+  return list.filter((r) => r.round == null || r.round === maxRoundByDomain.get(r.domain))
+})
 
 async function loadLogs() {
   logsLoading.value = true
@@ -979,7 +1027,8 @@ async function loadLogs() {
 }
 
 /* Clickflare 域名覆盖对比卡片：与状态条同款卡片风格，可折叠 */
-// 点击状态条展开的替换过程日志面板
+// 点击状态条展开的替换过程日志面板。
+// overflow-x hidden: 吸收 el-table 数据刷新/快速滚动时的瞬间重排超宽, 避免出现页面级横向滚动条
 .status-logs-panel {
   background: #fff;
   border: 1px solid #e8eaed;
@@ -987,6 +1036,7 @@ async function loadLogs() {
   margin-bottom: 12px;
   padding: 10px 16px 14px;
   min-height: 60px;
+  overflow-x: hidden;
 }
 
 // 日志事件列的成功勾
@@ -1003,6 +1053,34 @@ async function loadLogs() {
   font-size: 12px;
   color: #202124;
   line-height: 18px;
+}
+
+// 轮次列的彩色底 chip
+.log-round-chip {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-size: 12px;
+  color: #202124;
+  line-height: 16px;
+}
+
+// 详情列: 单行省略(tooltip 看全文)
+.log-detail-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #3c4043;
+}
+
+// 通知类记录的铃铛图标
+.log-notify-icon {
+  color: #f29900;
+  vertical-align: -2px;
+  margin-right: 3px;
 }
 
 .coverage-card {
@@ -1619,5 +1697,16 @@ async function loadLogs() {
       background-color: #dadce0;
     }
   }
+}
+</style>
+
+<!-- 全局样式(非 scoped): el-tooltip 的 popper 挂载在 body 上, scoped 样式作用不到。
+     限宽 + 自动换行, 修复长详情(如异地核验的原始返回 JSON)悬浮撑出屏幕的问题 -->
+<style lang="less">
+.log-detail-tooltip {
+  // min(640px, 90vw): 窄屏下也控制在视口内, 配合 fixed 定位彻底避免撑出页面滚动条
+  max-width: min(640px, 90vw);
+  word-break: break-all;
+  white-space: normal;
 }
 </style>
