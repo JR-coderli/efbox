@@ -32,6 +32,11 @@ landerRouter.get('/:landerKey', verifyAuth, get)
 
 landerRouter.post('/sync', verifyAuth, sync)
 
+// 无鉴权内部同步入口(仿 /domains/internal 惯例), 供 url_detection_database 替换前同步用:
+// 脚本的 checkLanderExists 查的是本地 cf_landers 镜像, 镜像过期会把"实际在用"误判成
+// "未使用"而跳过替换(2026-09-23 kervalix 事件)。处理器会等同步完成才返回。
+landerRouter.post('/internal/sync', sync)
+
 
 landerRouter.get('/sync/status', verifyAuth, syncStatus)
 

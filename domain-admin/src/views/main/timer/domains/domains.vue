@@ -1,12 +1,58 @@
 <template>
   <div class="domains-page">
     <!-- 检测状态条：最后检测时间来自 url_detection_database 脚本每轮检测完成的上报；
-         时间长期不推进 = 脚本没在跑（15 分钟一轮，留 5 分钟余量判"疑似停跑"） -->
-    <div class="check-status-bar">
+         时间长期不推进 = 脚本没在跑（15 分钟一轮，留 5 分钟余量判"疑似停跑"）。
+         点击状态条展开/收起替换过程日志 -->
+    <div class="check-status-bar" @click="toggleLogs" title="点击展开/收起替换过程日志">
+      <span class="coverage-arrow" :class="{ expanded: logsVisible }">▶</span>
       <span class="status-dot" :class="checkStatusClass"></span>
       <span class="status-label">最后检测时间：</span>
       <span class="status-time">{{ lastCheckTime || '暂无检测记录' }}</span>
       <span class="status-hint">{{ checkStatusText }}</span>
+    </div>
+
+    <!-- 替换过程日志面板（点击上方状态条展开）：
+         url_detection_database 写入 domain_replacement_logs 的全过程事件流
+         (替换/复核/异地核验/告警/移出监控, 不只结果也有过程) -->
+    <div v-if="logsVisible" class="status-logs-panel" v-loading="logsLoading">
+      <div class="coverage-toolbar">
+        <el-input
+          v-model="logsDomainFilter"
+          placeholder="按域名过滤, 如 pro.xxx.com"
+          clearable
+          size="small"
+          style="width: 260px"
+          @keyup.enter="loadLogs"
+          @clear="loadLogs"
+        />
+        <span v-if="logsData.length" style="margin-left: 10px; color: #909399; font-size: 12px">
+          共 {{ logsData.length }} 条（新事件在前）
+        </span>
+      </div>
+      <el-table :data="logsData" size="small" max-height="420" class="coverage-table">
+        <el-table-column label="时间" width="150" align="center">
+          <template #default="{ row }">{{ row.created_at }}</template>
+        </el-table-column>
+        <el-table-column label="域名" prop="domain" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="log-domain-chip" :style="{ backgroundColor: domainBgColor(row.domain) }">{{ row.domain }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="轮次" width="60" align="center">
+          <template #default="{ row }">{{ row.round || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="事件" width="140" align="center">
+          <template #default="{ row }">
+            <span>{{ logEventLabel(row.event) }}<span v-if="logEventDone(row)" class="log-done-check"> ✓</span></span>
+          </template>
+        </el-table-column>
+        <el-table-column label="详情" min-width="320" show-overflow-tooltip>
+          <template #default="{ row }">{{ formatLogDetail(row.detail) }}</template>
+        </el-table-column>
+        <template #empty>
+          <div class="coverage-empty-tip">暂无替换日志（域名替换 / 复核 / 告警时会记录在这里）</div>
+        </template>
+      </el-table>
     </div>
 
     <!-- 域名覆盖对比：Clickflare(本地 cf_landers) + ef-tracker(/query/landers) 两侧提取域名，
@@ -766,6 +812,108 @@ function handleAddToDetection(row) {
     }
   })
 }
+
+
+// ===== 替换过程日志（domain_replacement_logs: 替换/复核/核验/告警/降级全过程事件流）=====
+const logsVisible = ref(false)
+const logsLoading = ref(false)
+const logsData = ref([])
+const logsDomainFilter = ref('')
+
+// 事件中文名（与 url_detection_database 写入的事件一一对应）
+const LOG_EVENT_MAP = {
+  replace_start: '开始替换',
+  backup_selected: '选定备用',
+  sync: '数据同步',
+  cf_result: 'Clickflare结果',
+  ef_result: 'ef-tracker结果',
+  both_unused: '两侧未使用',
+  verdict: '裁决结果',
+  notice: '发送通知',
+  verify_start: '复核开始',
+  verify_result: '复核结果',
+  verify_call: '异地核验',
+  safe_browsing: '谷歌安全检测',
+  alert_sent: '告警发送',
+  daily_report: '日报发送',
+  auto_demoted: '自动移出监控',
+  manual_demoted: '手动移出监控'
+}
+
+function logEventLabel(event) {
+  return LOG_EVENT_MAP[event] || event
+}
+
+// 域名背景色: 按域名哈希生成稳定的浅色, 不同域名不同色, 多域名日志一眼可分。
+// 系统级事件(domain 为 (system))固定灰色。
+function domainBgColor(domain) {
+  if (!domain) return 'transparent'
+  if (domain === '(system)') return '#eceff1'
+  let hash = 0
+  for (let i = 0; i < domain.length; i++) {
+    hash = (hash * 31 + domain.charCodeAt(i)) % 360
+  }
+  return `hsl(${hash}, 65%, 90%)`
+}
+
+function parseLogDetail(detail) {
+  if (!detail) return {}
+  try {
+    return JSON.parse(detail)
+  } catch (e) {
+    return {}
+  }
+}
+
+// 该步骤是否成功完成: 成功的打 ✓。
+// - 开始类(开始替换/复核开始): 无完成语义, 不打勾
+// - 核验调用: 拿到结果即完成(结论是"可访问"还是"不可访问"不影响本步骤完成)
+// - 通知/告警/日报/移出监控/两侧未使用: 记录即完成(描述里的"未成功"指内容不指本步骤)
+// - 其余(选定备用/数据同步/两侧结果/裁决): 描述含失败类字眼则不打勾
+// 旧数据(JSON 英文字段)同样兼容: failed/timeout 也算失败字眼。
+function logEventDone(row) {
+  const e = row.event
+  if (e === 'replace_start' || e === 'verify_start') return false
+  const text = String(row.detail || '')
+  if (e === 'verify_call') return !/(调用失败|返回异常)/.test(text)
+  if (['notice', 'alert_sent', 'daily_report', 'auto_demoted', 'manual_demoted', 'both_unused'].includes(e)) return true
+  return !/(失败|未找到|未成功|超时|异常|failed|timeout)/i.test(text)
+}
+
+// detail 是 JSON 字符串, 展示成 k=v, k=v 的紧凑形式方便扫读
+function formatLogDetail(detail) {
+  if (!detail) return '-'
+  const obj = parseLogDetail(detail)
+  const keys = Object.keys(obj)
+  if (!keys.length) return detail
+  return keys.map((k) => `${k}=${obj[k]}`).join(', ')
+}
+
+function toggleLogs() {
+  logsVisible.value = !logsVisible.value
+  if (logsVisible.value && !logsData.value.length) {
+    loadLogs() // 首次展开懒加载
+  }
+}
+
+async function loadLogs() {
+  logsLoading.value = true
+  try {
+    const params = { limit: 200 }
+    if (logsDomainFilter.value.trim()) params.domain = logsDomainFilter.value.trim()
+    const res = await hyRequest.get({ url: '/domains/replacement_logs', params })
+    if (res.code === 0) {
+      logsData.value = res.data?.list || []
+    } else {
+      ElMessage.error(res.message || '获取替换日志失败')
+    }
+  } catch (error) {
+    console.error('获取替换日志失败:', error)
+    ElMessage.error('获取替换日志失败: ' + (error?.message || '网络错误'))
+  } finally {
+    logsLoading.value = false
+  }
+}
 </script>
 
 <style lang="less" scoped>
@@ -786,6 +934,12 @@ function handleAddToDetection(row) {
   border-radius: 8px;
   margin-bottom: 12px;
   font-size: 13px;
+  cursor: pointer; /* 点击整条展开/收起替换过程日志 */
+  user-select: none;
+
+  &:hover {
+    background: #f8f9fa;
+  }
 
   .status-dot {
     width: 8px;
@@ -825,6 +979,32 @@ function handleAddToDetection(row) {
 }
 
 /* Clickflare 域名覆盖对比卡片：与状态条同款卡片风格，可折叠 */
+// 点击状态条展开的替换过程日志面板
+.status-logs-panel {
+  background: #fff;
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 10px 16px 14px;
+  min-height: 60px;
+}
+
+// 日志事件列的成功勾
+.log-done-check {
+  color: #34a853;
+  font-weight: 600;
+}
+
+// 域名列的彩色底 chip
+.log-domain-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #202124;
+  line-height: 18px;
+}
+
 .coverage-card {
   background: #fff;
   border: 1px solid #e8eaed;

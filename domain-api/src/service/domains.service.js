@@ -539,6 +539,50 @@ class DomainsService {
     await connection.execute(statement, [is_accessible, is_safe, id])
   }
 
+  /**
+   * 按 id 查域名基础信息(手动移出监控时取域名名用于记录与提醒)
+   */
+  async getDomainById(id) {
+    const [rows] = await connection.execute(
+      'SELECT id, existing_domain, landing_page_url, purpose, is_important FROM domains WHERE id = ?',
+      [id]
+    )
+    return rows[0] || null
+  }
+
+  /**
+   * 写入域名替换过程日志(url_detection_database 在替换/复核/核验流程的关键节点调用)
+   * 事件流与 cf_lander_url_replacements(替换任务终态记录)互补, 记录脚本侧流程的每一步。
+   */
+  async writeReplacementLog(domain, event, detail, round) {
+    const statement = `
+      INSERT INTO domain_replacement_logs (domain, event, round, detail)
+      VALUES (?, ?, ?, ?);
+    `
+    await connection.execute(statement, [domain, event, round ?? null, detail])
+  }
+
+  /**
+   * 查询替换过程日志(按域名过滤, 新的在前)
+   */
+  async getReplacementLogs(domain, limit = 100) {
+    const params = []
+    let whereClause = ''
+    if (domain) {
+      whereClause = ' WHERE domain = ?'
+      params.push(domain)
+    }
+    params.push(String(limit))
+    const [rows] = await connection.execute(
+      `SELECT id, domain, event, round, detail, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+       FROM domain_replacement_logs${whereClause}
+       ORDER BY id DESC
+       LIMIT ?;`,
+      params
+    )
+    return rows
+  }
+
 
   async updateRemark(id, remark) {
     const statement = `

@@ -1,5 +1,6 @@
 const domainsService = require('../service/domains.service')
 const systemConfigService = require('../service/system-config.service')
+const feishuService = require('../service/feishu.service')
 
 // 检测脚本最后运行时间的 system_config 键
 const LAST_CHECK_KEY = 'domain_check.last_run_at'
@@ -133,6 +134,50 @@ class DomainsController {
 
     await domainsService.updateIsImportant(domainId, isImportant)
 
+
+    ctx.body = {
+      code: 0,
+      message: '域名等级已修改',
+    }
+  }
+
+  /**
+   * 手动修改域名等级(前端操作)。
+   * 移出监控(is_important=0)时: 写过程日志 + 发飞书提醒——手动移除和三轮自动降级一样,
+   * 都是"域名退出检测"的动作, 需要留痕和知晓。
+   * (自动降级走 /internal/is_important 路由, 那条路的通知由检测脚本带上下文发送, 不在此重复)
+   * 通知/日志失败不影响修改本身。
+   */
+  async updateIsImportantManual(ctx, next) {
+    const { domainId, isImportant } = ctx.params
+
+    await domainsService.updateIsImportant(domainId, isImportant)
+
+    if (String(isImportant) === '0') {
+      try {
+        const info = await domainsService.getDomainById(domainId)
+        const domainName = info?.existing_domain || `id=${domainId}`
+        console.log(`[域名移出监控] 手动移除: ${domainName}(id=${domainId})`)
+        await domainsService.writeReplacementLog(domainName, 'manual_demoted',
+          `已被手动移出监控，不再检测（域名 id=${domainId}）`)
+
+        const raw = process.env.FEISHU_ALERT_OPEN_ID
+        if (raw) {
+          const time = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+          for (const receiveId of raw.split(',').map(s => s.trim()).filter(Boolean)) {
+            feishuService.sendText(receiveId,
+              `【域名已手动移出监控】${time}\n` +
+              `- ${domainName}(id=${domainId}) 已被手动移出检测列表(不再检测)\n` +
+              `- 若因域名废弃, 请确认两侧系统已无 lander 在使用; 若误移, 可在重要域名页改回继续监控`
+            ).catch(err => console.log(`❌ 手动移出监控的飞书提醒发送失败: ${err.message}`))
+          }
+        } else {
+          console.log('⚠️ 未配置 FEISHU_ALERT_OPEN_ID, 跳过手动移出监控提醒')
+        }
+      } catch (err) {
+        console.error('移出监控的记录/提醒处理失败(不影响修改结果):', err)
+      }
+    }
 
     ctx.body = {
       code: 0,
@@ -321,6 +366,49 @@ class DomainsController {
         message: '检测失败: ' + error.message,
         data: null
       }
+    }
+  }
+
+  /**
+   * 写入替换过程日志(url_detection_database 调用, internal 无鉴权)
+   * body: { domain, event, detail }
+   */
+  async writeReplacementLog(ctx, next) {
+    const { domain, event, detail, round } = ctx.request.body || {}
+
+    if (!domain || !event) {
+      ctx.body = { code: 400, message: 'domain 和 event 不能为空', data: null }
+      return
+    }
+
+    try {
+      const roundNo = Number.isInteger(round) && round >= 1 && round <= 9 ? round : null
+      await domainsService.writeReplacementLog(
+        domain,
+        event,
+        typeof detail === 'string' ? detail : JSON.stringify(detail ?? {}),
+        roundNo
+      )
+      ctx.body = { code: 0, message: 'ok', data: null }
+    } catch (error) {
+      console.error('写入替换过程日志失败:', error)
+      ctx.body = { code: 500, message: error.message, data: null }
+    }
+  }
+
+  /**
+   * 查询替换过程日志(前端展示用)
+   * query: domain(可选, 精确过滤), limit(默认 100, 上限 500)
+   */
+  async getReplacementLogs(ctx, next) {
+    try {
+      const domain = ctx.query.domain || ''
+      const limit = Math.min(Number(ctx.query.limit) || 100, 500)
+      const list = await domainsService.getReplacementLogs(domain, limit)
+      ctx.body = { code: 0, message: '获取成功', data: { list } }
+    } catch (error) {
+      console.error('查询替换过程日志失败:', error)
+      ctx.body = { code: 500, message: error.message, data: null }
     }
   }
 

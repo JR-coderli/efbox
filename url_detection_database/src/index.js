@@ -1,8 +1,9 @@
 require('./utils/loadEnv')();
-const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, sendFeishuText, getDailyReportList, reportLastCheck, notifiedReplaced } = require('./utils/api')
+const { getUrlsFromApi, updateDomainStatus, setDomainNotImportant, triggerUrgentPhoneCall, sendFeishuText, getDailyReportList, reportLastCheck, notifiedReplaced, notifiedUnused } = require('./utils/api')
 // 注: sendFeishuText 同时用于异常告警的"后续轮次降级提醒"、域名标签提醒、替换成功通知
 // notifiedReplaced: 已替换成功并通知过飞书的域名集合(见 api.js), 其中的域名不再发任何预警
 const writeLog = require('./utils/writeLog')
+const logReplacementEvent = require('./utils/replacementLog')
 const sendMail = require('./utils/sendEmail')
 const checkSafeBrowsing = require('./utils/checkSafeBrowsing')
 const { buildStatus, buildNormalReportHtml, buildDailyReportHtml, buildAlertText, buildDomainListReportHtml } = require('./utils/buildReportHtml')
@@ -50,13 +51,15 @@ async function checkUrls(urlObjs, isComplete = false) {
   // 替换流程是在本轮 updateDomainStatus 内同步跑完的, 若读实时集合, 本轮刚替换成功的域名
   // 会在预警发出前就被静默, 连第一轮电话预警都被吞掉。快照保证: 本轮新替换成功的照常预警
   // (第一轮电话 + 替换完成通知都会发), 从下一轮起才静默。
-  const replacedBeforeRound = new Set(notifiedReplaced)
+  const replacedBeforeRound = new Set(notifiedReplaced.keys())
 
   const safeData = await checkSafeBrowsing(urls) // 检测安全性
 
   const alerts = await Promise.all(urlObjs.map(async ({ id, url, is_accessible, is_safe }) => {
     const isDanger = safeData.matches?.some(m => m.threat.url === url) || false;
-    const accessible = await checkAccessible(url, 2, 10000)
+    // 轮次提示(供 verify_call 日志标注第几轮): 若本轮异常, 它就是第几轮
+    const roundHint = (abnormalStreak.get(id) || 0) + 1
+    const accessible = await checkAccessible(url, 2, 10000, roundHint)
 
 
 
@@ -70,18 +73,37 @@ async function checkUrls(urlObjs, isComplete = false) {
     let streak = 0  // 本轮结束时该域名连续异常的轮数, 用于告警分级(第1轮电话, 后续普通消息)
     try {
       if (!accessible || isDanger) {
-
-        await updateDomainStatus(id, accessible ? 1 : 0, isDanger ? 0 : 1, url);
         abnormalUrls.add(url);
 
-        // 连续异常轮数 +1; 连续 3 轮(约 45 分钟)仍异常则降级为非重要域名
+        // 连续异常轮数 +1; 连续 3 轮(约 45 分钟)仍异常则降级为非重要域名。
+        // 先算 streak 再上报, 把轮次传给替换/复核流程写入日志的"轮次"列
         streak = (abnormalStreak.get(id) || 0) + 1
         abnormalStreak.set(id, streak)
+        await updateDomainStatus(id, accessible ? 1 : 0, isDanger ? 0 : 1, url, streak);
         if (streak >= 3) {
           const ok = await setDomainNotImportant(id)
           if (ok) {
             abnormalStreak.delete(id)  // 降级成功后会移出监控列表, 清空计数
             writeLog(`域名连续 ${streak} 轮异常, 已降级为非重要域名: ${url}`)
+            // 移出监控(自动降级): 记录过程日志 + 飞书提醒, 与"手动移出监控"同口径。
+            // 区分该域名是否替换成功过: 替换过的属正常收尾, 没替换的需人工处理
+            const demoteDomain = urlToDomain.get(url) || url
+            const replacedBefore = notifiedReplaced.has(demoteDomain)
+            const unusedBefore = notifiedUnused.has(demoteDomain)
+            logReplacementEvent(demoteDomain, 'auto_demoted',
+              `连续 ${streak} 轮异常，已自动移出监控，不再检测（` +
+              (replacedBefore ? '该域名此前已替换完成，属正常收尾'
+                : unusedBefore ? '该域名未被系统使用，属清理存量'
+                : '该域名未替换成功，需人工检查') + '）', streak)
+            sendFeishuText(
+              `【域名已移出监控(自动)】${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n` +
+              `- ${demoteDomain} 连续 ${streak} 轮异常, 已自动降级为非重要域名(不再检测)\n` +
+              (replacedBefore
+                ? `- 该域名此前已替换完成, 本次移出属正常收尾`
+                : unusedBefore
+                  ? `- 该域名未被两个系统使用, 移出监控属清理存量, 无需处理`
+                  : `- ⚠️ 该域名未替换成功, 请人工检查处理(lander/标签/备用域名)`)
+            )
           }
           // 降级失败则保留计数, 下一轮继续重试 (streak 仍 >= 3)
         }
@@ -95,6 +117,8 @@ async function checkUrls(urlObjs, isComplete = false) {
           await updateDomainStatus(id, 1, 1, url);
           abnormalUrls.delete(url);
           abnormalStreak.delete(id)  // 恢复正常, 清空连续异常计数
+          const recoveredDomain = urlToDomain.get(url)
+          if (recoveredDomain) notifiedUnused.delete(recoveredDomain)  // 恢复后"未使用"结论不再有效
         }
       }
     } catch (err) {
@@ -119,10 +143,19 @@ async function checkUrls(urlObjs, isComplete = false) {
   if (filteredAlerts.length > 0) {
     await sendMail(buildNormalReportHtml(filteredAlerts));
     // 告警分级: 有域名是"首次异常"(streak=1)时打电话加急; 全是后续轮次(streak>=2)只发飞书普通消息, 不再打电话
-    if (filteredAlerts.some(a => a.streak <= 1)) {
+    const usePhone = filteredAlerts.some(a => a.streak <= 1)
+    if (usePhone) {
       await triggerUrgentPhoneCall(buildAlertText(filteredAlerts));
     } else {
       await sendFeishuText(buildAlertText(filteredAlerts));
+    }
+    // 逐域名记录本轮告警发送(渠道/轮次), 供事后核对"应该收到哪些通知"
+    for (const a of filteredAlerts) {
+      const reason = !a.accessible && a.isDanger ? '不可访问且被标记危险'
+        : !a.accessible ? '不可访问'
+        : '被标记为危险'
+      logReplacementEvent(urlToDomain.get(a.url) || a.url, 'alert_sent',
+        `第 ${a.streak} 轮异常（${reason}），已通过${usePhone ? '电话+邮件' : '飞书+邮件'}告警`, a.streak)
     }
   }
 
@@ -175,6 +208,7 @@ function startTimers() {
       sendMail(buildDailyReportHtml(dailyReport, dailyCount), 'daily')
       // 第二封:域名清单日报(备用域名状态 + 主要在用域名,只发邮件不打电话)
       sendDomainListReport()
+      logReplacementEvent('(system)', 'daily_report', '已发送每天早上 8 点的邮件（检测日报 + 域名清单）')
       lastReportDate = today
       dailyReport = new Map()
       dailyCount = new Map()
