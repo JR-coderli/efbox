@@ -1,13 +1,5 @@
 <template>
-  <div class="landers-container" :class="{ 'is-fullscreen': isFullscreen }" ref="landersContainerRef">
-    <!-- 全屏提示 -->
-    <transition name="fullscreen-hint">
-      <div v-if="showFullscreenHint" class="fullscreen-hint">
-        <el-icon><FullScreen /></el-icon>
-        <span>按 ESC 键退出全屏</span>
-      </div>
-    </transition>
-
+  <div class="landers-container">
     <!-- 搜索栏（默认显示） -->
     <div class="search-bar">
       <div class="search-row">
@@ -60,7 +52,6 @@
           <el-button v-if="hasBatchReplacePermission" class="icon-btn" :icon="Edit" @click="openBatchReplaceDialog" title="批量修改URL" circle />
           <el-button v-if="hasCreatePermission" class="icon-btn" :icon="Plus" @click="openCreatePrivateDialog" title="创建 Private Lander" circle />
           <el-button v-if="hasCreatePublicPermission" class="icon-btn" :icon="CirclePlusFilled" @click="openCreatePublicDialog" title="创建 Public Lander" circle />
-          <el-button class="icon-btn" :icon="isFullscreen ? Crop : FullScreen" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏显示'" circle />
           <!-- 列设置下拉菜单 -->
           <el-dropdown trigger="click" :hide-on-click="false">
             <el-button class="icon-btn" :icon="Setting" circle title="列设置" />
@@ -1023,7 +1014,7 @@
 import { ref, reactive, onMounted, onUnmounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  Refresh, Camera, Search, Picture, WarningFilled, Warning, Setting, Menu, Upload, FullScreen, Crop, Plus, InfoFilled, CirclePlusFilled, Edit, CircleCheck, CircleClose, Download, Loading, Star, StarFilled
+  Refresh, Camera, Search, Picture, WarningFilled, Warning, Setting, Menu, Upload, Plus, InfoFilled, CirclePlusFilled, Edit, CircleCheck, CircleClose, Download, Loading, Star, StarFilled
 } from '@element-plus/icons-vue'
 import {
   getLanderList,
@@ -1307,49 +1298,12 @@ async function handleIntervalChange(value) {
 const syncInfoVisible = ref(false)
 
 
-const isFullscreen = ref(false)
-const showFullscreenHint = ref(false)
-const landersContainerRef = ref(null)
 const tableRef = ref(null)
-let hintTimer = null
 
 
 const isMobile = computed(() => {
   return window.innerWidth < 768
 })
-
-
-const handleEscKey = (event) => {
-  if (event.key === 'Escape' && isFullscreen.value) {
-    exitFullscreen()
-  }
-}
-
-
-const exitFullscreen = () => {
-  isFullscreen.value = false
-  document.body.classList.remove('landers-fullscreen-mode')
-  document.body.style.overflow = ''
-  showFullscreenHint.value = false
-}
-
-
-const toggleFullscreen = () => {
-  isFullscreen.value = !isFullscreen.value
-  if (isFullscreen.value) {
-    document.body.classList.add('landers-fullscreen-mode')
-    document.body.style.overflow = 'hidden'
-
-    showFullscreenHint.value = true
-
-    if (hintTimer) clearTimeout(hintTimer)
-    hintTimer = setTimeout(() => {
-      showFullscreenHint.value = false
-    }, 3000)
-  } else {
-    exitFullscreen()
-  }
-}
 
 
 const configDialogVisible = ref(false)
@@ -3057,9 +3011,6 @@ onMounted(() => {
   }, 30000)
 
 
-  document.addEventListener('keydown', handleEscKey)
-
-
   document.addEventListener('click', handleClickOutsideDimensionPicker)
 
 
@@ -3084,15 +3035,10 @@ const handleExpandColumnClick = (event) => {
 
 onUnmounted(() => {
 
-  if (hintTimer) clearTimeout(hintTimer)
   if (statusPollingTimer) clearInterval(statusPollingTimer)
 
-  document.removeEventListener('keydown', handleEscKey)
   document.removeEventListener('click', handleClickOutsideDimensionPicker)
   document.removeEventListener('click', handleExpandColumnClick)
-
-  document.body.classList.remove('landers-fullscreen-mode')
-  document.body.style.overflow = ''
 })
 </script>
 
@@ -3106,22 +3052,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   transition: all 0.3s ease;
-
-
-  &.is-fullscreen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 9999;
-    padding: 16px;
-    background: #f8f9fa;
-
-    .status-bar {
-      margin-bottom: 16px;
-    }
-  }
 
 
   .status-bar {
@@ -4599,16 +4529,6 @@ onUnmounted(() => {
 
 <style lang="less">
 
-body.landers-fullscreen-mode {
-  .el-select-dropdown,
-  .el-picker-dropdown,
-  .el-dropdown-menu,
-  .el-popper,
-  .el-dialog__wrapper {
-    z-index: 10000 !important;
-  }
-}
-
 .el-image-viewer__wrapper {
   .el-image-viewer__canvas {
     img {
@@ -4620,39 +4540,6 @@ body.landers-fullscreen-mode {
 </style>
 
 <style lang="less" scoped>
-
-.fullscreen-hint {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: rgba(0, 0, 0, 0.8);
-  color: #fff;
-  border-radius: 24px;
-  font-size: 14px;
-  z-index: 10001;
-  pointer-events: none;
-
-  .el-icon {
-    font-size: 16px;
-  }
-}
-
-
-.fullscreen-hint-enter-active,
-.fullscreen-hint-leave-active {
-  transition: all 0.3s ease;
-}
-
-.fullscreen-hint-enter-from,
-.fullscreen-hint-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-20px);
-}
 
 
 .delete-confirm-content {
