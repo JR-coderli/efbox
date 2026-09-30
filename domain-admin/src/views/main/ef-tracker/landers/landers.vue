@@ -71,7 +71,7 @@
 
     <!-- 数据表格 -->
     <div class="table-container">
-      <el-table :data="tableData" v-loading="loading" class="google-table" stripe border style="width: 100%">
+      <el-table ref="tableRef" :data="tableData" v-loading="loading" class="google-table" stripe border style="width: 100%">
         <template v-for="col in columns" :key="col.key">
           <el-table-column
             v-if="col.visible"
@@ -201,7 +201,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Setting, Edit } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
@@ -211,6 +211,7 @@ import { BASE_URL } from '@/services/request/config'
 const loading = ref(false)
 const tableData = ref([])
 const total = ref(0)
+const tableRef = ref(null)
 
 const pagination = reactive({
   page: 1,
@@ -405,9 +406,17 @@ async function loadData() {
   }
 }
 
-function handleSearch() {
+// 将表格滚动回顶部：等 nextTick（DOM 渲染完新数据后）再重置，
+// 复用 el-table 内部 scrollbar（与 clickflare 落地页列表一致）
+async function scrollToTableTop() {
+  await nextTick()
+  tableRef.value?.scrollBarRef?.setScrollTop(0)
+}
+
+async function handleSearch() {
   pagination.page = 1
-  loadData()
+  await loadData()
+  await scrollToTableTop()
 }
 
 function handleReset() {
@@ -420,11 +429,13 @@ function handleSizeChange(size) {
   pagination.pageSize = size
   pagination.page = 1
   loadData()
+  scrollToTableTop()
 }
 
 function handleCurrentChange(page) {
   pagination.page = page
   loadData()
+  scrollToTableTop()
 }
 
 onMounted(() => {
