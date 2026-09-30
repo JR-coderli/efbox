@@ -302,12 +302,12 @@
           </el-table-column>
           <el-table-column label="原始 URL" min-width="250" show-overflow-tooltip>
             <template #default="{ row }">
-              <span class="preview-url-old">{{ row.oldUrl }}</span>
+              <span class="preview-url-old" @click="handleOpenPreviewUrl(row.oldUrl)">{{ row.oldUrl }}</span>
             </template>
           </el-table-column>
           <el-table-column label="替换后 URL" min-width="250" show-overflow-tooltip>
             <template #default="{ row }">
-              <span class="preview-url-new">{{ row.newUrl }}</span>
+              <span class="preview-url-new" @click="handleOpenPreviewUrl(row.newUrl)">{{ row.newUrl }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -410,6 +410,7 @@ import { getReplacementList, getReplacementDetail } from '@/services/main/timer/
 import { batchReplaceLanderUrl, previewBatchReplace, getBatchReplaceProgress } from '@/services/main/webpage/landers'
 import { createOperationLog } from '@/services/main/system/operation-log'
 import useLoginStore from '@/stores/login/login'
+import SparkMD5 from 'spark-md5'
 
 
 const loginStore = useLoginStore()
@@ -632,6 +633,20 @@ const cleanDomain = (domain) => {
     cleaned = cleaned.substring(0, slashIndex)
   }
   return cleaned
+}
+
+
+// 批量修改弹窗预览表格的 URL 点击打开：仅预览用，不记录操作日志
+// go=1 签名参数只拼在打开的字符串上，不会写入任何数据、不影响替换
+const handleOpenPreviewUrl = (url) => {
+  if (!url) return ''
+  const t = Math.floor(Date.now() / 10000);
+  const n = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+  const raw = `eflp${t}${n}`;
+  const s = SparkMD5.hash(raw).substring(0, 10);
+  const sep = url.includes('?') ? '&' : '?';
+  window.open(`${url}${sep}go=1&t=${t}&n=${n}&s=${s}&w=1`, "_blank")
 }
 
 
@@ -1374,12 +1389,22 @@ onMounted(() => {
       color: #c5221f;
       word-break: break-all;
       font-size: 12px;
+      cursor: pointer;
+
+      &:hover {
+        text-decoration: underline;
+      }
     }
 
     .preview-url-new {
       color: #137333;
       word-break: break-all;
       font-size: 12px;
+      cursor: pointer;
+
+      &:hover {
+        text-decoration: underline;
+      }
     }
   }
 }
