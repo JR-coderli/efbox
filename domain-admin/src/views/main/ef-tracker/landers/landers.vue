@@ -27,7 +27,7 @@
         <!-- 供合并页壳组件（landers-tabs.vue）插入系统切换 tab；单独使用时无此插槽内容，不影响布局 -->
         <slot name="tabs"></slot>
         <div class="toolbar-actions">
-          <el-button class="icon-btn" :icon="Edit" circle title="批量替换域名" @click="openReplaceDialog" />
+          <el-button v-if="hasEfBatchReplacePermission" class="icon-btn" :icon="Edit" circle title="批量替换域名" @click="openReplaceDialog" />
           <el-button class="icon-btn" circle :title="refreshCountdown > 0 ? `${refreshCountdown}s 后可刷新` : '刷新'" :disabled="loading || refreshCountdown > 0" @click="handleRefresh">
             <span v-if="refreshCountdown > 0">{{ refreshCountdown }}</span>
             <el-icon v-else><Refresh /></el-icon>
@@ -201,12 +201,19 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Setting, Edit } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
 import { getLanders, getEfLanderScreenshots, triggerEfLanderScreenshot, uploadEfLanderScreenshot, replaceLanderUrl } from '@/services/main/ef-tracker'
 import { BASE_URL } from '@/services/request/config'
+import useLoginStore from '@/stores/login/login'
+
+// ===== 按钮权限（与 clickflare 落地页列表同机制：menu 表 type=3 节点收集的权限码） =====
+const loginStore = useLoginStore()
+const userPermissions = computed(() => loginStore.permissions || [])
+// ef 批量替换域名：权限码 system:ef-tracker:batch，未分配该节点的角色不显示按钮
+const hasEfBatchReplacePermission = computed(() => userPermissions.value.includes('system:ef-tracker:batch'))
 
 const loading = ref(false)
 const tableData = ref([])
