@@ -195,7 +195,8 @@ import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Setting, Edit } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
-import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot, replaceLanderUrl } from '@/services/main/ef-tracker'
+import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot } from '@/services/main/ef-tracker'
+import { previewEfManualReplace, efManualReplace } from '@/services/main/webpage/landers'
 import { BASE_URL } from '@/services/request/config'
 import useLoginStore from '@/stores/login/login'
 
@@ -426,6 +427,8 @@ function openReplaceDialog() {
   replaceDialogVisible.value = true
 }
 
+// ===== 批量替换域名：走 domain-api 手动替换接口（与域名替换页同一入口），
+// 正式执行会在「域名替换」页生成一条 eftracker 记录 =====
 async function handlePreview() {
   if (!replaceForm.old.trim()) {
     ElMessage.warning('请输入要替换的域名')
@@ -433,12 +436,16 @@ async function handlePreview() {
   }
   previewLoading.value = true
   try {
-    const res = await replaceLanderUrl({ old: replaceForm.old.trim(), new: replaceForm.new.trim(), dry_run: true })
-    previewList.value = res?.list || []
-    previewCount.value = res?.count ?? 0
-    if (previewCount.value === 0) ElMessage.info('没有匹配的落地页 url')
+    const res = await previewEfManualReplace(replaceForm.old.trim(), replaceForm.new.trim())
+    if (res.code === 0) {
+      previewList.value = res.data?.list || []
+      previewCount.value = res.data?.count ?? 0
+      if (previewCount.value === 0) ElMessage.info('没有匹配的落地页 url')
+    } else {
+      ElMessage.error(res.message || '预览失败')
+    }
   } catch (e) {
-    ElMessage.error('预览失败: ' + (e?.response?.data?.error || e?.message || '网络错误'))
+    ElMessage.error('预览失败: ' + (e?.message || '网络错误'))
   } finally {
     previewLoading.value = false
   }
@@ -460,12 +467,16 @@ async function handleReplace() {
   }
   replaceLoading.value = true
   try {
-    const res = await replaceLanderUrl({ old: replaceForm.old.trim(), new: replaceForm.new.trim() })
-    ElMessage.success(`已替换 ${res?.affected ?? 0} 条落地页`)
-    replaceDialogVisible.value = false
-    loadData()
+    const res = await efManualReplace(replaceForm.old.trim(), replaceForm.new.trim())
+    if (res.code === 0) {
+      ElMessage.success(`已替换 ${res.data?.affectedCount ?? 0} 条落地页，已生成替换记录`)
+      replaceDialogVisible.value = false
+      loadData()
+    } else {
+      ElMessage.error(res.message || '替换失败')
+    }
   } catch (e) {
-    ElMessage.error('替换失败: ' + (e?.response?.data?.error || e?.message || '网络错误'))
+    ElMessage.error('替换失败: ' + (e?.message || '网络错误'))
   } finally {
     replaceLoading.value = false
   }

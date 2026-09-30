@@ -1,6 +1,7 @@
 const landerReplacementService = require('../service/lander-replacement.service')
 const landerService = require('../service/lander.service')
 const efLanderReplacementService = require('../service/ef-lander-replacement.service')
+const efManualReplacementService = require('../service/ef-manual-replacement.service')
 const domainsService = require('../service/domains.service')
 
 class LanderReplacementController {
@@ -298,6 +299,58 @@ class LanderReplacementController {
         message: '获取失败: ' + error.message,
         data: null
       }
+    }
+  }
+
+  /**
+   * ef-tracker 手动替换：预演（dry_run，不写库不产生记录）
+   * 前端弹窗「预览影响范围」用；body: { domain, replacement_domain }（replacement_domain 可留空 = 删除子串）
+   */
+  async previewEfManualReplace(ctx, next) {
+    const { domain, replacement_domain } = ctx.request.body
+
+    if (!domain || !String(domain).trim()) {
+      ctx.body = { code: 1, message: '要替换的域名不能为空', data: null }
+      return
+    }
+
+    try {
+      const result = await efManualReplacementService.previewReplace(
+        String(domain).trim(),
+        String(replacement_domain || '').trim()
+      )
+      ctx.body = { code: 0, message: '预览成功', data: result }
+    } catch (error) {
+      console.error('ef-tracker 手动替换预览失败:', error)
+      ctx.body = { code: 1, message: 'ef-tracker 预览失败: ' + error.message, data: null }
+    }
+  }
+
+  /**
+   * ef-tracker 手动替换：正式执行并写入替换记录（cf_lander_url_replacements, target_system='eftracker'）
+   * body: { domain, replacement_domain }（replacement_domain 可留空 = 删除子串）
+   */
+  async replaceEfManual(ctx, next) {
+    const { domain, replacement_domain } = ctx.request.body
+
+    if (!domain || !String(domain).trim()) {
+      ctx.body = { code: 1, message: '要替换的域名不能为空', data: null }
+      return
+    }
+
+    try {
+      const result = await efManualReplacementService.replace(
+        String(domain).trim(),
+        String(replacement_domain || '').trim()
+      )
+      ctx.body = {
+        code: result.success ? 0 : 1,
+        message: result.message,
+        data: result.data || null
+      }
+    } catch (error) {
+      console.error('ef-tracker 手动替换失败:', error)
+      ctx.body = { code: 1, message: 'ef-tracker 手动替换失败: ' + error.message, data: null }
     }
   }
 }

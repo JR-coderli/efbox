@@ -240,6 +240,12 @@
       destroy-on-close
     >
       <el-form :model="batchReplaceForm" :rules="batchReplaceRules" ref="batchReplaceFormRef" label-width="140px" class="google-form">
+        <el-form-item label="目标系统">
+          <el-radio-group v-model="batchReplaceTarget" size="large">
+            <el-radio value="clickflare">clickflare 落地页</el-radio>
+            <el-radio v-if="hasEfBatchReplacePermission" value="eftracker">eftracker 落地页</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="要替换的域名" prop="domain">
           <el-input
             v-model="batchReplaceForm.domain"
@@ -251,12 +257,12 @@
         <el-form-item label="替换为域名" prop="replacementDomain">
           <el-input
             v-model="batchReplaceForm.replacementDomain"
-            placeholder="如: new-domain.com"
+            :placeholder="batchReplaceTarget === 'eftracker' ? '如: new-domain.com（留空 = 删除该域名子串）' : '如: new-domain.com'"
             clearable
             size="large"
           />
         </el-form-item>
-        <el-form-item label="Lander 类型" prop="landerType">
+        <el-form-item v-if="batchReplaceTarget === 'clickflare'" label="Lander 类型" prop="landerType">
           <el-radio-group v-model="batchReplaceForm.landerType" size="large">
             <el-radio value="all">all</el-radio>
             <el-radio value="public">public</el-radio>
@@ -265,7 +271,7 @@
         </el-form-item>
         <el-alert
           v-if="batchPreviewCount > 0"
-          :title="`当前有 ${batchPreviewCount} 条 ${batchReplaceForm.landerType === 'public' ? 'Public' : batchReplaceForm.landerType === 'private' ? 'Private' : ''} Lander 的 URL 包含该域名`"
+          :title="`当前有 ${batchPreviewCount} 条 ${batchReplaceTarget === 'eftracker' ? 'eftracker 落地页' : (batchReplaceForm.landerType === 'public' ? 'Public' : batchReplaceForm.landerType === 'private' ? 'Private' : '') + ' Lander'} 的 URL 包含该域名`"
           type="info"
           :closable="false"
           class="preview-alert"
@@ -404,10 +410,10 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Warning, Edit, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { getReplacementList, getReplacementDetail } from '@/services/main/timer/clickflare'
-import { batchReplaceLanderUrl, previewBatchReplace, getBatchReplaceProgress } from '@/services/main/webpage/landers'
+import { batchReplaceLanderUrl, previewBatchReplace, getBatchReplaceProgress, previewEfManualReplace, efManualReplace } from '@/services/main/webpage/landers'
 import { createOperationLog } from '@/services/main/system/operation-log'
 import useLoginStore from '@/stores/login/login'
 import SparkMD5 from 'spark-md5'
@@ -416,6 +422,8 @@ import SparkMD5 from 'spark-md5'
 const loginStore = useLoginStore()
 const userPermissions = computed(() => loginStore.permissions || [])
 const hasBatchReplacePermission = computed(() => userPermissions.value.includes('system:webpage:batch'))
+// eftracker 替换入口单独控权（与 eftracker 落地页列表的批量替换按钮同一权限码）
+const hasEfBatchReplacePermission = computed(() => userPermissions.value.includes('system:ef-tracker:batch'))
 
 
 const tableData = ref([])
@@ -537,16 +545,22 @@ const batchPreviewList = ref([])
 // 仅在打开窗口后首次点击「预览影响范围」时触发同步，避免每次重新搜索都重复同步
 const batchPreviewSynced = ref(false)
 
+// 替换目标系统：clickflare（走 domain-api 队列替换）/ eftracker（走 ef-tracker 直连 dry_run 预演 + 同步替换）
+const batchReplaceTarget = ref('clickflare')
+
 const batchReplaceForm = reactive({
   domain: '',
   replacementDomain: '',
-  landerType: 'private' // all, public, private
+  landerType: 'private' // all, public, private（仅 clickflare 目标使用）
 })
 
-const batchReplaceRules = {
+// eftracker 的替换域名允许留空（= 删除该子串），clickflare 必填
+const batchReplaceRules = computed(() => ({
   domain: [{ required: true, message: '请输入要替换的域名', trigger: 'blur' }],
-  replacementDomain: [{ required: true, message: '请输入替换后的域名', trigger: 'blur' }]
-}
+  replacementDomain: batchReplaceTarget.value === 'eftracker'
+    ? []
+    : [{ required: true, message: '请输入替换后的域名', trigger: 'blur' }]
+}))
 
 
 const progressDialogVisible = ref(false)
@@ -574,6 +588,7 @@ const openBatchReplaceDialog = () => {
   batchPreviewSearched.value = false
   batchPreviewList.value = []
   batchPreviewSynced.value = false  // 重置同步标志：新窗口会话的首次预览会触发同步
+  batchReplaceTarget.value = 'clickflare'
   batchReplaceForm.domain = ''
   batchReplaceForm.replacementDomain = ''
   batchReplaceForm.landerType = 'private'
@@ -622,6 +637,15 @@ watch(() => batchReplaceForm.landerType, () => {
 })
 
 
+// 切换目标系统后口径不同（cf 走 hostname 精确匹配 + 类型过滤，ef 走子串替换），必须重新预览
+watch(batchReplaceTarget, () => {
+
+  batchPreviewSearched.value = false
+  batchPreviewCount.value = -1
+  batchPreviewList.value = []
+})
+
+
 const cleanDomain = (domain) => {
   if (!domain) return ''
   let cleaned = domain.trim()
@@ -654,6 +678,35 @@ const handlePreviewBatchReplace = async () => {
 
   const valid = await batchReplaceFormRef.value?.validate().catch(() => false)
   if (!valid) return
+
+  // eftracker：走 domain-api 新接口 dry_run 预演（子串替换口径，替换域名留空 = 删除子串）
+  // 返回 data: { list:[{id, before, after}], count }，映射进现有预览表格（URL 可点击预览）
+  if (batchReplaceTarget.value === 'eftracker') {
+    batchPreviewLoading.value = true
+    try {
+      const res = await previewEfManualReplace(
+        batchReplaceForm.domain.trim(),
+        batchReplaceForm.replacementDomain.trim()
+      )
+      if (res.code === 0) {
+        const list = res.data?.list || []
+        batchPreviewCount.value = res.data?.count ?? list.length
+        batchPreviewList.value = list.map(item => ({
+          name: `#${item.id}`,
+          oldUrl: item.before,
+          newUrl: item.after
+        }))
+        batchPreviewSearched.value = true
+      } else {
+        ElMessage.error(res.message || '预览失败')
+      }
+    } catch (error) {
+      ElMessage.error('预览失败: ' + (error?.message || '网络错误'))
+    } finally {
+      batchPreviewLoading.value = false
+    }
+    return
+  }
 
   // 仅在窗口会话首次预览时触发同步（force_sync=true）
   // 同步失败后端会返回 code !== 0，synced 不会被置 true，用户再次点击可继续重试
@@ -698,6 +751,37 @@ const handleBatchReplace = async () => {
 
   if (batchPreviewCount.value === 0) {
     ElMessage.warning('没有找到包含该域名的 Lander')
+    return
+  }
+
+  // eftracker：走 domain-api 新接口同步执行并生成替换记录（无队列/进度弹窗）
+  if (batchReplaceTarget.value === 'eftracker') {
+    const oldDomain = batchReplaceForm.domain.trim()
+    const newDomain = batchReplaceForm.replacementDomain.trim()
+    try {
+      await ElMessageBox.confirm(
+        `确定把所有包含「${oldDomain}」的 eftracker 落地页 url 替换为「${newDomain || '(空，删除该子串)'}」吗？此操作不可撤销。`,
+        '确认替换',
+        { confirmButtonText: '确定替换', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch {
+      return
+    }
+    batchReplaceLoading.value = true
+    try {
+      const res = await efManualReplace(oldDomain, newDomain)
+      if (res.code === 0) {
+        ElMessage.success(`已替换 ${res.data?.affectedCount ?? 0} 条落地页，已生成替换记录`)
+        batchReplaceDialogVisible.value = false
+        fetchData()  // 刷新记录列表，新记录立即可见
+      } else {
+        ElMessage.error(res.message || '替换失败')
+      }
+    } catch (error) {
+      ElMessage.error('替换失败: ' + (error?.message || '网络错误'))
+    } finally {
+      batchReplaceLoading.value = false
+    }
     return
   }
 

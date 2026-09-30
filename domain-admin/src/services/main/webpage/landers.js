@@ -195,6 +195,30 @@ export function previewBatchReplace(domain, replacementDomain, workspaceType = '
 }
 
 /**
+ * ef-tracker 手动替换：预演（dry_run，不写库不产生记录）
+ * 返回 data: { list: [{id, before, after}], count }
+ * @param {string} replacementDomain 可留空（= 删除该子串）
+ */
+export function previewEfManualReplace(domain, replacementDomain) {
+  return hyRequest.post({
+    url: '/lander-replacement/ef-manual-preview',
+    data: { domain, replacement_domain: replacementDomain }
+  })
+}
+
+/**
+ * ef-tracker 手动替换：正式执行并写入替换记录（域名替换页可见）
+ * 返回 data: { recordId, affectedCount }
+ * @param {string} replacementDomain 可留空（= 删除该子串）
+ */
+export function efManualReplace(domain, replacementDomain) {
+  return hyRequest.post({
+    url: '/lander-replacement/ef-manual-replace',
+    data: { domain, replacement_domain: replacementDomain }
+  })
+}
+
+/**
  * 获取批量替换任务进度
  */
 export function getBatchReplaceProgress(recordId) {
