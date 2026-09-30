@@ -180,8 +180,10 @@
           <div v-for="item in previewList" :key="item.id" class="preview-item">
             <div class="preview-id">#{{ item.id }}</div>
             <div class="preview-url">
-              <div class="before">{{ item.before }}</div>
-              <div class="after">→ {{ item.after }}</div>
+              <!-- 点击 URL 新窗口打开预览（带 go=1 签名参数）；只影响打开的字符串，不影响实际替换。
+                   span 行内元素：修改前/修改后同一行显示，URL 过长再自然折行 -->
+              <span class="before" title="点击在新窗口打开（仅预览）" @click="handleOpenUrl(item.before)">{{ item.before }}</span>
+              <span class="after" title="点击在新窗口打开（仅预览）" @click="handleOpenUrl(item.after)">→ {{ item.after }}</span>
             </div>
           </div>
         </div>
@@ -917,11 +919,22 @@ async function handleReplace() {
     color: #9aa0a6;
     text-decoration: line-through;
     word-break: break-all;
+    cursor: pointer;
+    margin-right: 6px;
+
+    &:hover {
+      color: #5f6368;
+    }
   }
 
   .after {
     color: #1e8e3e;
     word-break: break-all;
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
   }
 }
 
