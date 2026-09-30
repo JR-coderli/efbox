@@ -1,29 +1,47 @@
 <template>
   <div class="tabs-page">
-    <!-- 顶部 Tab 菜单栏（落地页自己的风格：白卡片 + 圆角胶囊按钮 + 系统图标，区别于日志页的下划线式）。
+    <!-- 系统切换 tab 不单独占一行：通过 #tabs 插槽嵌进各面板自己的搜索栏行里
+         （搜索输入框 | tab 胶囊 | 工具按钮），窄屏跟随搜索栏 flex-wrap 换行，永不重叠。
+         两个面板都常驻时插槽内容渲染两份，但绑定的是同一个 activeTab，状态天然同步。
          页面入口由「网页管理 > landers列表」菜单项控制，进到页面后两个 Tab 人人都可用：
          有落地页列表菜单权限的角色自动获得 eftracker 落地页查看入口（各自按钮权限仍按权限码独立控制） -->
-    <div class="tab-bar">
-      <div
-        v-for="tab in TABS"
-        :key="tab.key"
-        class="tab-item"
-        :class="{ 'is-active': activeTab === tab.key }"
-        @click="switchTab(tab.key)"
-      >
-        <img class="tab-icon" :src="tab.icon" :alt="tab.label" />
-        <span class="tab-label">{{ tab.label }}</span>
-      </div>
-    </div>
-
     <!-- 两个面板分属各自文件：懒挂载（首次切到才渲染，onMounted 才发请求）
-         + v-show 保活（切走不销毁，切回保留筛选/分页状态、不重复请求）。
-         panel-holder 撑满剩余高度，保证面板内部 height:100% 的滚动布局不塌 -->
+         + v-show 保活（切走不销毁，切回保留筛选/分页状态、不重复请求） -->
     <div class="panel-holder" v-if="visited.clickflare" v-show="activeTab === 'clickflare'">
-      <clickflare-panel />
+      <clickflare-panel>
+        <template #tabs>
+          <div class="tab-bar">
+            <div
+              v-for="tab in TABS"
+              :key="tab.key"
+              class="tab-item"
+              :class="{ 'is-active': activeTab === tab.key }"
+              @click="switchTab(tab.key)"
+            >
+              <img class="tab-icon" :src="tab.icon" :alt="tab.label" />
+              <span class="tab-label">{{ tab.label }}</span>
+            </div>
+          </div>
+        </template>
+      </clickflare-panel>
     </div>
     <div class="panel-holder" v-if="visited.eftracker" v-show="activeTab === 'eftracker'">
-      <eftracker-panel />
+      <eftracker-panel>
+        <template #tabs>
+          <div class="tab-bar">
+            <div
+              v-for="tab in TABS"
+              :key="tab.key"
+              class="tab-item"
+              :class="{ 'is-active': activeTab === tab.key }"
+              @click="switchTab(tab.key)"
+            >
+              <img class="tab-icon" :src="tab.icon" :alt="tab.label" />
+              <span class="tab-label">{{ tab.label }}</span>
+            </div>
+          </div>
+        </template>
+      </eftracker-panel>
     </div>
   </div>
 </template>
@@ -44,8 +62,8 @@ const router = useRouter()
 
 // Tab 定义：key 用于 ?tab= 参数
 const TABS = [
-  { key: 'clickflare', label: 'clickflare落地页', icon: clickflareIcon },
-  { key: 'eftracker', label: 'eftracker落地页', icon: eftrackerIcon }
+  { key: 'clickflare', label: 'clickflare', icon: clickflareIcon },
+  { key: 'eftracker', label: 'eftracker', icon: eftrackerIcon }
 ]
 
 const TAB_KEYS = TABS.map((t) => t.key)
@@ -98,52 +116,49 @@ watch(
   flex-direction: column;
 }
 
+/* tab 胶囊组：嵌在面板搜索栏行内（#tabs 插槽），无需卡片容器和定位 */
 .tab-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
-  margin: 8px 8px 0;
-  padding: 8px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .tab-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 20px;
-  border-radius: 20px;
-  font-size: 14px;
+  gap: 7px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 18px;
+  font-size: 13px;
   font-weight: 500;
   color: #5f6368;
+  background: #fff;
+  border: 1px solid #dadce0;
   cursor: pointer;
   user-select: none;
   transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
 
   .tab-icon {
     display: block;
-    width: 22px;
-    height: 22px;
-    border-radius: 5px;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
   }
 
   &:hover {
-    background-color: #f1f3f4;
+    background-color: #f8f9fa;
     color: #202124;
   }
 
   &.is-active {
-    background-color: #1a73e8;
-    color: #fff;
-    box-shadow: 0 1px 4px rgba(26, 115, 232, 0.4);
+    border-color: #1a73e8;
+    color: #1a73e8;
+    background-color: #fff;
 
     &:hover {
-      background-color: #1765cc;
-      color: #fff;
+      background-color: #f8f9fa;
+      color: #1a73e8;
     }
   }
 }

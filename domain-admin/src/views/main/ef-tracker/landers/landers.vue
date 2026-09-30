@@ -24,6 +24,8 @@
             <el-button @click="handleReset">重置</el-button>
           </div>
         </div>
+        <!-- 供合并页壳组件（landers-tabs.vue）插入系统切换 tab；单独使用时无此插槽内容，不影响布局 -->
+        <slot name="tabs"></slot>
         <div class="toolbar-actions">
           <el-button class="icon-btn" :icon="Edit" circle title="批量替换域名" @click="openReplaceDialog" />
           <el-button class="icon-btn" circle :title="refreshCountdown > 0 ? `${refreshCountdown}s 后可刷新` : '刷新'" :disabled="loading || refreshCountdown > 0" @click="handleRefresh">

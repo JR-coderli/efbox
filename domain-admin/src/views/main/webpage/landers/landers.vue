@@ -39,6 +39,8 @@
             <el-button @click="handleReset">重置</el-button>
           </div>
         </div>
+        <!-- 供合并页壳组件（landers-tabs.vue）插入系统切换 tab；单独使用时无此插槽内容，不影响布局 -->
+        <slot name="tabs"></slot>
         <div class="toolbar-actions">
           <el-button
             class="icon-btn favorite-toggle-btn"
@@ -3183,7 +3185,6 @@ onUnmounted(() => {
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     margin-bottom: 12px;
-    animation: slideDown 0.2s ease-out;
 
     .search-row {
       display: flex;
@@ -3799,18 +3800,6 @@ onUnmounted(() => {
 
   .preview-alert {
     margin-top: 12px;
-  }
-}
-
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
