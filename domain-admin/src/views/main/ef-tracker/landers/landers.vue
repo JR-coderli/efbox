@@ -114,7 +114,7 @@
             <template v-else-if="col.key === 'url'" #default="{ row }">
               <span v-if="row.url" class="url-link">
                 <span class="url-text">{{ row.url }}</span>
-                <a class="external-link-btn" title="打开落地页" @click="handleOpenUrl(row.url)">
+                <a class="external-link-btn" title="打开落地页" @click="handleOpenUrlWithLog(row.url)">
                   <svg viewBox="0 0 24 24" class="external-icon">
                     <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
                   </svg>
@@ -197,6 +197,7 @@ import { Search, Setting, Edit } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
 import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot } from '@/services/main/ef-tracker'
 import { previewEfManualReplace, efManualReplace } from '@/services/main/webpage/landers'
+import { createOperationLog } from '@/services/main/system/operation-log'
 import { BASE_URL } from '@/services/request/config'
 import useLoginStore from '@/stores/login/login'
 
@@ -288,6 +289,19 @@ function handleOpenUrl(url) {
   const s = SparkMD5.hash(raw).substring(0, 10)
   const sep = url.includes('?') ? '&' : '?'
   window.open(`${url}${sep}go=1&t=${t}&n=${n}&s=${s}&w=1`, '_blank')
+}
+
+// URL 地址列的跳转图标：记录操作日志后打开
+// （批量替换弹窗预览里的 URL 点击不记日志，仍走上面的纯打开 handleOpenUrl）
+function handleOpenUrlWithLog(url) {
+  if (!url) return
+  createOperationLog({
+    module: 'ef-lander',
+    operation: 'open_url',
+    description: `链接: ${url}`,
+    details: { url: url }
+  }).catch(err => console.error('记录日志失败:', err))
+  handleOpenUrl(url)
 }
 
 // 列表加载后，按当前页 lander id 批量取已缓存的截图，合并到行上
@@ -384,6 +398,18 @@ async function scrollToTableTop() {
 
 async function handleSearch() {
   pagination.page = 1
+
+  // 搜索记录操作日志（关键词为空 = 查全部，不记录；记录失败静默，不影响搜索）
+  const keyword = filters.keyword.trim()
+  if (keyword) {
+    createOperationLog({
+      module: 'ef-lander',
+      operation: 'search',
+      description: `关键词: "${keyword}"`,
+      details: { keyword }
+    }).catch(err => console.error('记录日志失败:', err))
+  }
+
   await loadData()
   await scrollToTableTop()
 }
