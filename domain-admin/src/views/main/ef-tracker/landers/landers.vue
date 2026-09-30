@@ -92,21 +92,13 @@
                   class="shot-img"
                 />
                 <div v-else class="shot-empty">
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    :loading="!!shotLoading[row.id]"
-                    @click="handleScreenshot(row)"
-                  >
-                    {{ row.screenshot_status === 'failed' ? '重试截图' : '截图' }}
-                  </el-button>
+                  <span class="shot-empty-text">暂无截图</span>
                 </div>
+                <!-- 唯一的截图入口：悬停时在预览图/暂无截图占位右上角出现的上传图标（与 clickflare 落地页列表一致） -->
                 <button
-                  v-if="getImageUrl(row)"
                   class="shot-upload-btn"
                   :disabled="!!uploadLoading[row.id]"
-                  :title="uploadLoading[row.id] ? '上传中...' : '手动上传截图'"
+                  :title="uploadLoading[row.id] ? '上传中...' : '上传截图'"
                   @click.stop="triggerUpload(row)"
                 >
                   <svg v-if="!uploadLoading[row.id]" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
@@ -203,7 +195,7 @@ import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Setting, Edit } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
-import { getLanders, getEfLanderScreenshots, triggerEfLanderScreenshot, uploadEfLanderScreenshot, replaceLanderUrl } from '@/services/main/ef-tracker'
+import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot, replaceLanderUrl } from '@/services/main/ef-tracker'
 import { BASE_URL } from '@/services/request/config'
 import useLoginStore from '@/stores/login/login'
 
@@ -229,9 +221,6 @@ const TZ_PLUS_8 = 8
 const filters = reactive({
   keyword: ''
 })
-
-// 截图按钮的 per-row loading 状态：{ [lander_id]: true/false }
-const shotLoading = reactive({})
 
 // 上传按钮的 per-row loading 状态
 const uploadLoading = reactive({})
@@ -316,32 +305,6 @@ async function fetchScreenshots() {
     })
   } catch (e) {
     // 取截图失败不阻塞列表展示
-  }
-}
-
-// 手动触发单行截图（成功后原地刷新预览图）
-async function handleScreenshot(row) {
-  if (!row?.url) {
-    ElMessage.warning('该落地页没有 url，无法截图')
-    return
-  }
-  shotLoading[row.id] = true
-  try {
-    const res = await triggerEfLanderScreenshot(row.id, row.url)
-    if (res?.code === 0 && res.data?.screenshot_url) {
-      row.screenshot_url = res.data.screenshot_url
-      row.screenshot_status = 'success'
-      if (res.data.preview_url) row.preview_url = res.data.preview_url
-      ElMessage.success('截图成功')
-    } else {
-      row.screenshot_status = 'failed'
-      ElMessage.error(res?.message || '截图失败')
-    }
-  } catch (error) {
-    row.screenshot_status = 'failed'
-    ElMessage.error('截图失败: ' + (error?.message || '网络错误'))
-  } finally {
-    shotLoading[row.id] = false
   }
 }
 
@@ -824,6 +787,11 @@ async function handleReplace() {
   background: #f8f9fa;
   border-radius: 4px;
   border: 1px solid #e8eaed;
+
+  .shot-empty-text {
+    color: #9aa0a6;
+    font-size: 12px;
+  }
 }
 
 .shot-upload-btn {
