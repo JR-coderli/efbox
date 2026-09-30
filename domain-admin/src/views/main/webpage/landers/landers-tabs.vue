@@ -1,9 +1,9 @@
 <template>
   <div class="tabs-page">
-    <!-- 系统切换 tab 不单独占一行：通过 #tabs 插槽嵌进各面板自己的搜索栏行里
-         （搜索输入框 | tab 胶囊 | 工具按钮），窄屏跟随搜索栏 flex-wrap 换行，永不重叠。
-         两个面板都常驻时插槽内容渲染两份，但绑定的是同一个 activeTab，状态天然同步。
-         页面入口由「网页管理 > landers列表」菜单项控制，进到页面后两个 Tab 人人都可用：
+    <!-- 系统切换按钮不单独占一行：通过 #tabs 插槽嵌进各面板自己的搜索栏行里
+         （搜索输入框 | 切换按钮 | 工具按钮）。每个面板只显示一个「去往对方系统」的
+         带箭头按钮，不显示自身（人在本系统，自身按钮无意义）。
+         页面入口由「网页管理 > landers列表」菜单项控制，进到页面后两侧人人可切：
          有落地页列表菜单权限的角色自动获得 eftracker 落地页查看入口（各自按钮权限仍按权限码独立控制） -->
     <!-- 两个面板分属各自文件：懒挂载（首次切到才渲染，onMounted 才发请求）
          + v-show 保活（切走不销毁，切回保留筛选/分页状态、不重复请求） -->
@@ -11,15 +11,10 @@
       <clickflare-panel>
         <template #tabs>
           <div class="tab-bar">
-            <div
-              v-for="tab in TABS"
-              :key="tab.key"
-              class="tab-item"
-              :class="{ 'is-active': activeTab === tab.key }"
-              @click="switchTab(tab.key)"
-            >
-              <img class="tab-icon" :src="tab.icon" :alt="tab.label" />
-              <span class="tab-label">{{ tab.label }}</span>
+            <div class="tab-item" title="切换到 eftracker 落地页" @click="switchTab('eftracker')">
+              <img class="tab-icon" :src="eftrackerIcon" alt="eftracker" />
+              <span class="tab-label">eftracker</span>
+              <el-icon class="tab-arrow"><ArrowRight /></el-icon>
             </div>
           </div>
         </template>
@@ -29,15 +24,10 @@
       <eftracker-panel>
         <template #tabs>
           <div class="tab-bar">
-            <div
-              v-for="tab in TABS"
-              :key="tab.key"
-              class="tab-item"
-              :class="{ 'is-active': activeTab === tab.key }"
-              @click="switchTab(tab.key)"
-            >
-              <img class="tab-icon" :src="tab.icon" :alt="tab.label" />
-              <span class="tab-label">{{ tab.label }}</span>
+            <div class="tab-item" title="切换到 clickflare 落地页" @click="switchTab('clickflare')">
+              <el-icon class="tab-arrow"><ArrowLeft /></el-icon>
+              <img class="tab-icon" :src="clickflareIcon" alt="clickflare" />
+              <span class="tab-label">clickflare</span>
             </div>
           </div>
         </template>
@@ -49,6 +39,7 @@
 <script setup>
 import { ref, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { localCache } from '@/utils/cache'
 import ClickflarePanel from './landers.vue'
 import EftrackerPanel from '@/views/main/ef-tracker/landers/landers.vue'
@@ -60,13 +51,8 @@ const eftrackerIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/s
 const route = useRoute()
 const router = useRouter()
 
-// Tab 定义：key 用于 ?tab= 参数
-const TABS = [
-  { key: 'clickflare', label: 'clickflare', icon: clickflareIcon },
-  { key: 'eftracker', label: 'eftracker', icon: eftrackerIcon }
-]
-
-const TAB_KEYS = TABS.map((t) => t.key)
+// Tab key 定义：用于 ?tab= 参数与 localStorage 记忆
+const TAB_KEYS = ['clickflare', 'eftracker']
 
 // 记住用户最后一次所在的 Tab（localStorage，跨会话保留）：
 // 再次从菜单进入落地页列表且 URL 未指定 ?tab= 时，直接回到上次离开的 Tab
@@ -146,19 +132,17 @@ watch(
     border-radius: 4px;
   }
 
-  &:hover {
-    background-color: #f8f9fa;
-    color: #202124;
+  .tab-arrow {
+    font-size: 14px;
   }
 
-  &.is-active {
-    border-color: #1a73e8;
+  &:hover {
+    background-color: #f8f9fa;
     color: #1a73e8;
-    background-color: #fff;
+    border-color: #1a73e8;
 
-    &:hover {
-      background-color: #f8f9fa;
-      color: #1a73e8;
+    .tab-arrow {
+      transform: translateX(1px);
     }
   }
 }
