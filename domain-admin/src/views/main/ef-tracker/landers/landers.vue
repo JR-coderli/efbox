@@ -110,7 +110,7 @@
                 </button>
               </div>
             </template>
-            <!-- URL地址 -->
+            <!-- URL 地址 -->
             <template v-else-if="col.key === 'url'" #default="{ row }">
               <span v-if="row.url" class="url-link">
                 <span class="url-text">{{ row.url }}</span>
@@ -229,8 +229,8 @@ const uploadLoading = reactive({})
 // 截图为必选（required）不可关闭
 const defaultColumns = [
   { key: 'screenshot', label: '预览图', width: 200, align: 'center', visible: true, required: true },
-  { key: 'name', label: 'Lander名称', prop: 'name', minWidth: 160, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
-  { key: 'url', label: 'URL地址', prop: 'url', minWidth: 280, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
+  { key: 'name', label: 'Lander 名称', prop: 'name', minWidth: 160, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
+  { key: 'url', label: 'URL 地址', prop: 'url', minWidth: 280, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
   { key: 'created_at', label: 'EF 创建时间', prop: 'created_at', width: 200, align: 'center', visible: true }
 ]
 const columns = ref(defaultColumns.map((c) => ({ ...c })))
