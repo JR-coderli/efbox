@@ -120,7 +120,7 @@
                 </button>
               </div>
             </template>
-            <!-- 落地页url -->
+            <!-- URL地址 -->
             <template v-else-if="col.key === 'url'" #default="{ row }">
               <span v-if="row.url" class="url-link">
                 <span class="url-text">{{ row.url }}</span>
@@ -151,6 +151,7 @@
           layout="total, sizes, prev, pager, next"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
+          class="google-pagination"
         />
       </div>
     </div>
@@ -211,7 +212,7 @@ const total = ref(0)
 
 const pagination = reactive({
   page: 1,
-  pageSize: 10
+  pageSize: 50
 })
 
 // 时区固定 +8（接口按 tz 返回带偏移的 ISO 串；页面不再提供时区选择）
@@ -231,8 +232,8 @@ const uploadLoading = reactive({})
 // 截图为必选（required）不可关闭
 const defaultColumns = [
   { key: 'screenshot', label: '预览图', width: 200, align: 'center', visible: true, required: true },
-  { key: 'name', label: '落地页名称', prop: 'name', minWidth: 160, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
-  { key: 'url', label: '落地页url', prop: 'url', minWidth: 280, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
+  { key: 'name', label: 'Lander名称', prop: 'name', minWidth: 160, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
+  { key: 'url', label: 'URL地址', prop: 'url', minWidth: 280, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
   { key: 'created_at', label: '创建时间', prop: 'created_at', width: 200, visible: true }
 ]
 const columns = ref(defaultColumns.map((c) => ({ ...c })))
@@ -522,7 +523,7 @@ async function handleReplace() {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  // padding: 12px;
 
   .search-bar {
     padding: 12px;
@@ -695,6 +696,65 @@ async function handleReplace() {
           padding: 0 10px;
         }
       }
+    }
+  }
+}
+
+/* 分页按钮样式（与 网页管理 > 落地页列表 一致） */
+:deep(.google-pagination) {
+  flex-wrap: wrap;
+
+  .el-pagination__total {
+    color: #5f6368;
+    font-size: 13px;
+  }
+
+  .el-pagination__sizes {
+    .el-select {
+      .el-input__wrapper {
+        border-radius: 4px;
+        border: 1px solid #dadce0;
+
+        &:hover {
+          border-color: #1a73e8;
+        }
+      }
+    }
+  }
+
+  .btn-prev,
+  .btn-next {
+    border-radius: 4px;
+    border: 1px solid #dadce0;
+    color: #5f6368;
+    background: #fff;
+
+    &:hover:not(:disabled) {
+      background-color: #f1f3f4;
+      color: #1a73e8;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+
+  .el-pager li {
+    border-radius: 4px;
+    margin: 0 2px;
+    color: #5f6368;
+    font-weight: 500;
+    min-width: 32px;
+    height: 32px;
+    line-height: 32px;
+
+    &:hover {
+      background-color: #f1f3f4;
+    }
+
+    &.is-active {
+      background-color: #1a73e8;
+      color: #fff;
     }
   }
 }
