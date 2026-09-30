@@ -1,6 +1,6 @@
 <template>
   <div class="tabs-page">
-    <!-- 顶部 Tab 菜单栏（Material 风格，与 ef-归因系统「媒体点击」页一致）。
+    <!-- 顶部 Tab 菜单栏（落地页自己的风格：白卡片 + 圆角胶囊按钮 + 系统图标，区别于日志页的下划线式）。
          页面入口由「网页管理 > landers列表」菜单项控制，进到页面后两个 Tab 人人都可用：
          有落地页列表菜单权限的角色自动获得 eftracker 落地页查看入口（各自按钮权限仍按权限码独立控制） -->
     <div class="tab-bar">
@@ -10,7 +10,10 @@
         class="tab-item"
         :class="{ 'is-active': activeTab === tab.key }"
         @click="switchTab(tab.key)"
-      >{{ tab.label }}</div>
+      >
+        <img class="tab-icon" :src="tab.icon" :alt="tab.label" />
+        <span class="tab-label">{{ tab.label }}</span>
+      </div>
     </div>
 
     <!-- 两个面板分属各自文件：懒挂载（首次切到才渲染，onMounted 才发请求）
@@ -31,14 +34,18 @@ import { useRoute, useRouter } from 'vue-router'
 import { localCache } from '@/utils/cache'
 import ClickflarePanel from './landers.vue'
 import EftrackerPanel from '@/views/main/ef-tracker/landers/landers.vue'
+import clickflareIcon from '@/assets/img/clickflare-icon.png'
+
+// eftracker 图标：内联 SVG data URI（深色圆角方块 + EF 字样，与 clickflare 图标同规格）
+const eftrackerIcon = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%231e293b' rx='8'/%3E%3Ctext x='32' y='44' font-family='Arial, sans-serif' font-size='28' font-weight='bold' fill='white' text-anchor='middle'%3EEF%3C/text%3E%3C/svg%3E"
 
 const route = useRoute()
 const router = useRouter()
 
 // Tab 定义：key 用于 ?tab= 参数
 const TABS = [
-  { key: 'clickflare', label: 'clickflare落地页' },
-  { key: 'eftracker', label: 'eftracker落地页' }
+  { key: 'clickflare', label: 'clickflare落地页', icon: clickflareIcon },
+  { key: 'eftracker', label: 'eftracker落地页', icon: eftrackerIcon }
 ]
 
 const TAB_KEYS = TABS.map((t) => t.key)
@@ -93,42 +100,50 @@ watch(
 
 .tab-bar {
   display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
   margin: 8px 8px 0;
+  padding: 8px;
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .tab-item {
-  position: relative;
-  flex: 1;
-  height: 48px;
-  line-height: 48px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 20px;
   font-size: 14px;
-  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-weight: 500;
   color: #5f6368;
   cursor: pointer;
   user-select: none;
-  border-bottom: 3px solid transparent;
-  transition: color 0.2s;
+  transition: background-color 0.2s, color 0.2s, box-shadow 0.2s;
 
-  &:not(:last-child) {
-    border-right: 1px solid #e8eaed;
+  .tab-icon {
+    display: block;
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
   }
 
   &:hover {
+    background-color: #f1f3f4;
     color: #202124;
   }
 
   &.is-active {
-    color: #1a73e8;
-    font-weight: 500;
-    border-bottom-color: #1a73e8;
+    background-color: #1a73e8;
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(26, 115, 232, 0.4);
 
     &:hover {
-      color: #1a73e8;
+      background-color: #1765cc;
+      color: #fff;
     }
   }
 }
