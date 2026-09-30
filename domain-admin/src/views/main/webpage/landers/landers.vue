@@ -919,12 +919,12 @@
           </el-table-column>
           <el-table-column label="原始 URL" min-width="250" show-overflow-tooltip>
             <template #default="{ row }">
-              <span class="preview-url-old">{{ row.oldUrl }}</span>
+              <span class="preview-url-old" @click="handleOpenPreviewUrl(row.oldUrl)">{{ row.oldUrl }}</span>
             </template>
           </el-table-column>
           <el-table-column label="替换后 URL" min-width="250" show-overflow-tooltip>
             <template #default="{ row }">
-              <span class="preview-url-new">{{ row.newUrl }}</span>
+              <span class="preview-url-new" @click="handleOpenPreviewUrl(row.newUrl)">{{ row.newUrl }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -2766,6 +2766,18 @@ const handleOpenUrl = (url) => {
   }).catch(err => console.error('记录日志失败:', err))
 
 
+  openUrlWithGoParam(url)
+}
+
+
+// 批量修改弹窗预览表格的 URL 点击打开：仅预览用
+const handleOpenPreviewUrl = (url) => {
+  openUrlWithGoParam(url)
+}
+
+
+// 带 go=1 签名参数在新窗口打开 URL（预览参数只用于打开，不会写入任何数据）
+const openUrlWithGoParam = (url) => {
   if (!url) return ''
   const t = Math.floor(Date.now() / 10000);
   const n = Array.from(crypto.getRandomValues(new Uint8Array(4)))
@@ -4714,12 +4726,22 @@ body.landers-fullscreen-mode {
       color: #c5221f;
       word-break: break-all;
       font-size: 12px;
+      cursor: pointer;
+
+      &:hover {
+        text-decoration: underline;
+      }
     }
 
     .preview-url-new {
       color: #137333;
       word-break: break-all;
       font-size: 12px;
+      cursor: pointer;
+
+      &:hover {
+        text-decoration: underline;
+      }
     }
   }
 }
