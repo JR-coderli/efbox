@@ -122,7 +122,7 @@
               </span>
               <span v-else>-</span>
             </template>
-            <!-- 创建时间 -->
+            <!-- EF 创建时间 -->
             <template v-else-if="col.key === 'created_at'" #default="{ row }">
               <span class="date-text">{{ fmtTime(row.created_at) }}</span>
             </template>
@@ -231,7 +231,7 @@ const defaultColumns = [
   { key: 'screenshot', label: '预览图', width: 200, align: 'center', visible: true, required: true },
   { key: 'name', label: 'Lander名称', prop: 'name', minWidth: 160, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
   { key: 'url', label: 'URL地址', prop: 'url', minWidth: 280, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
-  { key: 'created_at', label: '创建时间', prop: 'created_at', width: 200, visible: true }
+  { key: 'created_at', label: 'EF 创建时间', prop: 'created_at', width: 200, align: 'center', visible: true }
 ]
 const columns = ref(defaultColumns.map((c) => ({ ...c })))
 const draggingIndex = ref(-1)
