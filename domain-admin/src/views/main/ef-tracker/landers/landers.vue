@@ -19,18 +19,6 @@
               </template>
             </el-input>
           </div>
-          <div class="search-item">
-            <label>创建日期</label>
-            <el-date-picker
-              v-model="dateRange"
-              type="daterange"
-              start-placeholder="开始日期"
-              end-placeholder="结束日期"
-              clearable
-              class="search-input"
-              style="width: 240px"
-            />
-          </div>
           <div class="search-actions">
             <el-button @click="handleSearch">搜索</el-button>
             <el-button @click="handleReset">重置</el-button>
@@ -144,21 +132,9 @@
               </span>
               <span v-else>-</span>
             </template>
-            <!-- type_id -->
-            <template v-else-if="col.key === 'type_id'" #default="{ row }">
-              <span>{{ row.type_id == null ? '-' : row.type_id }}</span>
-            </template>
-            <!-- oid -->
-            <template v-else-if="col.key === 'oid'" #default="{ row }">
-              <span>{{ row.oid == null ? '-' : row.oid }}</span>
-            </template>
             <!-- 创建时间 -->
             <template v-else-if="col.key === 'created_at'" #default="{ row }">
               <span class="date-text">{{ fmtTime(row.created_at) }}</span>
-            </template>
-            <!-- 更新时间 -->
-            <template v-else-if="col.key === 'updated_at'" #default="{ row }">
-              <span class="date-text">{{ fmtTime(row.updated_at) }}</span>
             </template>
           </el-table-column>
         </template>
@@ -245,8 +221,6 @@ const filters = reactive({
   keyword: ''
 })
 
-const dateRange = ref([])
-
 // 截图按钮的 per-row loading 状态：{ [lander_id]: true/false }
 const shotLoading = reactive({})
 
@@ -254,16 +228,12 @@ const shotLoading = reactive({})
 const uploadLoading = reactive({})
 
 // ===== 列设置（参考 网页管理 > 落地页列表：可勾选显隐 + 拖拽排序 + 重置） =====
-// type_id / oid / 更新时间 默认隐藏；截图为必选（required）不可关闭
+// 截图为必选（required）不可关闭
 const defaultColumns = [
   { key: 'screenshot', label: '预览图', width: 200, align: 'center', visible: true, required: true },
-  { key: 'id', label: 'ID', prop: 'id', width: 80, align: 'center', visible: false },
   { key: 'name', label: '落地页名称', prop: 'name', minWidth: 160, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
   { key: 'url', label: '落地页url', prop: 'url', minWidth: 280, align: 'center', showOverflowTooltip: false, className: 'cell-pad', visible: true },
-  { key: 'type_id', label: 'type_id', prop: 'type_id', width: 90, align: 'center', visible: false },
-  { key: 'oid', label: 'oid', prop: 'oid', width: 90, align: 'center', visible: false },
-  { key: 'created_at', label: '创建时间', prop: 'created_at', width: 200, visible: true },
-  { key: 'updated_at', label: '更新时间', prop: 'updated_at', width: 200, visible: false }
+  { key: 'created_at', label: '创建时间', prop: 'created_at', width: 200, visible: true }
 ]
 const columns = ref(defaultColumns.map((c) => ({ ...c })))
 const draggingIndex = ref(-1)
@@ -408,16 +378,6 @@ function fmtTime(s) {
   return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, '').replace(/Z$/, '')
 }
 
-function rangeToParams(range) {
-  if (!range || range.length !== 2) return {}
-  const [d1, d2] = range
-  const pad = (n) => String(n).padStart(2, '0')
-  const fmt = (dt) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} 00:00:00`
-  const end = new Date(d2.getTime())
-  end.setDate(end.getDate() + 1)
-  return { start: fmt(d1), end: fmt(end) }
-}
-
 function buildParams() {
   const p = {
     page: pagination.page,
@@ -425,7 +385,6 @@ function buildParams() {
     tz: TZ_PLUS_8
   }
   if (filters.keyword) p.keyword = filters.keyword
-  Object.assign(p, rangeToParams(dateRange.value))
   return p
 }
 
@@ -450,7 +409,6 @@ function handleSearch() {
 
 function handleReset() {
   filters.keyword = ''
-  dateRange.value = []
   pagination.page = 1
   loadData()
 }
