@@ -18,7 +18,7 @@
         </div>
         <div class="header-actions">
           <!-- 用途筛选按钮 -->
-          <el-dropdown trigger="click" @command="handlePurposeFilter">
+          <el-dropdown trigger="click" popper-class="purpose-filter-dropdown" @command="handlePurposeFilter">
             <el-button class="filter-btn" :class="{ active: selectedPurpose }">
               <svg viewBox="0 0 24 24">
                 <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v7H6V9zm9.5 3l-2.5 3h-4l-2.5-3h9z"/>
@@ -178,6 +178,10 @@ const props = defineProps({
     default: () => ({
       levelText: '修改等级'
     })
+  },
+  purposeLibrary: { // 用途库全量列表（来自 domain_purposes 表，不受当前分页影响）
+    type: Array,
+    default: () => []
   }
 })
 
@@ -229,7 +233,15 @@ const rawData = computed(() => {
 const purposeOptions = computed(() => {
   const purposes = new Set()
 
+  // 用途库全量为主，保证不在当前分页中的用途也能筛出来
+  props.purposeLibrary.forEach(item => {
+    const name = typeof item === 'string' ? item : item?.name
+    if (name) {
+      purposes.add(name)
+    }
+  })
 
+  // 兜底合并当前数据中出现过的用途（防止历史数据的用途未录入用途库）
   if (allDataForFilter.value.length > 0) {
     allDataForFilter.value.forEach(item => {
       if (item.purpose) {
@@ -237,7 +249,6 @@ const purposeOptions = computed(() => {
       }
     })
   } else {
-
     rawData.value.forEach(item => {
       if (item.purpose) {
         purposes.add(item.purpose)
@@ -866,5 +877,13 @@ defineExpose({
   height: 12px;
   border-radius: 50%;
   display: inline-block;
+}
+</style>
+
+<style lang="less">
+/* 用途筛选下拉：限制最大高度，超出滚动（popper 传送到 body，需放全局） */
+.purpose-filter-dropdown {
+  max-height: 300px;
+  overflow-y: auto;
 }
 </style>
