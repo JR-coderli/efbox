@@ -116,6 +116,13 @@ class CusAttachmentsService {
       const value = filters[key]
       if (value === undefined || value === null) continue
 
+      // 客户简称/全称联合模糊搜索（发票弹窗查找客户用）
+      if (key === 'name_keyword') {
+        whereClauses.push('(full_name LIKE ? OR short_name LIKE ?)')
+        params.push(`%${value}%`, `%${value}%`)
+        continue
+      }
+
       if (Array.isArray(value) && value.length === 2) {
         whereClauses.push(`${key} BETWEEN ? AND ?`)
         params.push(value[0], value[1])

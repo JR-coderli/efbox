@@ -222,7 +222,14 @@
           @blur="handleModalBlur"
           :teleported="false"
           style="width: 100%"
-        />
+        >
+          <template #default="{ item }">
+            <div class="customer-option">
+              <span class="customer-option__full">{{ item.full_name }}</span>
+              <span v-if="item.short_name" class="customer-option__short">{{ item.short_name }}</span>
+            </div>
+          </template>
+        </el-autocomplete>
       </template>
 
       <!-- 选择开票主体 -->
@@ -405,7 +412,7 @@ const queryModalSearchAsync = (queryString, cb) => {
 
   const queryInfo = {
     filters: {
-      full_name: queryString
+      name_keyword: queryString // 后端对 full_name / short_name 做联合模糊搜索
     },
     options: {
       page: 1,
@@ -418,7 +425,7 @@ const queryModalSearchAsync = (queryString, cb) => {
       cb([])
       return
     }
-    res.forEach(item => { item.value = item.full_name }) // el-autocomplete要求返回的数据中必须有value属性, 用于显示在下拉列表中的文本内容
+    res.forEach(item => { item.value = item.full_name }) // el-autocomplete要求返回的数据中必须有value属性（下拉展示样式见 #default 插槽）
 
 
 
@@ -1143,6 +1150,31 @@ onUnmounted(() => {
 
 :deep(.el-autocomplete-suggestion__wrap) {
   max-height: 264px !important;
+}
+
+/* 客户下拉项：全称加粗居左，简称灰色居右 */
+.customer-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  overflow: hidden;
+
+  &__full {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+  }
+
+  &__short {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
 }
 </style>
 
