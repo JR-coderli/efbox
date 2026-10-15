@@ -56,12 +56,22 @@ const useSystemStore = defineStore('system', {
       short_name: "",
       payment_status: undefined,
     },
+
+    // 各页面最近一次 'list' 查询条件（pageName → queryInfo）
+    // 编辑成功后 store 会以空条件刷新列表，此时复用该页最近一次条件，
+    // 避免与组件带筛选的刷新形成竞态（空条件响应后到会覆盖筛选结果）
+    lastListQueryInfoMap: {},
   }),
   actions: {
     
 
 
     async postPageListAction(pageName, queryInfo, listType = "list") {
+      // 记录 'list' 查询条件，供编辑成功后的无参刷新复用
+      if (listType === 'list' && queryInfo) {
+        this.lastListQueryInfoMap[pageName] = queryInfo
+      }
+
       const pageListResult = await postPageListData(pageName, queryInfo, listType)
 
       // 后端错误响应（如 token 过期 {code:-1006}）没有 data 字段：保持列表为空并透传错误码，不抛 TypeError
@@ -223,8 +233,11 @@ const useSystemStore = defineStore('system', {
         }
         this.postPageListAction(pageName, obj, list)
       } else {
-
-        this.postPageListAction(pageName, null, list || 'list')
+        // 编辑成功后的默认刷新：复用该页最近一次查询条件，保留筛选与分页
+        // （空条件刷新会与组件带筛选的刷新竞态，空条件响应后到时会覆盖筛选结果）
+        const listType = list || 'list'
+        const lastQuery = listType === 'list' ? this.lastListQueryInfoMap[pageName] : null
+        this.postPageListAction(pageName, lastQuery || null, listType)
       }
 
 
