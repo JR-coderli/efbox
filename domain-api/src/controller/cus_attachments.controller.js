@@ -295,7 +295,19 @@ class CusAttachmentsController {
 
   async sendEmail(ctx, next) {
     const { filename, id, emails, invoice_entity_name } = ctx.request.body
-    const { transporter, senderTitle, user, to, bcc } = getMailConfig(invoice_entity_name)
+
+    // 以服务端数据为准：按发票记录关联的开票主体取主体名称与通知邮箱（前端传值仅作兜底）
+    const entity = await customerService.getEntityByAttachmentId(id)
+    const entityName = entity?.name || invoice_entity_name || ''
+
+    const mailConfig = getMailConfig(entityName)
+    if (!mailConfig) {
+      return ctx.body = {
+        code: -1,
+        message: `开票主体「${entityName || '未设置'}」未配置发件邮箱，请联系管理员处理`
+      }
+    }
+    const { transporter, senderTitle, user, bcc } = mailConfig
     const companyName = senderTitle.replace(' Invoice', '')
 
 
@@ -304,6 +316,12 @@ class CusAttachmentsController {
 
     const toEmails = emails.map(item => `${item.email}`)
 
+
+    // 通知邮箱（核查邮箱）：从开票主体配置读取，多个用逗号分隔，替代原先写死的环境变量 MAIL_TO
+    const notifyEmails = String(entity?.notify_email || '')
+      .split(/[,，]/)
+      .map(s => s.trim())
+      .filter(Boolean)
 
     const mailOptions = {
       from: `"${senderTitle}" <${user}>`,
@@ -317,7 +335,7 @@ class CusAttachmentsController {
       `,
       attachments: [ // 发送附件
         {
-          filename: `${filename}.pdf`, // 邮件中显示的文件名
+          filename: filename.replace(/\.pdf$/i, '') + '.pdf', // 邮件中显示的文件名（filename 本身已带 .pdf，避免出现双后缀）
           path: path.resolve(__dirname, `../../output/${filename}`), // 本地路径
           contentType: 'application/pdf' // MIME 类型
         }
@@ -328,9 +346,9 @@ class CusAttachmentsController {
     const ccEmails = []
     const bccEmails = []
 
-    if (to) {
-      ccEmails.push(to)
-      console.log('添加 MAIL_TO 到抄送(CC):', to)
+    if (notifyEmails.length > 0) {
+      ccEmails.push(...notifyEmails)
+      console.log('添加开票主体通知邮箱到抄送(CC):', notifyEmails)
     }
     if (bcc) {
       bccEmails.push(bcc)
@@ -359,15 +377,20 @@ class CusAttachmentsController {
         'send',
         `发送发票邮件: ${filename}`,
         null,
-        { filename, recipients: recipientEmails }
+        { filename, recipients: recipientEmails, notify_emails: notifyEmails }
       )
     } catch (err) {
       console.error('邮件发送失败:', err)
+      return ctx.body = {
+        code: -1,
+        message: '邮件发送失败，请稍后重试'
+      }
     }
 
 
 
     ctx.body = {
+      code: 0,
       message: "邮件已发送",
       type: 'success'
     }

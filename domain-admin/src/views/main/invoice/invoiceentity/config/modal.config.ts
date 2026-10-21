@@ -68,6 +68,12 @@ const modalConfig = {
       label: '模板路径',
       prop: 'template_path',
       placeholder: '模板文件名, 可留空'
+    },
+    {
+      type: 'input',
+      label: '通知邮箱',
+      prop: 'notify_email',
+      placeholder: '发送发票邮件时抄送的通知邮箱, 多个用逗号分隔'
     }
   ]
 }

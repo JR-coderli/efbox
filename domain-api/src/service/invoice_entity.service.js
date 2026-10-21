@@ -35,7 +35,8 @@ class InvoiceEntityService {
           'bank_address',
           'status',
           'is_top',
-          'template_path'
+          'template_path',
+          'notify_email'
         ]
       }
     )

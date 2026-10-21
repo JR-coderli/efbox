@@ -104,6 +104,20 @@ class CusAttachmentsService {
   }
 
 
+  // 按发票记录 id 查关联的开票主体（发邮件时以服务端数据为准：取主体名称与通知邮箱）
+  async getEntityByAttachmentId(attachmentId) {
+    const sql = `
+      SELECT ie.*
+      FROM customer_attachments AS ca
+      LEFT JOIN invoice_entity AS ie ON ca.invoice_entity_id = ie.id
+      WHERE ca.id = ?
+      LIMIT 1
+    `
+    const [rows] = await connection.execute(sql, [attachmentId])
+    return rows[0] || null
+  }
+
+
   async list(cusAttachmentsInfo) {
     const { filters = {}, options = {} } = cusAttachmentsInfo
     const { page = 1, pageSize = 20, orderBy = 'id DESC' } = options
@@ -241,7 +255,8 @@ class CusAttachmentsService {
         c.full_name,
         c.short_name,
         c.company_address,
-        ie.name AS invoice_entity_name
+        ie.name AS invoice_entity_name,
+        ie.notify_email AS invoice_entity_notify_email
       FROM customer_attachments AS ca
       LEFT JOIN customers AS c ON ca.customer_id = c.id
       LEFT JOIN cms_user AS u ON ca.created_by = u.id
@@ -415,6 +430,7 @@ class CusAttachmentsService {
           receivable_date: item.receivable_date,
           creator_name: item.creator_name || '-',
           invoice_entity_name: item.invoice_entity_name || '-',
+          invoice_entity_notify_email: item.invoice_entity_notify_email || '',
 
           customer: {
             id: item.customer_id,

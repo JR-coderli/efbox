@@ -68,6 +68,12 @@ const contentConfig = {
       showOverflowTooltip: true
     },
     {
+      label: '通知邮箱',
+      prop: 'notify_email',
+      width: '180',
+      showOverflowTooltip: true
+    },
+    {
       type: 'timer',
       label: '创建时间',
       prop: 'createAt',

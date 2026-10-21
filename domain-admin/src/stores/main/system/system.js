@@ -274,15 +274,18 @@ const useSystemStore = defineStore('system', {
 
       const sendResult = await sendEmail(queryInfo)
 
-
-
-
-
-
-
+      // 后端返回 code:-1（如主体未配置发件邮箱/发送失败）时提示错误，不再误报"已发送"
+      if (!sendResult || (sendResult.code !== undefined && sendResult.code !== 0)) {
+        ElNotification({
+          message: sendResult?.message || '邮件发送失败',
+          type: 'error'
+        })
+        return
+      }
 
       ElNotification({
         message: '邮件已发送',
+        type: 'success'
       })
 
     },

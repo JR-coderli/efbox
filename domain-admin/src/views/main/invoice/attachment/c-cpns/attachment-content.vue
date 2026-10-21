@@ -676,7 +676,9 @@
                 <span v-for="value in clickedRowData.customer.emails.filter(e => e.type === 'send')" :key="value.id" class="email-chip">
                   {{ value.email }}
                 </span>
-                <span class="email-chip secondary">netapop@outlook.com</span>
+                <span v-for="mail in notifyEmails" :key="mail" class="email-chip secondary">
+                  {{ mail }}
+                </span>
               </div>
             </div>
           </div>
@@ -985,6 +987,12 @@ const invoiceLoading = ref(false) // 生成发票的加载动画
 const dataLoading = ref(false) // 数据加载的加载动画
 const dialogVisible = ref(false) // 显示邮件发送确认框?
 const clickedRowData = ref(null) // 当前点击发送的邮件的那一行表格数据
+
+// 核查邮箱（随该行开票主体配置走，多个用逗号分隔；后端发送时同样按主体 notify_email 抄送）
+const notifyEmails = computed(() => {
+  const raw = clickedRowData.value?.invoice_entity_notify_email || ''
+  return raw.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+})
 const sending = ref(false) // 邮件发送中状态
 
 
