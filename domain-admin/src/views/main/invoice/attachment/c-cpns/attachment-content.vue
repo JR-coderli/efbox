@@ -651,8 +651,46 @@
       class="google-style-dialog"
     >
       <div class="confirm-container">
-        <p class="helper-text">请在发送前核对以下账单及联系人信息</p>
-        
+        <p class="helper-text">
+          <span>请在发送前核对以下账单及联系人信息</span>
+          <!-- 邮件内容预览：悬浮/点击眼睛图标，浮层模拟对方收到的邮件效果，字段与后端 sendEmail 生成逻辑一致 -->
+          <el-popover
+            placement="right-start"
+            :width="400"
+            trigger="hover"
+            :show-after="150"
+            popper-class="email-preview-popover"
+          >
+            <template #reference>
+              <span class="preview-trigger">
+                <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                预览邮件
+              </span>
+            </template>
+
+            <div class="email-preview-title">邮件预览</div>
+            <div v-if="!senderInfo" class="email-preview-warning">
+              开票主体「{{ clickedRowData.invoice_entity_name }}」未配置发件邮箱，发送时将被拒绝，请联系管理员处理
+            </div>
+            <div v-else class="email-preview">
+              <div class="email-preview-head">
+                <div class="ep-row"><span class="ep-label">发件人</span><span class="ep-value">{{ senderInfo.senderText }}</span></div>
+                <div class="ep-row"><span class="ep-label">收件人</span><span class="ep-value">{{ sendEmailText }}</span></div>
+                <div v-if="notifyEmails.length" class="ep-row"><span class="ep-label">抄送</span><span class="ep-value">{{ notifyEmails.join('；') }}</span></div>
+                <div class="ep-row"><span class="ep-label">主题</span><span class="ep-value ep-subject">{{ clickedRowData.filename }}</span></div>
+              </div>
+              <div class="email-preview-body">
+                <p>Hi team,</p>
+                <p class="ep-indent">Please check and receive the invoices from {{ mailCompanyName }}. Thank you.</p>
+              </div>
+              <div class="email-preview-attachment">
+                <svg viewBox="0 0 24 24"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 2.76 2.24 5 5 5s5-2.24 5-5V6h-1.5z"/></svg>
+                <span>{{ mailAttachmentName }}</span>
+              </div>
+            </div>
+          </el-popover>
+        </p>
+
         <div class="info-group">
           <div class="info-item">
             <label>客户名称</label>
@@ -683,7 +721,7 @@
             </div>
           </div>
 
-          <div class="info-item no-border">
+          <div class="info-item">
             <label>发票附件</label>
             <div class="content1">
               <a class="file-link" :href="clickedRowData.destination" target="_blank">
@@ -992,6 +1030,35 @@ const clickedRowData = ref(null) // 当前点击发送的邮件的那一行表�
 const notifyEmails = computed(() => {
   const raw = clickedRowData.value?.invoice_entity_notify_email || ''
   return raw.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+})
+
+// 发件配置预览（匹配规则与后端 domain-api/src/utils/email-transporter.js 保持一致，改后端时需同步这里）
+const senderInfo = computed(() => {
+  const entityName = (clickedRowData.value?.invoice_entity_name || '').toLowerCase().replace(/\s+/g, '')
+  if (entityName.startsWith('terra')) {
+    return { senderTitle: 'Terra Invoice', senderText: 'Terra Invoice <notice@mail.terra-ads.com>' }
+  }
+  if (entityName.startsWith('eflow')) {
+    return { senderTitle: 'Eflow Invoice', senderText: 'Eflow Invoice <notice@eflow-media.com>' }
+  }
+  return null // 未匹配到发件配置，后端发送时会拒绝
+})
+
+// 收件人文本（客户的发送邮箱）
+const sendEmailText = computed(() => {
+  const list = (clickedRowData.value?.customer?.emails || []).filter(e => e.type === 'send')
+  return list.map(e => e.email).join('；') || '-'
+})
+
+// 邮件正文里的公司名（后端由 senderTitle 去掉 " Invoice" 后大写，只可能是 TERRA / EFLOW）
+const mailCompanyName = computed(() => {
+  return (senderInfo.value?.senderTitle || '').replace(' Invoice', '').toUpperCase()
+})
+
+// 邮件里附件的显示名（与后端一致：归一化为单个 .pdf 后缀）
+const mailAttachmentName = computed(() => {
+  const name = clickedRowData.value?.filename || ''
+  return name.replace(/\.pdf$/i, '') + '.pdf'
 })
 const sending = ref(false) // 邮件发送中状态
 
@@ -2189,6 +2256,117 @@ defineExpose({
 .email-chip.secondary {
   background: #f1f3f4;
   color: #5f6368;
+}
+
+
+/* 邮件内容预览（悬浮浮层）：模拟邮件客户端的展示效果（发件人/收件人/抄送/主题/正文/附件） */
+.preview-trigger {
+  margin-left: auto; /* 推到 helper-text 行最右侧 */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #1a73e8;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.email-preview-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #5f6368;
+  margin-bottom: 8px;
+}
+
+.email-preview-warning {
+  font-size: 13px;
+  color: #c5221f;
+  background: #fce8e6;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.email-preview {
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.email-preview-head {
+  padding: 10px 14px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e8eaed;
+
+  .ep-row {
+    display: flex;
+    font-size: 12px;
+    line-height: 1.9;
+
+    .ep-label {
+      width: 44px;
+      color: #5f6368;
+      flex-shrink: 0;
+    }
+
+    .ep-value {
+      color: #202124;
+      word-break: break-all;
+    }
+
+    .ep-subject {
+      font-weight: 600;
+    }
+  }
+}
+
+.email-preview-body {
+  padding: 14px 16px;
+  background: #fff;
+  font-size: 13px;
+  color: #202124;
+  line-height: 1.7;
+
+  p {
+    margin: 0;
+  }
+
+  .ep-indent {
+    text-indent: 2em; /* 对应邮件正文里的两个全角空格缩进 */
+  }
+}
+
+.email-preview-attachment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid #e8eaed;
+  background: #f8f9fa;
+  font-size: 12px;
+  color: #3c4043;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    fill: #5f6368;
+    flex-shrink: 0;
+  }
+
+  span {
+    word-break: break-all;
+  }
 }
 
 
