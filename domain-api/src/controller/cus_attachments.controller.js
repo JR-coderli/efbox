@@ -308,7 +308,9 @@ class CusAttachmentsController {
       }
     }
     const { transporter, senderTitle, user, bcc } = mailConfig
-    const companyName = senderTitle.replace(' Invoice', '')
+    // 品牌名:开票主体配置了"公司标题"就用它(按填写原样显示),否则用默认(EFLOW/TERRA,大写)
+    const customTitle = String(entity?.company_title || '').trim()
+    const companyName = customTitle || senderTitle.replace(' Invoice', '')
 
 
     const recipientEmails = emails.map(e => e.email)
@@ -330,7 +332,7 @@ class CusAttachmentsController {
       html: `
         <div>
           Hi team,<br>
-          &emsp;&emsp;Please check and receive the invoices from ${companyName.toUpperCase()}. Thank you.
+          &emsp;&emsp;Please check and receive the invoices from ${customTitle ? companyName : companyName.toUpperCase()}. Thank you.
         </div>
       `,
       attachments: [ // 发送附件

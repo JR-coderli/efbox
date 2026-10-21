@@ -74,6 +74,12 @@ const contentConfig = {
       showOverflowTooltip: true
     },
     {
+      label: '公司标题',
+      prop: 'company_title',
+      width: '140',
+      showOverflowTooltip: true
+    },
+    {
       type: 'timer',
       label: '创建时间',
       prop: 'createAt',

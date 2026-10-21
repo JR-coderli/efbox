@@ -1050,8 +1050,11 @@ const sendEmailText = computed(() => {
   return list.map(e => e.email).join('；') || '-'
 })
 
-// 邮件正文里的公司名（后端由 senderTitle 去掉 " Invoice" 后大写，只可能是 TERRA / EFLOW）
+// 邮件正文里的公司名：主体配置了"公司标题"就用它（按填写原样显示），
+// 否则用默认品牌名大写（TERRA / EFLOW），与后端 sendEmail 逻辑一致
 const mailCompanyName = computed(() => {
+  const customTitle = String(clickedRowData.value?.invoice_entity_company_title || '').trim()
+  if (customTitle) return customTitle
   return (senderInfo.value?.senderTitle || '').replace(' Invoice', '').toUpperCase()
 })
 
