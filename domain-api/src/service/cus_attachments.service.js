@@ -257,7 +257,8 @@ class CusAttachmentsService {
         c.company_address,
         ie.name AS invoice_entity_name,
         ie.notify_email AS invoice_entity_notify_email,
-        ie.company_title AS invoice_entity_company_title
+        ie.company_title AS invoice_entity_company_title,
+        ie.sender_mail AS invoice_entity_sender_mail
       FROM customer_attachments AS ca
       LEFT JOIN customers AS c ON ca.customer_id = c.id
       LEFT JOIN cms_user AS u ON ca.created_by = u.id
@@ -433,6 +434,7 @@ class CusAttachmentsService {
           invoice_entity_name: item.invoice_entity_name || '-',
           invoice_entity_notify_email: item.invoice_entity_notify_email || '',
           invoice_entity_company_title: item.invoice_entity_company_title || '',
+          invoice_entity_sender_mail: item.invoice_entity_sender_mail || '',
 
           customer: {
             id: item.customer_id,

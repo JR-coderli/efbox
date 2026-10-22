@@ -300,7 +300,7 @@ class CusAttachmentsController {
     const entity = await customerService.getEntityByAttachmentId(id)
     const entityName = entity?.name || invoice_entity_name || ''
 
-    const mailConfig = getMailConfig(entityName)
+    const mailConfig = getMailConfig(entity || { name: invoice_entity_name })
     if (!mailConfig) {
       return ctx.body = {
         code: -1,

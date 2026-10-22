@@ -1032,15 +1032,21 @@ const notifyEmails = computed(() => {
   return raw.split(/[,，]/).map(s => s.trim()).filter(Boolean)
 })
 
-// 发件配置预览（匹配规则与后端 domain-api/src/utils/email-transporter.js 保持一致，改后端时需同步这里）
+// 发件配置预览（解析规则与后端 domain-api/src/utils/email-transporter.js 保持一致：
+// 优先用主体配置的 sender_mail，未配置按主体名称前缀兜底；改后端时需同步这里）
+const SENDER_MAP = {
+  eflow: { senderTitle: 'Eflow Invoice', senderText: 'Eflow Invoice <notice@eflow-media.com>' },
+  terra: { senderTitle: 'Terra Invoice', senderText: 'Terra Invoice <notice@mail.terra-ads.com>' }
+}
 const senderInfo = computed(() => {
-  const entityName = (clickedRowData.value?.invoice_entity_name || '').toLowerCase().replace(/\s+/g, '')
-  if (entityName.startsWith('terra')) {
-    return { senderTitle: 'Terra Invoice', senderText: 'Terra Invoice <notice@mail.terra-ads.com>' }
-  }
-  if (entityName.startsWith('eflow')) {
-    return { senderTitle: 'Eflow Invoice', senderText: 'Eflow Invoice <notice@eflow-media.com>' }
-  }
+  const row = clickedRowData.value || {}
+  const configured = String(row.invoice_entity_sender_mail || '').trim().toLowerCase()
+  if (SENDER_MAP[configured]) return SENDER_MAP[configured]
+
+  // 兜底：主体未配置发送邮箱（历史数据）时按名称前缀匹配
+  const entityName = String(row.invoice_entity_name || '').toLowerCase().replace(/\s+/g, '')
+  if (entityName.startsWith('terra')) return SENDER_MAP.terra
+  if (entityName.startsWith('eflow')) return SENDER_MAP.eflow
   return null // 未匹配到发件配置，后端发送时会拒绝
 })
 

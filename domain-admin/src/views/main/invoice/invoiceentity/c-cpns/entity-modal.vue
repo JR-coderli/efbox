@@ -22,14 +22,16 @@
               ref="formRef"
               class="google-form"
               :rules="rules"
+              label-position="top"
             >
               <div class="form-grid">
                 <template v-for="item in modalConfig.formItems" :key="item.prop">
-                  <div class="form-item" :class="{ 'full-width': item.type === 'textarea' }">
-                    <label class="form-label">
-                      {{ item.label }}
-                      <span v-if="item.required" class="required-mark">*</span>
-                    </label>
+                  <el-form-item
+                    :prop="item.prop"
+                    :label="item.label"
+                    class="form-item"
+                    :class="{ 'full-width': item.type === 'textarea' }"
+                  >
                     <!-- 输入框 -->
                     <el-input
                       v-if="item.type === 'input'"
@@ -48,7 +50,21 @@
                       class="google-textarea"
                       clearable
                     />
-                  </div>
+                    <!-- 下拉框 -->
+                    <el-select
+                      v-else-if="item.type === 'select'"
+                      v-model="formData[item.prop]"
+                      :placeholder="item.placeholder"
+                      class="google-select"
+                    >
+                      <el-option
+                        v-for="option in item.options"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
                 </template>
               </div>
             </el-form>
@@ -148,10 +164,14 @@ function handleConfirmClick() {
 }
 
 
-const rules = {
-  name: [
-    { required: true, message: '主体名称不能为空', trigger: 'blur' }
-  ]
+// 按配置生成校验规则: required 的表单项必填(输入框 blur 触发, 下拉框 change 触发)
+const rules = {}
+for (const item of props.modalConfig.formItems) {
+  if (item.required) {
+    rules[item.prop] = [
+      { required: true, message: `${item.label}不能为空`, trigger: item.type === 'select' ? 'change' : 'blur' }
+    ]
+  }
 }
 
 
@@ -254,16 +274,18 @@ defineExpose({ setModalVisible })
   }
 }
 
-.form-label {
+/* el-form-item(label-position=top)接管 label 渲染：去掉默认边距，间距由 .form-item 的 gap 控制 */
+:deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+:deep(.el-form-item__label) {
+  padding: 0;
   font-size: 13px;
   font-weight: 500;
   color: #3c4043;
   font-family: 'Google Sans', Roboto, Arial, sans-serif;
-}
-
-.required-mark {
-  color: #d93025;
-  margin-left: 2px;
+  line-height: 1.4;
 }
 
 
@@ -335,6 +357,36 @@ defineExpose({ setModalVisible })
   font-size: 12px;
   color: #d93025;
   margin-top: 4px;
+}
+
+
+:deep(.google-select) {
+  width: 100%;
+
+  /* 兼容 Element Plus 新旧两种 select 结构 */
+  .el-select__wrapper,
+  .el-input__wrapper {
+    border-radius: 6px;
+    border: 1px solid #dadce0;
+    box-shadow: none;
+    padding: 8px 12px;
+    background-color: #fff;
+    transition: all 0.2s ease;
+
+    &:hover {
+      border-color: #5f6368;
+    }
+
+    &.is-focus {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.1);
+    }
+
+    &.is-error,
+    &.is-error:hover {
+      border-color: #d93025;
+    }
+  }
 }
 
 
@@ -419,5 +471,12 @@ defineExpose({ setModalVisible })
     padding-left: 16px;
     padding-right: 16px;
   }
+}
+</style>
+
+<style lang="less">
+/* select 下拉面板 teleport 到 body，需高于弹窗遮罩(9999)才不会被盖住 */
+.el-select__popper {
+  z-index: 10001 !important;
 }
 </style>

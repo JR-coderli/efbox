@@ -17,51 +17,59 @@ const modalConfig = {
       type: 'input',
       label: '账户名称',
       prop: 'account_name',
-      placeholder: 'Account Name'
+      placeholder: 'Account Name',
+      required: true
     },
     {
       type: 'input',
       label: '账户号码',
       prop: 'account_number',
-      placeholder: 'Account Number'
+      placeholder: 'Account Number',
+      required: true
     },
     {
       type: 'input',
       label: '银行名称',
       prop: 'bank_name',
-      placeholder: 'Bank Name'
+      placeholder: 'Bank Name',
+      required: true
     },
     {
       type: 'input',
       label: 'SWIFT代码',
       prop: 'swift_code',
-      placeholder: 'SWIFT Code'
+      placeholder: 'SWIFT Code',
+      required: true
     },
     {
       type: 'input',
       label: '银行代码',
       prop: 'bank_code',
-      placeholder: 'Bank Code'
+      placeholder: 'Bank Code',
+      required: true
     },
     {
       type: 'input',
       label: '分行代码',
       prop: 'branch_code',
-      placeholder: 'Branch Code'
+      placeholder: 'Branch Code',
+      required: true
     },
     {
       type: 'textarea',
       label: '公司地址',
       prop: 'company_address',
       placeholder: 'Company Address',
-      autosize: { minRows: 2, maxRows: 4 }
+      autosize: { minRows: 2, maxRows: 4 },
+      required: true
     },
     {
       type: 'textarea',
       label: '银行地址',
       prop: 'bank_address',
       placeholder: 'Bank Address',
-      autosize: { minRows: 2, maxRows: 4 }
+      autosize: { minRows: 2, maxRows: 4 },
+      required: true
     },
     {
       type: 'input',
@@ -80,6 +88,17 @@ const modalConfig = {
       label: '公司标题',
       prop: 'company_title',
       placeholder: '邮件正文中的品牌名, 如 Eflow Media; 留空则按主体名称自动匹配'
+    },
+    {
+      type: 'select',
+      label: '发送邮箱',
+      prop: 'sender_mail',
+      placeholder: '请选择发件邮箱',
+      required: true,
+      options: [
+        { label: 'Eflow（notice@eflow-media.com）', value: 'eflow' },
+        { label: 'Terra（notice@mail.terra-ads.com）', value: 'terra' }
+      ]
     }
   ]
 }
