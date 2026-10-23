@@ -79,12 +79,6 @@ const modalConfig = {
     },
     {
       type: 'input',
-      label: '通知邮箱',
-      prop: 'notify_email',
-      placeholder: '发送发票邮件时抄送的通知邮箱, 多个用逗号分隔'
-    },
-    {
-      type: 'input',
       label: '公司标题',
       prop: 'company_title',
       placeholder: '邮件正文中的品牌名, 如 Eflow Media; 留空则按主体名称自动匹配'

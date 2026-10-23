@@ -52,7 +52,7 @@ const contentConfig = {
     },
     {
       type: 'custom',
-      label: '其他邮箱',
+      label: '通知邮箱',
       prop: 'normal_emails',
       slotName: 'normal_emails',
       width: '200'

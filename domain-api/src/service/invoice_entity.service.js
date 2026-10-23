@@ -36,7 +36,6 @@ class InvoiceEntityService {
           'status',
           'is_top',
           'template_path',
-          'notify_email',
           'company_title',
           'sender_mail'
         ]

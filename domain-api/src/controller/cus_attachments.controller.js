@@ -319,11 +319,8 @@ class CusAttachmentsController {
     const toEmails = emails.map(item => `${item.email}`)
 
 
-    // 通知邮箱（核查邮箱）：从开票主体配置读取，多个用逗号分隔，替代原先写死的环境变量 MAIL_TO
-    const notifyEmails = String(entity?.notify_email || '')
-      .split(/[,，]/)
-      .map(s => s.trim())
-      .filter(Boolean)
+    // 通知邮箱（密送核对，客户不可见）：从客户管理配置的通知邮箱(type='normal')读取
+    const notifyEmails = await customerService.getNotifyEmailsByAttachmentId(id)
 
     const mailOptions = {
       from: `"${senderTitle}" <${user}>`,
@@ -349,8 +346,8 @@ class CusAttachmentsController {
     const bccEmails = []
 
     if (notifyEmails.length > 0) {
-      ccEmails.push(...notifyEmails)
-      console.log('添加开票主体通知邮箱到抄送(CC):', notifyEmails)
+      bccEmails.push(...notifyEmails)
+      console.log('添加客户通知邮箱到密送(BCC):', notifyEmails)
     }
     if (bcc) {
       bccEmails.push(bcc)

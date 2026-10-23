@@ -676,17 +676,17 @@
               <div class="email-preview-head">
                 <div class="ep-row"><span class="ep-label">发件人</span><span class="ep-value">{{ senderInfo.senderText }}</span></div>
                 <div class="ep-row"><span class="ep-label">收件人</span><span class="ep-value">{{ sendEmailText }}</span></div>
-                <div v-if="notifyEmails.length" class="ep-row"><span class="ep-label">抄送</span><span class="ep-value">{{ notifyEmails.join('；') }}</span></div>
+                <div v-if="notifyEmails.length" class="ep-row"><span class="ep-label">密送</span><span class="ep-value">{{ notifyEmails.join('；') }}</span></div>
                 <div class="ep-row"><span class="ep-label">主题</span><span class="ep-value ep-subject">{{ clickedRowData.filename }}</span></div>
               </div>
               <div class="email-preview-body">
                 <p>Hi team,</p>
                 <p class="ep-indent">Please check and receive the invoices from {{ mailCompanyName }}. Thank you.</p>
               </div>
-              <div class="email-preview-attachment">
+              <a class="email-preview-attachment" :href="clickedRowData.destination" target="_blank" :title="mailAttachmentName">
                 <svg viewBox="0 0 24 24"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 2.76 2.24 5 5 5s5-2.24 5-5V6h-1.5z"/></svg>
                 <span>{{ mailAttachmentName }}</span>
-              </div>
+              </a>
             </div>
           </el-popover>
         </p>
@@ -1026,10 +1026,11 @@ const dataLoading = ref(false) // 数据加载的加载动画
 const dialogVisible = ref(false) // 显示邮件发送确认框?
 const clickedRowData = ref(null) // 当前点击发送的邮件的那一行表格数据
 
-// 核查邮箱（随该行开票主体配置走，多个用逗号分隔；后端发送时同样按主体 notify_email 抄送）
+// 通知邮箱（密送核对，客户不可见）：取客户管理中配置的通知邮箱(type='normal')，
+// 后端发送时同样按客户通知邮箱密送
 const notifyEmails = computed(() => {
-  const raw = clickedRowData.value?.invoice_entity_notify_email || ''
-  return raw.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+  const list = (clickedRowData.value?.customer?.emails || []).filter(e => e.type === 'normal')
+  return list.map(e => e.email).filter(Boolean)
 })
 
 // 发件配置预览（解析规则与后端 domain-api/src/utils/email-transporter.js 保持一致：
@@ -2356,6 +2357,7 @@ defineExpose({
   }
 }
 
+/* 附件条：可点击在新窗口打开（与确认弹窗的发票附件同地址），默认即呈现链接样式 */
 .email-preview-attachment {
   display: flex;
   align-items: center;
@@ -2364,17 +2366,31 @@ defineExpose({
   border-top: 1px solid #e8eaed;
   background: #f8f9fa;
   font-size: 12px;
-  color: #3c4043;
+  color: #1a73e8;
+  font-weight: 500;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
 
   svg {
     width: 16px;
     height: 16px;
-    fill: #5f6368;
+    fill: #1a73e8;
     flex-shrink: 0;
+    transition: fill 0.15s;
   }
 
   span {
     word-break: break-all;
+  }
+
+  &:hover {
+    color: #1557b0;
+    background: #f1f3f4;
+
+    svg {
+      fill: #1557b0;
+    }
   }
 }
 

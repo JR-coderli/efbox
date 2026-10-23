@@ -68,12 +68,6 @@ const contentConfig = {
       showOverflowTooltip: true
     },
     {
-      label: '通知邮箱',
-      prop: 'notify_email',
-      width: '180',
-      showOverflowTooltip: true
-    },
-    {
       label: '公司标题',
       prop: 'company_title',
       width: '140',

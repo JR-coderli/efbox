@@ -7,7 +7,7 @@
       @new-click="handleNewClick"
       @edit-click="handleEditClick"
     >
-      <!-- 其他邮箱 -->
+      <!-- 通知邮箱（密送核对，客户不可见） -->
       <template #normal_emails="scope">
         <el-tooltip
           v-if="scope.normal_emails && scope.normal_emails.length !== 0"
