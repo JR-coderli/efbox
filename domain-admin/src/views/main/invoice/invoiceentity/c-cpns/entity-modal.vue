@@ -55,10 +55,12 @@
                       v-else-if="item.type === 'select'"
                       v-model="formData[item.prop]"
                       :placeholder="item.placeholder"
+                      :clearable="item.clearable"
+                      :filterable="item.filterable"
                       class="google-select"
                     >
                       <el-option
-                        v-for="option in item.options"
+                        v-for="option in getSelectOptions(item)"
                         :key="option.value"
                         :label="option.label"
                         :value="option.value"
@@ -87,7 +89,8 @@
 
 <script setup>
 import useSystemStore from '@/stores/main/system/system'
-import { reactive, ref } from 'vue'
+import { getInvoiceTemplates } from '@/services/main/system/system'
+import { reactive, ref, onMounted } from 'vue'
 
 
 const props = defineProps({
@@ -142,6 +145,24 @@ function handleCancel() {
 
 
 const systemStore = useSystemStore()
+
+
+// 发票模板下拉选项（从后端 template 目录动态拉取，新增模板文件后下拉自动出现）
+const invoiceTemplateOptions = ref([])
+onMounted(async () => {
+  try {
+    const res = await getInvoiceTemplates()
+    invoiceTemplateOptions.value = (res?.data?.list || []).map(name => ({ label: name, value: name }))
+  } catch {
+    invoiceTemplateOptions.value = []
+  }
+})
+
+// select 选项来源：配置了 optionsSource 的走动态数据，否则用静态 options
+function getSelectOptions(item) {
+  if (item.optionsSource === 'invoice_templates') return invoiceTemplateOptions.value
+  return item.options || []
+}
 function handleConfirmClick() {
 
   formRef.value.validate(valid => {

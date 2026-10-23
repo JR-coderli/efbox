@@ -111,6 +111,14 @@ export function getTopInvoiceEntity() {
 }
 
 
+// 发票模板列表（开票主体"模板路径"下拉选项）
+export function getInvoiceTemplates() {
+  return hyRequest.get({
+    url: `/invoiceentity/templates`
+  })
+}
+
+
 export function editPaymentCustomerRemark(id, remarkInfo) {
   return hyRequest.patch({
     url: `/payment_customers/remark/${id}`,

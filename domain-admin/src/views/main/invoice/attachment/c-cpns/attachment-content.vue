@@ -648,6 +648,7 @@
       v-model="dialogVisible"
       title="核对邮件内容"
       width="550px"
+      top="3vh"
       class="google-style-dialog"
     >
       <div class="confirm-container">
@@ -705,6 +706,21 @@
           <div class="info-item">
             <label>结算总计</label>
             <div class="content1 price-text">{{ formatCurrency(clickedRowData.amount) }}</div>
+          </div>
+
+          <!-- 发送邮箱：默认为开票主体配置的发件邮箱（未配置则兜底 Eflow），弹窗内下拉可临时切换，不回写主体配置 -->
+          <div class="info-item">
+            <label>发送邮箱</label>
+            <div class="content1">
+              <el-select v-model="selectedSender" class="sender-mail-select">
+                <el-option
+                  v-for="(conf, key) in SENDER_MAP"
+                  :key="key"
+                  :label="key === defaultSenderKey ? `${conf.senderLabel}（默认）` : conf.senderLabel"
+                  :value="key"
+                />
+              </el-select>
+            </div>
           </div>
 
           <div class="info-item">
@@ -1033,22 +1049,39 @@ const notifyEmails = computed(() => {
   return list.map(e => e.email).filter(Boolean)
 })
 
-// 发件配置预览（解析规则与后端 domain-api/src/utils/email-transporter.js 保持一致：
+// 发件配置（解析规则与后端 domain-api/src/utils/email-transporter.js 保持一致：
 // 优先用主体配置的 sender_mail，未配置按主体名称前缀兜底；改后端时需同步这里）
+// senderLabel 与开票主体"发送邮箱"下拉选项的展示一致
 const SENDER_MAP = {
-  eflow: { senderTitle: 'Eflow Invoice', senderText: 'Eflow Invoice <notice@eflow-media.com>' },
-  terra: { senderTitle: 'Terra Invoice', senderText: 'Terra Invoice <notice@mail.terra-ads.com>' }
+  eflow: { senderTitle: 'Eflow Invoice', senderText: 'Eflow Invoice <notice@eflow-media.com>', senderLabel: 'Eflow（notice@eflow-media.com）' },
+  terra: { senderTitle: 'Terra Invoice', senderText: 'Terra Invoice <notice@mail.terra-ads.com>', senderLabel: 'Terra（notice@mail.terra-ads.com）' }
 }
-const senderInfo = computed(() => {
+
+// 默认发件邮箱：开票主体配置的 sender_mail，未配置（历史数据）按主体名称前缀兜底
+const defaultSenderKey = computed(() => {
   const row = clickedRowData.value || {}
   const configured = String(row.invoice_entity_sender_mail || '').trim().toLowerCase()
-  if (SENDER_MAP[configured]) return SENDER_MAP[configured]
+  if (SENDER_MAP[configured]) return configured
 
-  // 兜底：主体未配置发送邮箱（历史数据）时按名称前缀匹配
   const entityName = String(row.invoice_entity_name || '').toLowerCase().replace(/\s+/g, '')
-  if (entityName.startsWith('terra')) return SENDER_MAP.terra
-  if (entityName.startsWith('eflow')) return SENDER_MAP.eflow
-  return null // 未匹配到发件配置，后端发送时会拒绝
+  if (entityName.startsWith('terra')) return 'terra'
+  if (entityName.startsWith('eflow')) return 'eflow'
+  return null
+})
+
+// 弹窗内临时切换的发件邮箱：仅对本次发送生效，不回写开票主体配置，重新打开弹窗自动回到默认
+const senderMailOverride = ref(null)
+
+// 下拉选中的发件邮箱：默认 = 开票主体配置（前缀兜底），主体完全未配置时兜底选 eflow
+const selectedSender = computed({
+  get: () => senderMailOverride.value || defaultSenderKey.value || 'eflow',
+  set: (val) => { senderMailOverride.value = val }
+})
+
+// 当前生效的发件配置（预览与实际发送均以此为准）
+const senderInfo = computed(() => {
+  const key = selectedSender.value
+  return key ? { key, ...SENDER_MAP[key] } : null
 })
 
 // 收件人文本（客户的发送邮箱）
@@ -1509,7 +1542,7 @@ function handleEditBtnClick(rowData) {
 function confirmSendEmail(rowData) {
   dialogVisible.value = true // 打开弹窗
   clickedRowData.value = rowData // 记录被点击的那一行表格数据
-
+  senderMailOverride.value = null // 发送邮箱重置为开票主体默认，上次的手动切换不保留
 }
 async function handleSendEmail() {
   sending.value = true
@@ -1524,7 +1557,8 @@ async function handleSendEmail() {
       filename: clickedRowData.value.filename,
       id: clickedRowData.value.id,
       emails: sendEmails,
-      invoice_entity_name: clickedRowData.value.invoice_entity_name
+      invoice_entity_name: clickedRowData.value.invoice_entity_name,
+      sender_mail: selectedSender.value // 本次发送实际使用的发件邮箱（默认=主体配置，弹窗内可临时切换）
     })
 
 
@@ -2268,6 +2302,35 @@ defineExpose({
   color: #5f6368;
 }
 
+/* 发送邮箱下拉：默认为开票主体配置（选项上带"默认"标记），可临时切换；常规黑白样式 */
+.sender-mail-select {
+  width: 100%;
+  max-width: 340px;
+
+  /* 兼容 Element Plus 新旧两种 select 结构 */
+  :deep(.el-select__wrapper),
+  :deep(.el-input__wrapper) {
+    background-color: #fff;
+    box-shadow: 0 0 0 1px #dadce0 inset;
+
+    &:hover,
+    &.is-focus {
+      box-shadow: 0 0 0 1.5px #5f6368 inset;
+    }
+  }
+
+  :deep(.el-select__selected-item),
+  :deep(.el-select__placeholder),
+  :deep(.el-input__inner) {
+    color: #202124;
+  }
+
+  :deep(.el-select__caret),
+  :deep(.el-select__icon) {
+    color: #5f6368;
+  }
+}
+
 
 /* 邮件内容预览（悬浮浮层）：模拟邮件客户端的展示效果（发件人/收件人/抄送/主题/正文/附件） */
 .preview-trigger {
@@ -2395,20 +2458,18 @@ defineExpose({
 }
 
 
+/* 发票附件链接：无背景，仅下划线示意可点击 */
 .file-link {
   display: inline-flex;
   align-items: center;
   color: #1a73e8;
-  text-decoration: none;
+  text-decoration: underline;
   font-weight: 500;
-  padding: 6px 12px;
-  background: #e8f0fe;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  word-break: break-all;
+  transition: color 0.2s ease;
 
   &:hover {
-    background: #d2e3fc;
-    text-decoration: none;
+    color: #1557b0;
   }
 }
 

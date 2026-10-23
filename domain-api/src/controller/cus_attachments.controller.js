@@ -168,7 +168,8 @@ class CusAttachmentsController {
 
 
       const invoiceEntity = attachment.invoice_entity || {}
-      const templateFileName = invoiceEntity.template_path || 'invoice_template.docx'
+      // 老主体未配置模板路径时，默认使用 Eflow 模板（与开票主体表单的默认选中一致）
+      const templateFileName = invoiceEntity.template_path || 'invoice_eflow_template.docx'
       const templatePath = path.resolve(__dirname, '..', '..', 'template', templateFileName)
       if (!fs.existsSync(templatePath)) {
         return ctx.body = {
@@ -294,13 +295,17 @@ class CusAttachmentsController {
 
 
   async sendEmail(ctx, next) {
-    const { filename, id, emails, invoice_entity_name } = ctx.request.body
+    const { filename, id, emails, invoice_entity_name, sender_mail } = ctx.request.body
 
     // 以服务端数据为准：按发票记录关联的开票主体取主体名称与通知邮箱（前端传值仅作兜底）
     const entity = await customerService.getEntityByAttachmentId(id)
     const entityName = entity?.name || invoice_entity_name || ''
 
-    const mailConfig = getMailConfig(entity || { name: invoice_entity_name })
+    // 发件邮箱优先级：本次请求临时指定（弹窗内切换，仅本次生效）> 主体配置 > 主体名称前缀兜底
+    const mailConfig = getMailConfig({
+      sender_mail: sender_mail || entity?.sender_mail,
+      name: entity?.name || invoice_entity_name
+    })
     if (!mailConfig) {
       return ctx.body = {
         code: -1,

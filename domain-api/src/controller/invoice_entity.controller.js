@@ -1,3 +1,5 @@
+const fs = require('fs')
+const path = require('path')
 const invoiceEntityService = require('../service/invoice_entity.service')
 const operationLogService = require('../service/operation-log.service')
 
@@ -131,6 +133,25 @@ class InvoiceEntityController {
     ctx.body = {
       code: 0,
       data: result
+    }
+  }
+
+  // 发票模板列表：白名单控制可选模板（供开票主体"模板路径"下拉选择）
+  // 注意：新增可选模板时需同步更新白名单
+  async templates(ctx, next) {
+    const templateDir = path.resolve(__dirname, '..', '..', 'template')
+    const whitelist = ['invoice_eflow_template.docx', 'invoice_terra_template.docx']
+    let files = []
+    try {
+      const all = fs.readdirSync(templateDir).filter(f => f.endsWith('.docx'))
+      files = whitelist.filter(name => all.includes(name))
+    } catch (err) {
+      console.log('读取模板目录失败:', err)
+    }
+    ctx.body = {
+      code: 0,
+      message: '发票模板列表',
+      data: { list: files }
     }
   }
 }

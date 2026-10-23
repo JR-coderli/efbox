@@ -72,10 +72,15 @@ const modalConfig = {
       required: true
     },
     {
-      type: 'input',
+      type: 'select',
       label: '模板路径',
       prop: 'template_path',
-      placeholder: '模板文件名, 可留空'
+      placeholder: '请选择发票模板',
+      required: true,
+      initialValue: 'invoice_eflow_template.docx', // 新建主体默认选中 Eflow 模板
+      filterable: true,
+      optionsSource: 'invoice_templates', // 选项从接口动态拉取(白名单内的模板)
+      options: []
     },
     {
       type: 'input',
