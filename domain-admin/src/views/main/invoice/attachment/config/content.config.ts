@@ -96,6 +96,14 @@ const contentConfig = {
     },
 
     {
+      type: 'custom',
+      slotName: 'statements',
+      label: '对账单',
+      prop: 'statements',
+      width: '170'
+    },
+
+    {
       type: 'custom-header',
       slotName: 'amount_received',
       label: '收款金额',

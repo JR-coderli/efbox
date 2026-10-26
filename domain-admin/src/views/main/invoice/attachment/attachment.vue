@@ -170,6 +170,52 @@
         </div>
       </template>
 
+      <!-- 对账单（双击打开预览气泡，支持上传/粘贴/删除，风格对齐付款追踪） -->
+      <template #statements="scope">
+        <el-tooltip effect="light" placement="top" :show-after="500" :disabled="!scope.statements || scope.statements.length === 0">
+          <template #content>
+            <div class="file-tooltip" v-if="scope.statements && scope.statements.length > 0">
+              <div v-for="sta in scope.statements" :key="sta.id">{{ sta.filename }}</div>
+            </div>
+          </template>
+          <div
+            class="upload-cell"
+            :class="{ 'has-files': scope.statements && scope.statements.length > 0, 'is-active': preview.visible && preview.trackId === scope.id && preview.type === 'statement' }"
+            @dblclick.stop="openPreview($event, scope.statements || [], 0, scope.id, 'statement')"
+          >
+            <template v-if="scope.statements && scope.statements.length > 0">
+              <div class="file-preview-list">
+                <template v-for="(sta, idx) in scope.statements" :key="sta.id">
+                  <div v-if="idx < 3" class="file-preview-item clickable" @click.stop="openFileInNewWindow(sta)">
+                    <el-image
+                      v-if="isImage(sta.mimetype)"
+                      :src="getFileUrl(sta.destination, sta.filename)"
+                      fit="cover"
+                      class="preview-img"
+                    />
+                    <img
+                      v-else-if="sta.thumbnail"
+                      :src="getFileUrl(sta.thumbnail)"
+                      class="preview-img pdf-thumb"
+                    />
+                    <div v-else class="file-type-icon">{{ getFileExt(sta.filename) }}</div>
+                  </div>
+                </template>
+                <span v-if="scope.statements.length > 3" class="file-more clickable" @click.stop="openFileInNewWindow(scope.statements[0])">+{{ scope.statements.length - 3 }}</span>
+              </div>
+            </template>
+            <span v-else class="upload-hint" data-text="双击上传对账单"></span>
+            <span
+              v-if="scope.statements && scope.statements.length > 0"
+              class="cell-dropdown-arrow"
+              @click.stop="openPreview($event, scope.statements || [], 0, scope.id, 'statement')"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
+            </span>
+          </div>
+        </el-tooltip>
+      </template>
+
       <!-- 5. 收款状态 -->
       <template #payment_status="scope">
         <template v-if="scope.payment_status === '已收款'">
@@ -252,6 +298,88 @@
       </template>
     </attachment-modal>
 
+    <!-- 文件预览气泡（teleport 到 body，风格对齐付款追踪） -->
+    <teleport to="body">
+        <div
+          v-if="preview.visible"
+          class="bubble-backdrop"
+          @mousedown="closePreview"
+        >
+          <div
+            class="bubble-wrapper"
+            :style="previewBubbleStyle"
+            @mousedown.stop
+          >
+            <div class="bubble-arrow" :class="previewPlacement === 'bottom' ? 'arrow-up' : 'arrow-down'" :style="previewArrowStyle"></div>
+            <div class="bubble-body preview-bubble">
+              <div class="preview-grid">
+                <div
+                  v-for="(file, fIdx) in preview.files"
+                  :key="file._uploadKey || file.id"
+                  class="preview-grid-item"
+                  :class="{ 'is-uploading': file.isUploading }"
+                >
+                  <!-- 缩略图 -->
+                  <div class="grid-thumb">
+                    <img
+                      v-if="isImage(file.mimetype) && !file.isUploading"
+                      :src="getFileUrl(file.destination, file.filename)"
+                    />
+                    <div v-else-if="isImage(file.mimetype)" class="grid-file-type">IMG</div>
+                    <img
+                      v-else-if="file.thumbnail"
+                      :src="getFileUrl(file.thumbnail)"
+                    />
+                    <div v-else class="grid-file-type">{{ getFileExt(file.filename) }}</div>
+                  </div>
+                  <!-- 上传进度遮罩 -->
+                  <div v-if="file.isUploading" class="grid-upload-mask">
+                    <div class="upload-progress-bar">
+                      <div class="upload-progress-fill" :style="{ width: file.progress + '%' }"></div>
+                    </div>
+                    <span class="upload-progress-text">{{ file.progress }}%</span>
+                  </div>
+                  <!-- 悬浮遮罩（非上传中才显示） -->
+                  <div v-else class="grid-overlay">
+                    <span class="grid-filename" :title="file.filename">{{ file.filename }}</span>
+                    <div class="grid-actions">
+                      <button class="grid-action-btn" @click.stop="previewFile(file)" title="预览">
+                        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/></svg>
+                      </button>
+                      <button class="grid-action-btn" @click.stop="downloadFile(file)" title="下载">
+                        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/></svg>
+                      </button>
+                      <button class="grid-action-btn danger" @click.stop="requestDeleteFile(file)" title="删除">
+                        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <!-- 添加文件 -->
+                <div class="preview-grid-item add-item" @click="triggerPreviewUpload">
+                  <svg viewBox="0 0 24 24" width="28" height="28"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/></svg>
+                  <span>添加文件</span>
+                </div>
+              </div>
+              <div class="paste-hint">也可按 Ctrl+V 粘贴文件上传</div>
+            </div>
+            <!-- 删除确认遮罩（放在 bubble-wrapper 层级，脱离 bubble-body 的 overflow:hidden） -->
+            <div v-if="confirmDeleteId" class="delete-confirm-overlay" @click.stop="confirmDeleteId = null">
+              <div class="delete-confirm-bubble" @click.stop>
+                <span>确定删除该文件？</span>
+                <div class="confirm-btns">
+                  <button class="confirm-yes" @click.stop="confirmDeleteYes">确定</button>
+                  <button class="confirm-no" @click.stop="confirmDeleteId = null">取消</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 隐藏的文件上传 input -->
+          <input type="file" ref="previewFileInput" multiple style="display: none" @change="handlePreviewFileUpload" />
+        </div>
+    </teleport>
+
     <!-- 备注行内编辑（teleport 到 body，风格对齐付款追踪） -->
     <teleport to="body">
       <div v-if="editingRemarkId !== null" class="inline-edit-overlay" @mousedown="saveRemarkEdit">
@@ -277,7 +405,7 @@ import contentConfig from './config/content.config'
 import AttachmentModal from './c-cpns/attachment-modal.vue'
 import modalConfig from './config/modal.config'
 
-import { nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
+import { nextTick, ref, watch, reactive, onMounted, onUnmounted } from 'vue'
 import useMainStore from '@/stores/main/main'
 import useLoginStore from '@/stores/login/login'
 import getTodayStr from '@/utils/get-today-str'
@@ -287,6 +415,12 @@ import { editAttachmentRemark } from '@/services/main/system/system'
 import convertDateRange from '@/utils/convert-date-range'
 import formatCurrency from '@/utils/format-currency'
 import { storeToRefs } from 'pinia'
+import { LOGIN_TOKEN } from '@/global/constants'
+import { localCache } from '@/utils/cache'
+import { BASE_URL } from '@/services/request/config'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 const systemStore = useSystemStore()
 
 const { allQueryInfo, pageAllCount } = storeToRefs(systemStore)
@@ -739,6 +873,307 @@ systemStore.$onAction(({ name, after }) => {
 })
 
 
+// ========== 对账单附件：预览气泡 + 上传/粘贴/删除（风格对齐付款追踪） ==========
+const preview = reactive({
+  visible: false,
+  files: [],
+  trackId: null,
+  type: 'statement' // 收款管理目前只有对账单一种
+})
+const previewPlacement = ref('bottom')
+const confirmDeleteId = ref(null)
+const previewFileInput = ref(null)
+const previewBubbleStyle = ref({})
+const previewArrowStyle = ref({})
+
+function openPreview(event, files, index, trackId, type) {
+  const rect = event.currentTarget?.getBoundingClientRect() || event.target?.getBoundingClientRect()
+  if (!rect) return
+  preview.files = files
+  preview.trackId = trackId
+  preview.type = type
+
+  const bubbleWidth = 340
+  const estimatedBubbleHeight = 280
+
+  let left = rect.left + rect.width / 2 - bubbleWidth / 2
+  const maxLeft = window.innerWidth - bubbleWidth - 12
+  if (left > maxLeft) left = maxLeft
+  if (left < 12) left = 12
+
+  let top = rect.bottom + 14
+
+  if (top + estimatedBubbleHeight > window.innerHeight - 12) {
+    top = rect.top - estimatedBubbleHeight - 14
+    previewPlacement.value = 'top'
+  } else {
+    previewPlacement.value = 'bottom'
+  }
+  if (top < 12) top = 12
+
+  previewBubbleStyle.value = {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${bubbleWidth}px`
+  }
+
+  const arrowLeft = rect.left + rect.width / 2 - left
+  previewArrowStyle.value = { left: `${arrowLeft}px` }
+
+  preview.visible = true
+}
+
+function closePreview() {
+  preview.visible = false
+  preview.files = []
+  preview.trackId = null
+  preview.type = null
+}
+
+// 刷新列表（保持当前查询条件，分组视图拉全量）
+function refreshAttachmentList() {
+  const isGroupView = attachmentContentRef.value?.groupBy !== 'merged'
+  const queryInfo = {
+    ...allQueryInfo.value,
+    ...(isGroupView ? { page: 1, pageSize: 10000 } : {}),
+    role_name: loginStore.userInfo.role.name || '',
+    user_id: loginStore.userInfo.id
+  }
+  systemStore.postPageListAction(contentConfig.pageName, queryInfo, 'attalist')
+}
+
+// 上传/删除后用最新行数据同步预览气泡里的文件列表
+function refreshPreviewFiles() {
+  if (!preview.trackId) return
+  const list = attachmentContentRef.value?.pageList || []
+  const row = list.find(item => item.id === preview.trackId)
+  if (!row) return
+  preview.files = row.statements || []
+}
+
+function previewFile(file) {
+  const url = getFileUrl(file.destination, file.filename)
+  if (url) window.open(url, '_blank')
+}
+
+function openFileInNewWindow(file) {
+  const url = getFileUrl(file.destination, file.filename)
+  if (url) window.open(url, '_blank')
+}
+
+async function downloadFile(file) {
+  const url = getFileUrl(file.destination, file.filename)
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = file.filename || 'download'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(blobUrl)
+  } catch {
+    window.open(url, '_blank')
+  }
+}
+
+function triggerPreviewUpload() {
+  previewFileInput.value?.click()
+}
+
+async function uploadFilesToPreview(files) {
+  if (!files || files.length === 0 || !preview.trackId) return
+
+  const fieldName = 'customer_statement'
+  const uploadUrl = `${BASE_URL}/cus_attachments/upload/statement/${preview.trackId}`
+  const token = localCache.getCache(LOGIN_TOKEN)
+
+
+  const uploadItems = []
+  for (let i = 0; i < files.length; i++) {
+    const item = reactive({
+      _uploadKey: `_upload_${Date.now()}_${i}`,
+      id: null,
+      filename: files[i].name,
+      mimetype: files[i].type,
+      isUploading: true,
+      progress: 0
+    })
+    uploadItems.push({ file: files[i], item })
+    preview.files.push(item)
+  }
+
+
+  const timers = uploadItems.map(({ item }) => {
+    return setInterval(() => {
+      if (item.progress < 85) {
+        item.progress += Math.floor(Math.random() * 12) + 3
+        if (item.progress > 85) item.progress = 85
+      }
+    }, 200)
+  })
+
+  let successCount = 0
+
+  for (let i = 0; i < uploadItems.length; i++) {
+    const { file, item } = uploadItems[i]
+    const formData = new FormData()
+    formData.append(fieldName, file)
+
+
+    if (file.type === 'application/pdf') {
+      try {
+        const arrayBuffer = await file.arrayBuffer()
+        const thumbnail = await generatePdfThumbnail(arrayBuffer)
+        if (thumbnail) formData.append('thumbnail', thumbnail)
+      } catch {
+
+      }
+    }
+
+    try {
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData
+      })
+      const result = await res.json()
+      if (result.code === 0) {
+        successCount++
+        clearInterval(timers[i])
+        item.progress = 100
+      } else {
+        clearInterval(timers[i])
+        item.progress = 0
+        item.isUploading = false
+      }
+    } catch {
+      clearInterval(timers[i])
+      item.progress = 0
+      item.isUploading = false
+    }
+  }
+
+
+  await new Promise(resolve => setTimeout(resolve, 400))
+
+  if (successCount > 0) {
+    ElNotification({ message: `${successCount}个文件上传成功`, type: 'success', duration: 2000 })
+    refreshAttachmentList()
+    await nextTick()
+    refreshPreviewFiles()
+  } else {
+
+    preview.files = preview.files.filter(f => !f.isUploading)
+    ElNotification({ message: '文件上传失败', type: 'error' })
+  }
+}
+
+async function handlePreviewFileUpload(event) {
+  await uploadFilesToPreview(event.target.files)
+  event.target.value = ''
+}
+
+function requestDeleteFile(file) {
+  confirmDeleteId.value = file.id
+}
+
+function confirmDeleteYes() {
+  const file = preview.files.find(f => f.id === confirmDeleteId.value)
+  confirmDeleteId.value = null
+  if (file) deleteFile(file)
+}
+
+async function deleteFile(file) {
+  if (!file || !preview.trackId) return
+
+
+  const trackId = preview.trackId
+
+  try {
+    const url = `${BASE_URL}/cus_attachments/statement/${file.id}`
+    const token = localCache.getCache(LOGIN_TOKEN)
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    const result = await res.json()
+    if (result.code === 0) {
+      ElNotification({ message: '文件已删除', type: 'success', duration: 2000 })
+      const idx = preview.files.findIndex(f => f.id === file.id)
+      if (idx !== -1) preview.files.splice(idx, 1)
+      if (preview.files.length === 0) {
+        closePreview()
+      }
+      refreshAttachmentList()
+
+      if (preview.visible && preview.trackId === trackId) {
+        await nextTick()
+        refreshPreviewFiles()
+      }
+    } else {
+      ElNotification({ message: result.message || '删除失败', type: 'error' })
+    }
+  } catch {
+    ElNotification({ message: '删除失败', type: 'error' })
+  }
+}
+
+function isImage(mimetype) {
+  return mimetype?.startsWith('image/')
+}
+
+function getFileUrl(destination, filename) {
+  if (!destination) return ''
+  if (destination.startsWith('http')) return destination
+  const basePath = destination.startsWith('/') ? destination.slice(1) : destination
+  const fullPath = filename ? `${basePath}/${filename}` : basePath
+  return `${BASE_URL}/${fullPath}`
+}
+
+function getFileExt(filename) {
+  if (!filename) return '?'
+  const ext = filename.split('.').pop().toUpperCase()
+  return ext.length > 4 ? ext.slice(0, 4) : ext
+}
+
+
+async function generatePdfThumbnail(arrayBuffer) {
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const page = await pdf.getPage(1)
+  const desiredWidth = 200
+  const unscaledViewport = page.getViewport({ scale: 1 })
+  const scale = desiredWidth / unscaledViewport.width
+  const viewport = page.getViewport({ scale })
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(viewport.width))
+  canvas.height = Math.max(1, Math.round(viewport.height))
+  const ctx = canvas.getContext('2d')
+  await page.render({ canvasContext: ctx, viewport }).promise
+  return canvas.toDataURL('image/jpeg', 0.8)
+}
+
+
+// 预览气泡打开时支持 Ctrl+V 粘贴上传
+async function handlePaste(event) {
+  if (!preview.visible || !preview.trackId) return
+  const files = event.clipboardData?.files
+  if (!files || files.length === 0) return
+  event.preventDefault()
+  await uploadFilesToPreview(files)
+}
+
+function handlePreviewKeydown(event) {
+  if (!preview.visible) return
+  if (event.key === 'Escape') {
+    closePreview()
+  }
+}
+
+
 function handleTableScroll() {
   if (editingRowId.value !== null) {
     editingRowId.value = null
@@ -760,6 +1195,9 @@ onMounted(async () => {
     tableWrapper.addEventListener('scroll', handleTableScroll)
   }
 
+  // 对账单预览气泡：粘贴上传 / Esc 关闭
+  document.addEventListener('paste', handlePaste)
+  document.addEventListener('keydown', handlePreviewKeydown)
 
   await fetchInvoiceEntities()
   attachmentContentRef.value?.fetchPageListData()
@@ -770,6 +1208,8 @@ onUnmounted(() => {
   if (tableWrapper) {
     tableWrapper.removeEventListener('scroll', handleTableScroll)
   }
+  document.removeEventListener('paste', handlePaste)
+  document.removeEventListener('keydown', handlePreviewKeydown)
 })
 
 
@@ -779,6 +1219,157 @@ onUnmounted(() => {
 .attachement {
   width: 100%;
   height: 100%;
+}
+
+
+/* ===== 对账单单元格（与付款追踪同风格） ===== */
+.file-preview-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.file-preview-item {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #e8eaed;
+
+  &.clickable {
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+
+    &:hover {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 1px #1a73e8;
+    }
+  }
+
+  .preview-img {
+    width: 100%;
+    height: 100%;
+  }
+
+  .pdf-thumb {
+    object-fit: cover;
+    background: #fff;
+  }
+}
+
+.file-more.clickable {
+  cursor: pointer;
+  &:hover { color: #1a73e8; }
+}
+
+.file-type-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f1f3f4;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  color: #5f6368;
+}
+
+.file-more {
+  font-size: 11px;
+  color: #5f6368;
+  font-weight: 500;
+}
+
+.file-tooltip {
+  div {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #202124;
+  }
+}
+
+.upload-hint {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: #e8eaed;
+  border-radius: 50%;
+}
+
+.upload-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+  position: relative;
+
+  &:hover {
+    border-color: #1a73e8;
+    background-color: #f0f5ff;
+  }
+
+  &.is-active {
+    border-color: #1a73e8;
+    background-color: #f0f5ff;
+  }
+
+  &.has-files:hover {
+    background-color: transparent;
+  }
+
+  &.has-files.is-active {
+    background-color: transparent;
+  }
+}
+
+.upload-cell:hover > .upload-hint {
+  width: auto;
+  height: auto;
+  background-color: transparent;
+  border-radius: 0;
+  color: #9aa0a6;
+  font-size: 13px;
+
+  &::after {
+    content: attr(data-text);
+  }
+}
+
+.cell-dropdown-arrow {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  color: #9aa0a6;
+  opacity: 0;
+  transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+  cursor: pointer;
+
+  &:hover {
+    background-color: #1a73e8;
+    color: #fff;
+  }
+}
+
+.upload-cell:hover > .cell-dropdown-arrow {
+  opacity: 1;
 }
 
 
@@ -1184,5 +1775,276 @@ onUnmounted(() => {
   white-space: pre-wrap !important;
   max-width: 320px !important;
   line-height: 1.6;
+}
+
+
+/* ===== 对账单预览气泡（teleport 到 body，与付款追踪同风格） ===== */
+.bubble-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.bubble-wrapper {
+  position: absolute;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.15));
+  transform-origin: center bottom;
+}
+
+.bubble-arrow {
+  position: absolute;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border: 8px solid transparent;
+
+  &.arrow-down {
+    bottom: -16px;
+    border-top-color: #fff;
+    border-bottom-width: 0;
+  }
+
+  &.arrow-up {
+    top: -16px;
+    border-bottom-color: #fff;
+    border-top-width: 0;
+  }
+}
+
+.bubble-body {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.preview-bubble {
+  padding: 10px;
+}
+
+.paste-hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e0e0e0;
+  font-size: 12px;
+  color: #999;
+  text-align: center;
+  user-select: none;
+}
+
+.delete-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+}
+
+.delete-confirm-bubble {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font-size: 14px;
+  color: #202124;
+
+  .confirm-btns {
+    display: flex;
+    gap: 8px;
+  }
+
+  .confirm-yes {
+    border: none;
+    background: #d93025;
+    color: #fff;
+    padding: 6px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover { background: #c5221f; }
+  }
+
+  .confirm-no {
+    border: 1px solid #dadce0;
+    background: #fff;
+    color: #5f6368;
+    padding: 6px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover { background: #f1f3f4; }
+  }
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.preview-grid-item {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f1f3f4;
+  cursor: pointer;
+
+  &.is-uploading {
+    cursor: default;
+    &:hover .grid-overlay { opacity: 0; }
+  }
+
+  .grid-thumb {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .grid-file-type {
+    font-size: 11px;
+    font-weight: 600;
+    color: #5f6368;
+  }
+
+  .grid-upload-mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .upload-progress-bar {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .upload-progress-fill {
+    height: 100%;
+    background: #fff;
+    border-radius: 2px;
+    transition: width 0.2s ease;
+  }
+
+  .upload-progress-text {
+    font-size: 11px;
+    color: #fff;
+    font-weight: 500;
+  }
+
+  .grid-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.18s;
+    padding: 6px;
+  }
+
+  &:hover .grid-overlay {
+    opacity: 1;
+  }
+
+  .grid-filename {
+    font-size: 10px;
+    color: #fff;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .grid-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .grid-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    &.danger:hover {
+      background: rgba(217, 48, 37, 0.6);
+    }
+  }
+}
+
+.preview-grid-item.add-item {
+  border: 1px dashed #dadce0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #9aa0a6;
+  transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+
+  svg {
+    fill: #9aa0a6;
+    width: 22px;
+    height: 22px;
+  }
+
+  span {
+    font-size: 10px;
+  }
+
+  &:hover {
+    border-color: #1a73e8;
+    color: #1a73e8;
+    background-color: #f0f5ff;
+
+    svg {
+      fill: #1a73e8;
+    }
+  }
 }
 </style>

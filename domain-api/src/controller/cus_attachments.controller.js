@@ -402,6 +402,86 @@ class CusAttachmentsController {
 
 
 
+  // 收款管理对账单：上传（multer 落盘后入库，PDF 附带前端生成的首页缩略图）
+  async uploadStatement(ctx, next) {
+    const { cusAttachmentId } = ctx.params
+    const file = ctx.request.file
+
+    if (!file) {
+      ctx.body = { code: -1, message: '请选择文件' }
+      return
+    }
+
+    const { filename, mimetype, size, destination } = file
+
+    let thumbnailPath = null
+    const thumbnailBase64 = ctx.request.body?.thumbnail
+    if (thumbnailBase64) {
+      try {
+        const matches = thumbnailBase64.match(/^data:image\/\w+;base64,(.+)$/)
+        if (matches) {
+          const buffer = Buffer.from(matches[1], 'base64')
+          const thumbDir = path.join(destination)
+          const thumbFilename = `thumb_${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`
+          const thumbFullPath = path.join(thumbDir, thumbFilename)
+          fs.writeFileSync(thumbFullPath, buffer)
+          thumbnailPath = `${destination}/${thumbFilename}`
+        }
+      } catch {
+
+      }
+    }
+
+    const result = await customerService.createStatement({
+      customer_attachment_id: cusAttachmentId,
+      filename,
+      mimetype,
+      size,
+      destination,
+      thumbnail: thumbnailPath
+    })
+
+    operationLogService.log(
+      ctx.user.id,
+      ctx.user.name,
+      'invoice',
+      'create',
+      `上传对账单: ${filename}`,
+      null,
+      { filename, cusAttachmentId }
+    )
+
+    ctx.body = {
+      code: 0,
+      message: '对账单上传成功',
+      data: { insertId: result.insertId, filename }
+    }
+  }
+
+
+  // 收款管理对账单：删除
+  async removeStatement(ctx, next) {
+    const { statementId } = ctx.params
+
+    await customerService.removeStatement(statementId)
+
+    operationLogService.log(
+      ctx.user.id,
+      ctx.user.name,
+      'invoice',
+      'delete',
+      `删除对账单 statementId: ${statementId}`,
+      null,
+      null
+    )
+
+    ctx.body = {
+      code: 0,
+      message: '对账单已删除'
+    }
+  }
+
+
   async customerList(ctx, next) {
 
     const queryInfo = ctx.request.body

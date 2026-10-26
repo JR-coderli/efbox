@@ -53,6 +53,11 @@ const uploadStatement = multer({ storage: storages.storage9 })
 const handleStatementUpload = uploadStatement.single('payment_statement')
 
 
+// 收款管理对账单
+const uploadCustomerStatement = multer({ storage: storages.storage10 })
+const handleCustomerStatementUpload = uploadCustomerStatement.single('customer_statement')
+
+
 module.exports = {
   handleAvatar,
   handleAvatar2,
@@ -62,7 +67,8 @@ module.exports = {
   handleAvatar6,
   handleAttachmentUpload,
   handleVoucherUpload,
-  handleStatementUpload
+  handleStatementUpload,
+  handleCustomerStatementUpload
 }
 
 

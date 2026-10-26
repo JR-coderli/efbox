@@ -131,6 +131,20 @@ class CusAttachmentsService {
   }
 
 
+  // 收款管理对账单：上传入库 / 删除
+  async createStatement(info) {
+    const [result] = await connection.execute(
+      `INSERT INTO customer_statements (customer_attachment_id, filename, mimetype, size, destination, thumbnail) VALUES (?, ?, ?, ?, ?, ?)`,
+      [info.customer_attachment_id, info.filename, info.mimetype, info.size, info.destination, info.thumbnail || null]
+    )
+    return result
+  }
+
+  async removeStatement(id) {
+    await connection.execute('DELETE FROM customer_statements WHERE id = ?', [id])
+  }
+
+
   async list(cusAttachmentsInfo) {
     const { filters = {}, options = {} } = cusAttachmentsInfo
     const { page = 1, pageSize = 20, orderBy = 'id DESC' } = options
@@ -428,6 +442,23 @@ class CusAttachmentsService {
       })
 
 
+      // 对账单附件（收款管理上传，随行数据带出）
+      const attachmentIds = rows.map(r => r.attachment_id)
+      const statementSql = `
+        SELECT id, customer_attachment_id, filename, mimetype, size, destination, thumbnail, createAt
+        FROM customer_statements
+        WHERE customer_attachment_id IN (${attachmentIds.map(() => '?').join(',')})
+      `
+      const [statementRows] = await connection.execute(statementSql, attachmentIds)
+      const statementMap = {}
+      for (const sta of statementRows) {
+        const key = sta.customer_attachment_id
+        if (!statementMap[key]) statementMap[key] = []
+        const { customer_attachment_id, ...rest } = sta
+        statementMap[key].push(rest)
+      }
+
+
       const formatted = rows.map(item => {
         return {
           id: item.attachment_id,
@@ -446,6 +477,7 @@ class CusAttachmentsService {
           invoice_entity_name: item.invoice_entity_name || '-',
           invoice_entity_company_title: item.invoice_entity_company_title || '',
           invoice_entity_sender_mail: item.invoice_entity_sender_mail || '',
+          statements: statementMap[item.attachment_id] || [],
 
           customer: {
             id: item.customer_id,

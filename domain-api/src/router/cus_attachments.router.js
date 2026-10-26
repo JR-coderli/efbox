@@ -1,6 +1,7 @@
 const KoaRouter = require('@koa/router')
 const { verifyAuth, attachRole } = require('../middleware/login.middleware')
-const { create, remove, update, list, attalist, customerList, generateInvoice, sendEmail, updateRemark } = require('../controller/cus_attachments.controller')
+const { handleCustomerStatementUpload } = require('../middleware/file.middleware')
+const { create, remove, update, list, attalist, customerList, generateInvoice, sendEmail, updateRemark, uploadStatement, removeStatement } = require('../controller/cus_attachments.controller')
 
 
 const cusAttachmentsRouter = new KoaRouter({ prefix: '/cus_attachments' })
@@ -23,6 +24,10 @@ cusAttachmentsRouter.post('/send-email', verifyAuth, sendEmail)
 
 // 独立接口：更新备注（双击单元格编辑）
 cusAttachmentsRouter.patch('/remark/:cusAttachmentId', verifyAuth, updateRemark)
+
+// 对账单上传/删除（路径为两段/三段，不会与单段的 /:cusAttachmentId 冲突）
+cusAttachmentsRouter.post('/upload/statement/:cusAttachmentId', verifyAuth, handleCustomerStatementUpload, uploadStatement)
+cusAttachmentsRouter.delete('/statement/:statementId', verifyAuth, removeStatement)
 
 
 module.exports = cusAttachmentsRouter
