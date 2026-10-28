@@ -58,6 +58,11 @@ const uploadCustomerStatement = multer({ storage: storages.storage10 })
 const handleCustomerStatementUpload = uploadCustomerStatement.single('customer_statement')
 
 
+// LP 产品媒体(图片/视频)
+const uploadLpMedia = multer({ storage: storages.storage11 });
+const handleLpMediaUpload = uploadLpMedia.single('media') // 前端 input 的 name 属性需为 'media'
+
+
 module.exports = {
   handleAvatar,
   handleAvatar2,
@@ -68,7 +73,8 @@ module.exports = {
   handleAttachmentUpload,
   handleVoucherUpload,
   handleStatementUpload,
-  handleCustomerStatementUpload
+  handleCustomerStatementUpload,
+  handleLpMediaUpload
 }
 
 

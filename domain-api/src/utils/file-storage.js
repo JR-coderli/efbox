@@ -278,6 +278,23 @@ const storage10 = multer.diskStorage({
 })
 
 
+// LP 产品媒体(图片/视频,存 uploads/lp)
+const storage11 = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = `./uploads/lp`
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true })
+    }
+    cb(null, uploadDir)
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || ''
+    const randomName = `${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`
+    cb(null, randomName)
+  }
+})
+
+
 module.exports = {
   storage,
   storage2,
@@ -288,5 +305,6 @@ module.exports = {
   storage7,
   storage8,
   storage9,
-  storage10
+  storage10,
+  storage11
 }

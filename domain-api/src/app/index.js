@@ -16,7 +16,8 @@ const ensureDirectories = () => {
     path.join(__dirname, '..', '..', 'uploads'),
     path.join(__dirname, '..', '..', 'uploads', 'cms_user_avatar'),
     path.join(__dirname, '..', '..', 'crawler_output'),
-    path.join(__dirname, '..', '..', 'uploads', 'lander_screenshots')
+    path.join(__dirname, '..', '..', 'uploads', 'lander_screenshots'),
+    path.join(__dirname, '..', '..', 'uploads', 'lp')
   ]
 
   dirs.forEach(dir => {
@@ -66,6 +67,12 @@ app.use(mountedUploadsMiddleware)
 const crawlerMiddleware = serve(path.join(__dirname, '..', '..', 'crawler_output'))
 const mountedCrawlerMiddleware = mount('/crawler/preview', crawlerMiddleware)
 app.use(mountedCrawlerMiddleware)
+
+
+// LP 产品媒体(公开,LP 页面直接 <img>/<video> 引用;zorfell.com 域名下由守卫放行 /lp/ 前缀)
+const lpUploadsMiddleware = serve(path.join(__dirname, '..', '..', 'uploads', 'lp'))
+const mountedLpUploadsMiddleware = mount('/lp/uploads', lpUploadsMiddleware)
+app.use(mountedLpUploadsMiddleware)
 
 
 

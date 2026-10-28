@@ -21,6 +21,7 @@ import paymentCustomers from '@/router/main/payment/customers/customers'
 import paymentTracks from '@/router/main/payment/tracks/tracks'
 import monetstatusNotice from '@/router/main/webpage/monetstatus-notice/monetstatus-notice'
 import emailCollect from '@/router/main/webpage/email-collect/email-collect'
+import lpProducts from '@/router/main/webpage/lp-products/lp-products'
 import efClicks from '@/router/main/ef-tracker/clicks/clicks'
 import efErrorLogs from '@/router/main/ef-tracker/error-logs/error-logs'
 import efLpClicks from '@/router/main/ef-tracker/lp-clicks/lp-clicks'
@@ -61,6 +62,7 @@ function loadLocalRoutes() {
   localRoutes.push(paymentTracks)
   localRoutes.push(monetstatusNotice)
   localRoutes.push(emailCollect)
+  localRoutes.push(lpProducts)
   localRoutes.push(efClicks)
   localRoutes.push(efErrorLogs)
   localRoutes.push(efLpClicks)

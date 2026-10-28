@@ -12,9 +12,11 @@
 const LP_PUBLIC_DOMAIN = 'zorfell.com'
 
 // 该域名上允许访问的路径前缀
-// /lp/        —— LP 产品数据公开接口(public.lp.router.js,后续接入)
-// /lp/uploads —— LP 媒体文件(图片/视频,后续接入)
+// /lp/        —— LP 产品数据公开接口(public.lp.router.js)
+// /lp/uploads —— LP 媒体文件(图片/视频)
+// 注意 /lp/manage(后台管理接口)虽也在 /lp/ 下,但在公开域名上一律禁止
 const LP_ALLOWED_PREFIXES = ['/lp/']
+const LP_DENIED_PREFIXES = ['/lp/manage']
 
 
 function getHostname(ctx) {
@@ -31,6 +33,7 @@ function isLpPublicDomain(hostname) {
 
 
 function isPathAllowed(path) {
+  if (LP_DENIED_PREFIXES.some((prefix) => path.startsWith(prefix))) return false
   return LP_ALLOWED_PREFIXES.some((prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix))
 }
 
