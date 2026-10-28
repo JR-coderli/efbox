@@ -38,6 +38,10 @@ const app = new Koa()
 // 因此在创建 server 之前先 require 错误处理器，保证业务 emit('error', 错误码字符串) 由它接管。
 require('../utils/handle-error').attachErrorHandler(app)
 
+// LP 公开域名守卫:zorfell.com 只放行 /lp/ 前缀,其余一律 404(必须挂在最前,
+// 连 CORS 头都不给被拦截的请求返回),后台管理域名不受任何影响
+app.use(require('../middleware/lp-host-guard.middleware'))
+
 app.use(handleCors)
 app.use(bodyParser())
 
