@@ -6,6 +6,7 @@ const KoaRouter = require('@koa/router')
 const { verifyAuth } = require('../middleware/login.middleware')
 const { handleLpMediaUpload } = require('../middleware/file.middleware')
 const lpController = require('../controller/lp.controller')
+const lpGiftController = require('../controller/lp-gift.controller')
 
 
 const lpRouter = new KoaRouter({ prefix: '/lp/manage' })
@@ -24,6 +25,20 @@ lpRouter.patch('/config', verifyAuth, (ctx) => lpController.updatePageConfig(ctx
 
 // 媒体上传(图片/视频)
 lpRouter.post('/upload', verifyAuth, handleLpMediaUpload, (ctx) => lpController.upload(ctx))
+
+
+// ============ Gift LP(礼品清单页, pro2.winrab.com/s2/1/ecomlistical) ============
+
+// 产品 CRUD
+lpRouter.get('/gift/products', verifyAuth, (ctx) => lpGiftController.list(ctx))
+lpRouter.post('/gift/products', verifyAuth, (ctx) => lpGiftController.create(ctx))
+lpRouter.patch('/gift/products/:id', verifyAuth, (ctx) => lpGiftController.update(ctx))
+lpRouter.delete('/gift/products/:id', verifyAuth, (ctx) => lpGiftController.remove(ctx))
+lpRouter.patch('/gift/products-sort', verifyAuth, (ctx) => lpGiftController.updateSort(ctx))
+
+// 页面配置
+lpRouter.get('/gift/config', verifyAuth, (ctx) => lpGiftController.getPageConfig(ctx))
+lpRouter.patch('/gift/config', verifyAuth, (ctx) => lpGiftController.updatePageConfig(ctx))
 
 
 module.exports = lpRouter

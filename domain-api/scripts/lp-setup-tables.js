@@ -6,28 +6,36 @@ const fs = require('fs')
 const path = require('path')
 const connection = require('../src/app/database')
 
+// zorfell 电商LP + 礼品清单LP(gift) 两套表
+const SQL_FILES = ['create_lp_tables.sql', 'create_lp_gift_tables.sql']
+
 async function main() {
-  const sqlPath = path.join(__dirname, '..', 'src', 'sql', 'create_lp_tables.sql')
-  const sql = fs.readFileSync(sqlPath, 'utf-8')
+  for (const file of SQL_FILES) {
+    const sqlPath = path.join(__dirname, '..', 'src', 'sql', file)
+    const sql = fs.readFileSync(sqlPath, 'utf-8')
 
-  // 按分号切分逐条执行(跳过注释行)
-  const statements = sql
-    .split(/;\s*\n/)
-    .map((s) => s.replace(/--.*$/gm, '').trim())
-    .filter(Boolean)
+    // 按分号切分逐条执行(跳过注释行)
+    const statements = sql
+      .split(/;\s*\n/)
+      .map((s) => s.replace(/--.*$/gm, '').trim())
+      .filter(Boolean)
 
-  for (const stmt of statements) {
-    const [result] = await connection.query(stmt)
-    const head = stmt.replace(/\s+/g, ' ').slice(0, 60)
-    console.log('OK:', head, result.affectedRows !== undefined ? `(affected ${result.affectedRows})` : '')
+    console.log(`\n===== ${file} =====`)
+    for (const stmt of statements) {
+      const [result] = await connection.query(stmt)
+      const head = stmt.replace(/\s+/g, ' ').slice(0, 60)
+      console.log('OK:', head, result.affectedRows !== undefined ? `(affected ${result.affectedRows})` : '')
+    }
   }
 
   // 校验
   const [tables] = await connection.query("SHOW TABLES LIKE 'lp_%'")
   const [count] = await connection.query('SELECT COUNT(*) AS c FROM lp_products')
+  const [giftCount] = await connection.query('SELECT COUNT(*) AS c FROM lp_gift_products')
   const [menus] = await connection.query("SELECT id, name, url FROM menu WHERE url = '/main/webpage/lp-products'")
   console.log('\nlp_ 开头的表:', tables.map((t) => Object.values(t)[0]))
   console.log('lp_products 现有行数:', count[0].c)
+  console.log('lp_gift_products 现有行数:', giftCount[0].c)
   console.log('菜单:', menus)
   process.exit(0)
 }

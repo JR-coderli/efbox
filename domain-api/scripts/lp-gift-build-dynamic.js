@@ -1,0 +1,168 @@
+/**
+ * 礼品清单 LP 页动态化改造:把 43490 静态页(47 个硬编码产品板块)改造成
+ * 从 zorfell.com/lp/gift/products 拉数据动态渲染的版本
+ *
+ * 源: index.static.bak.html(原始静态版备份) → 输出: index.html(动态版, 部署到 pro2.winrab.com)
+ * 用法: node scripts/lp-gift-build-dynamic.js
+ * 所有替换都用精确锚点, 锚点缺失立即报错退出, 不会产生半改造状态
+ */
+const fs = require('fs')
+
+const DIR = 'C:/Users/aha/Desktop/1102/43490'
+const SRC = DIR + '/index.static.bak.html'
+const OUT = DIR + '/index.html'
+
+
+// ================= 动态渲染脚本(注入页面, 替换原 data_list 渲染逻辑) =================
+const RENDER_SCRIPT = `  // ===== 礼品清单 LP 动态渲染(数据来自后台 LP产品管理 → 礼品清单LP) =====
+  // 接口默认走线上;本地联调可在 URL 加 ?api=http://localhost:8001 覆盖
+  (function () {
+    var API_BASE = (new URLSearchParams(location.search).get('api') || window.LP_API_BASE || 'https://zorfell.com').replace(/\\/+$/, '');
+    var API_URL = API_BASE + '/lp/gift/products';
+
+    function esc(s) { // 文本节点转义
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    }
+    function attr(s) { // 属性值转义(用于 src 与 onclick 内嵌)
+      return esc(s).replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+    }
+    function gotoAttr(link) { // 统一的点击跳转属性(沿用原页 Goto/clickflare 链路)
+      return 'onclick="Goto(\\'' + attr(link) + '\\')" href="javascript:void(0);"'
+    }
+    function mediaHtml(p) {
+      return p.media_type === 2
+        ? '<video src="' + attr(p.media_url) + '" style="max-width:100%;" autoplay="autoplay" muted="muted" loop="loop"></video>'
+        : '<img src="' + attr(p.media_url) + '">'
+    }
+
+    // 单个产品板块(结构与原静态页一致; num=主列表编号(逆序), null=New Arrivals)
+    function sectionHtml(p, num) {
+      var titleA = '<a class="smb-section-title product_link" ' + gotoAttr(p.link) + '>' + esc(p.title) + '</a>'
+      var headerWrap = num
+        ? '<div class="smb-section-title-container">\\n          <span class="smb-section-number">' + num + '.</span>\\n          ' + titleA + '\\n        </div>'
+        : '<div class="smb-section-header-container">\\n          ' + titleA + '\\n        </div>'
+      var buttonCls = p.sold_out === 1 ? 'product_link sold-out-button' : 'product_link'
+      return '<section>\\n' +
+        '      <div class="smb-section-header">\\n        ' + headerWrap + '\\n      </div>\\n' +
+        '      <div class="smb-product-source">\\n' +
+        '        <a class="smb-product-img product_link" ' + gotoAttr(p.link) + '>\\n          ' + mediaHtml(p) + '\\n        </a>\\n' +
+        '      </div>\\n' +
+        '      <div class="smb-section-main">\\n        ' + (p.content || '') + '\\n      </div>\\n' +
+        '      <div class="smb-button ">\\n' +
+        '        <a class="' + buttonCls + '" ' + gotoAttr(p.link) + '>' + esc(p.product_name || '') + '</a>\\n' +
+        '      </div>\\n' +
+        '    </section>'
+    }
+
+    function render(data) {
+      var cfg = data.config || {}
+      var t = document.getElementById('lp-title-text')
+      if (t && cfg.title) t.textContent = cfg.title
+      var hero = document.getElementById('lp-hero')
+      if (hero && cfg.hero_url) hero.src = cfg.hero_url
+      var intro = document.getElementById('lp-intro')
+      if (intro && cfg.intro_html) intro.innerHTML = cfg.intro_html
+
+      var list = data.products || []
+      var main = list.filter(function (p) { return p.group_type === 1 })
+      var arrivals = list.filter(function (p) { return p.group_type === 2 })
+
+      // 主列表逆序编号(复刻原 setSectionNumber: 第一个板块编号 = 可见主列表总数), 之后 New Arrivals 分隔栏 + 新品区
+      var html = main.map(function (p, i) { return sectionHtml(p, main.length - i) }).join('\\n')
+      if (arrivals.length > 0) {
+        html += '<section>\\n        <h2>-- -- New Arrivals -- --</h2>\\n      </section>\\n'
+        html += arrivals.map(function (p) { return sectionHtml(p, null) }).join('\\n')
+      }
+      document.getElementById('lp-sections').innerHTML = html
+
+      // 侧栏: Quick Links(主列表, ol reversed) + Bonus(New Arrivals, ul)
+      var quick = document.getElementById('lp-quick-links')
+      if (quick) quick.innerHTML = main.map(function (p) {
+        return '<li>\\n          <a class="product_link" ' + gotoAttr(p.link) + '>' + esc(p.title) + '</a>\\n        </li>'
+      }).join('\\n')
+      var bonus = document.getElementById('lp-bonus-links')
+      if (bonus) bonus.innerHTML = arrivals.map(function (p) {
+        return '<li>\\n          <a class="product_link" ' + gotoAttr(p.link) + '>' + esc(p.title) + '</a>\\n        </li>'
+      }).join('\\n')
+    }
+
+    function load(attempt) {
+      fetch(API_URL + '?t=' + Date.now())
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+        .then(function (res) {
+          if (res.code !== 0 || !res.data) throw new Error('接口返回异常')
+          render(res.data)
+        })
+        .catch(function (err) {
+          if (attempt < 2) {
+            setTimeout(function () { load(attempt + 1) }, attempt === 0 ? 1000 : 3000)
+          } else {
+            console.error('礼品清单 LP 数据加载失败:', err && err.message)
+            // 兜底: 隐藏产品区与侧栏, 静态 header/footer 仍可见
+            var s = document.getElementById('lp-sections'); if (s) s.style.display = 'none'
+            var a = document.querySelector('aside'); if (a) a.style.display = 'none'
+          }
+        })
+    }
+    load(0)
+  })();
+`
+
+
+let html = fs.readFileSync(SRC, 'utf8')
+const assert = (cond, msg) => { if (!cond) { console.error('转换失败: ' + msg); process.exit(1) } }
+
+// ---------- 1. header: 大标题 span 挂 id(接口数据注入点, 保留原文本作兜底) ----------
+const titleOld = '<span style="font-size: 36px;">29+ Clever Gadgets Worth Adding to Your 2026 Holiday Gift List</span>'
+assert(html.includes(titleOld), '未找到大标题 span')
+html = html.replace(titleOld, '<span style="font-size: 36px;" id="lp-title-text">29+ Clever Gadgets Worth Adding to Your 2026 Holiday Gift List</span>')
+
+// ---------- 2. header: 头图挂 id ----------
+const HERO_IMG = 'images/1789104504_a70aa546456456457e01842ad774c52c.jpg'
+const heroOld = '<p style="white-space: normal;"><img src="' + HERO_IMG + '"/></p>'
+assert(html.includes(heroOld), '未找到头图段落')
+html = html.replace(heroOld, '<p style="white-space: normal;"><img src="' + HERO_IMG + '" id="lp-hero"/></p>')
+
+// ---------- 3. header: 导语段落包一层 #lp-intro ----------
+const introStart = '<p style="white-space: normal;"><strong style="font-size: 24px;">The 2026 Holiday Gift Hunt Starts Early</strong></p>'
+assert(html.includes(introStart), '未找到导语起始段')
+html = html.replace(introStart, '<div id="lp-intro">' + introStart)
+assert(html.split('</header>').length === 2, '</header> 应只出现一次')
+html = html.replace('</p>    </header>', '</p></div>    </header>')
+
+// ---------- 4. 移除全部产品板块(</header> 到 <aside> 之间), 换成动态容器 ----------
+const hEnd = html.indexOf('</header>')
+const aStart = html.indexOf('<aside>')
+assert(hEnd > -1 && aStart > hEnd, 'header/aside 定位失败')
+const sectionCount = (html.slice(hEnd, aStart).match(/<section>/g) || []).length
+html = html.slice(0, hEnd + '</header>'.length) +
+  '\n\n    <!-- 产品板块由接口动态渲染(后台: LP产品管理 → 礼品清单LP), 数据接口 /lp/gift/products -->\n    <div id="lp-sections"></div>\n\n  ' +
+  html.slice(aStart)
+console.log('已移除硬编码板块数(含 New Arrivals 分隔栏):', sectionCount)
+
+// ---------- 5. aside: 两个侧栏列表清空并挂 id(Quick Links 主列表 + Bonus 新品) ----------
+const olOld = '<ol class="smb-aside-ol" reversed>'
+const olStart = html.indexOf(olOld)
+assert(olStart > -1, '未找到 Quick Links ol')
+const olEnd = html.indexOf('</ol>', olStart)
+html = html.slice(0, olStart) + '<ol class="smb-aside-ol" reversed id="lp-quick-links"></ol>' +
+  html.slice(olEnd + '</ol>'.length)
+
+const ulOld = '<ul class="smb-new-arrivals-ul">'
+const ulStart = html.indexOf(ulOld)
+assert(ulStart > -1, '未找到 Bonus ul')
+const ulEnd = html.indexOf('</ul>', ulStart)
+html = html.slice(0, ulStart) + '<ul class="smb-new-arrivals-ul" id="lp-bonus-links"></ul>' +
+  html.slice(ulEnd + '</ul>'.length)
+
+// ---------- 6. 底部脚本: 移除 data_list/setSectionNumber/setSectionProductLink, 注入动态渲染 ----------
+const scriptStart = html.indexOf('  getDataList();\n')
+assert(scriptStart > -1, '未找到 getDataList 调用')
+const endMarker = "  function setSectionProductLink(){\n    $('.product_link').attr('href','javascript:void(0);')\n  }"
+const endIdx = html.indexOf(endMarker)
+assert(endIdx > scriptStart, '未找到 setSectionProductLink 结束锚点')
+
+html = html.slice(0, scriptStart) + RENDER_SCRIPT + html.slice(endIdx + endMarker.length)
+
+fs.writeFileSync(OUT, html)
+console.log('已生成动态版:', OUT, `(${(fs.statSync(OUT).size / 1024).toFixed(1)} KB)`)

@@ -88,8 +88,8 @@ class LpController {
 
   async publicData(ctx) {
     const result = await lpService.getPublicData()
-    // LP 每个访客都会请求,给一分钟浏览器缓存,减轻数据库压力
-    ctx.set('Cache-Control', 'public, max-age=60')
+    // 不缓存:后台改完产品,访客下一次刷新页面立即看到新数据
+    ctx.set('Cache-Control', 'no-store')
     ctx.body = { code: 0, message: 'ok', data: result }
   }
 }

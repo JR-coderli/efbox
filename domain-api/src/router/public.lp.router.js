@@ -5,6 +5,7 @@
  */
 const KoaRouter = require('@koa/router')
 const lpController = require('../controller/lp.controller')
+const lpGiftController = require('../controller/lp-gift.controller')
 
 
 const publicLpRouter = new KoaRouter({ prefix: '/lp' })
@@ -12,6 +13,9 @@ const publicLpRouter = new KoaRouter({ prefix: '/lp' })
 
 // 产品 + 页面配置(LP 页加载后拉取)
 publicLpRouter.get('/products', (ctx) => lpController.publicData(ctx))
+
+// Gift LP(礼品清单页)产品 + 页面配置
+publicLpRouter.get('/gift/products', (ctx) => lpGiftController.publicData(ctx))
 
 
 module.exports = publicLpRouter
