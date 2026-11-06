@@ -1,8 +1,8 @@
 <template>
   <div class="lp-gift-panel">
     <div class="header">
-      <div class="title">礼品清单LP(43490)</div>
-      <div class="desc">管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效。页面: pro2.winrab.com/s2/1/ecomlistical/v5/</div>
+      <div class="title">清单页LP · v6</div>
+      <div class="desc">管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效。页面: pro2.winrab.com/s2/1/ecomlistical/v6/</div>
       <div class="actions">
         <el-button @click="openConfig">页面配置</el-button>
         <el-button type="primary" @click="openCreate">新增产品</el-button>

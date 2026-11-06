@@ -15,7 +15,8 @@
  */
 
 // 线上静态页地址(可视化编辑时引用其 CSS 并补全相对图片路径)
-export const GIFT_LP_BASE = 'https://pro2.winrab.com/s2/1/ecomlistical/v5'
+// 注意: 随投放版本升级同步更新(当前投放 v6, 资源结构与 v5 相同)
+export const GIFT_LP_BASE = 'https://pro2.winrab.com/s2/1/ecomlistical/v6'
 
 // 存储格式 → 显示格式: img 的相对路径(images/、videos/)拼上线上域名
 export function toDisplayHtml(html) {

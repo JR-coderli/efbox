@@ -1,7 +1,7 @@
 <template>
   <div class="lp-zorfell-panel">
     <div class="header">
-      <div class="title">电商LP(zorfell)</div>
+      <div class="title">清单页LP · v2</div>
       <div class="desc">管理投放 LP 页的产品文案、图片视频、增删与排序,保存后 LP 立即生效(访客下次打开页面时拉取最新数据)</div>
       <div class="actions">
         <el-button @click="openConfig">页面配置</el-button>
