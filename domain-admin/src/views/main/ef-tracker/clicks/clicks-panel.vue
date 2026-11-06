@@ -129,10 +129,17 @@
               :class="{ active: timelineBucket === b }"
               @click="switchTimelineBucket(b)"
             >{{ b }}</button>
+            <!-- LP 到达率视图开关：with_lp=1，看有多少点击真正进了 LP（域名被标记/LP 服务器挂时到达率断崖） -->
+            <button
+              class="timeline-bucket-btn lp-toggle"
+              :class="{ active: timelineLP }"
+              @click="toggleTimelineLP"
+              title="LP 到达率"
+            >LP 到达率</button>
           </div>
         </div>
         <div ref="timelineChartRef" class="timeline-chart"></div>
-        <div class="timeline-hint">clicks 尖峰 + u_clicks 平 = 可疑流量(刷量)；两条同涨 = 真实流量上涨</div>
+        <div class="timeline-hint">{{ timelineHint }}</div>
       </div>
 
       <!-- 表格 -->
@@ -932,8 +939,11 @@ onUnmounted(() => {
 
 // ===== 时间桶点击量统计（/query/stats/timeline，排查负载告警用）=====
 // 弹层形式：双折线（clicks 总点击 / u_clicks 独立点击）。
+// 「LP 到达率」开关（2026-11-06，with_lp=1）：加一条"到达的点击数"折线 + 右轴一条到达率%
+// （到达率 = lp_reached_clicks ÷ clicks，分母不去重分子按点击去重）——用于发现域名被谷歌
+// 标记 / LP 服务器挂导致的"点了进不去"：clicks 平稳 + 到达率断崖 = LP 侧问题。
 // 默认：昨天此时~现在（近 24 小时）、UTC+8、30m 桶；时间范围四个预设，桶粒度随范围联动。
-// 三个状态（是否打开 / 时间范围 / 时间桶）持久化到 localStorage，切走再切回保留
+// 四个状态（是否打开 / 时间范围 / 时间桶 / LP 到达率开关）持久化到 localStorage，切走再切回保留
 const TIMELINE_STATE_KEY = 'ef_clicks_timeline'
 
 // 时间范围预设：key + 标签 + 该范围允许的桶粒度 + 默认桶（切到该范围时自动选中）
@@ -965,6 +975,7 @@ const timelineVisible = ref(savedTimeline.visible === true)
 const timelineLoading = ref(false)
 const timelineBucket = ref(savedBucket || '30m') // 默认 30m
 const timelineRange = ref(savedRange || '24h') // 默认：昨天此时 ~ 现在
+const timelineLP = ref(savedTimeline.with_lp === true) // LP 到达率视图（with_lp=1），默认关
 const timelineData = ref(null)
 const timelineChartRef = ref(null)
 let timelineChart = null
@@ -974,11 +985,19 @@ const timelineBuckets = computed(() => {
   return TIMELINE_RANGES.find((r) => r.key === timelineRange.value)?.buckets || []
 })
 
+// 底部口径提示随视图切换：默认(流量排查) / LP 到达率(到达侧诊断)
+const timelineHint = computed(() =>
+  timelineLP.value
+    ? '到达率 = 到达的点击数 ÷ 点击数（分母不去重、分子按点击去重）；clicks 平稳 + 到达率断崖 = LP 侧问题（所有 LP 一起跌 = 域名被标记，单个 LP 跌 = 该 LP 服务器挂）；基线本就 <100%，看相对变化；偶发单桶 >100% 是跨桶错位，属预期'
+    : 'clicks 尖峰 + u_clicks 平 = 可疑流量(刷量)；两条同涨 = 真实流量上涨'
+)
+
 function saveTimelineState() {
   localStorage.setItem(TIMELINE_STATE_KEY, JSON.stringify({
     visible: timelineVisible.value,
     range: timelineRange.value,
-    bucket: timelineBucket.value
+    bucket: timelineBucket.value,
+    with_lp: timelineLP.value
   }))
 }
 
@@ -1020,6 +1039,7 @@ async function loadTimeline() {
   try {
     const { start, end } = timelineWindow()
     const p = { bucket: timelineBucket.value, tz: 8, start, end } // 时间线固定 UTC+8，不随页面筛选区的 tz 走
+    if (timelineLP.value) p.with_lp = 1
     const res = await getClicksTimeline(p)
     timelineData.value = res
     await nextTick()
@@ -1033,6 +1053,13 @@ async function loadTimeline() {
 
 function switchTimelineBucket(b) {
   timelineBucket.value = b
+  saveTimelineState()
+  loadTimeline()
+}
+
+// LP 到达率视图开关：切换即重载（带/不带 with_lp 的返回结构不同）
+function toggleTimelineLP() {
+  timelineLP.value = !timelineLP.value
   saveTimelineState()
   loadTimeline()
 }
@@ -1052,16 +1079,32 @@ function renderTimelineChart() {
     timelineChart = echarts.init(timelineChartRef.value)
   }
   const list = timelineData.value?.list || []
+  // LP 到达率视图：数据带 lp_reached_clicks 才画（旧响应/关闭时不画，兼容无字段数据）
+  const lpOn = timelineLP.value && list.some(i => i.lp_reached_clicks != null)
+  // 到达率 = 到达的点击数 ÷ 点击数（%），分母为 0 的桶置 null（折线断开，不画误导性的 0%）
+  const ratio = lpOn
+    ? list.map(i => (i.clicks > 0 ? Math.round((i.lp_reached_clicks / i.clicks) * 1000) / 10 : null))
+    : []
+  const yAxis = [
+    { type: 'value', axisLabel: { fontSize: 11, color: '#5f6368' }, splitLine: { lineStyle: { color: '#f1f3f4' } } }
+  ]
+  const series = [
+    { name: 'clicks（总点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.clicks), lineStyle: { color: '#1a73e8', width: 2 }, itemStyle: { color: '#1a73e8' } },
+    { name: 'u_clicks（独立点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.u_clicks), lineStyle: { color: '#1e8e3e', width: 2 }, itemStyle: { color: '#1e8e3e' } }
+  ]
+  if (lpOn) {
+    series.push({ name: '到达的点击数', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.lp_reached_clicks), lineStyle: { color: '#f9ab00', width: 2 }, itemStyle: { color: '#f9ab00' } })
+    series.push({ name: '到达率 %', type: 'line', smooth: true, symbol: 'none', yAxisIndex: 1, data: ratio, lineStyle: { color: '#d93025', width: 2 }, itemStyle: { color: '#d93025' } })
+    // 右轴百分比：正常封顶 100，偶发滞后错位超 100 时自动抬高，不裁剪
+    yAxis.push({ type: 'value', min: 0, max: v => Math.max(100, Math.ceil(v.max)), axisLabel: { fontSize: 11, color: '#5f6368', formatter: '{value}%' }, splitLine: { show: false } })
+  }
   timelineChart.setOption({
-    grid: { top: 30, bottom: 24, left: 40, right: 16, containLabel: true },
+    grid: { top: 30, bottom: 24, left: 40, right: lpOn ? 52 : 16, containLabel: true },
     xAxis: { type: 'category', data: list.map(i => i.key), axisLabel: { fontSize: 11, color: '#5f6368' } },
-    yAxis: { type: 'value', axisLabel: { fontSize: 11, color: '#5f6368' }, splitLine: { lineStyle: { color: '#f1f3f4' } } },
+    yAxis,
     tooltip: { trigger: 'axis', backgroundColor: '#2c2c2c', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 } },
     legend: { show: true, top: 0, right: 0, itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 12, color: '#5f6368' } },
-    series: [
-      { name: 'clicks（总点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.clicks), lineStyle: { color: '#1a73e8', width: 2 }, itemStyle: { color: '#1a73e8' } },
-      { name: 'u_clicks（独立点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.u_clicks), lineStyle: { color: '#1e8e3e', width: 2 }, itemStyle: { color: '#1e8e3e' } }
-    ]
+    series
   }, true)
 }
 </script>
@@ -1263,6 +1306,11 @@ function renderTimelineChart() {
     border-color: #1a73e8;
     color: #fff;
   }
+}
+
+/* LP 到达率开关：与桶粒度按钮同排，留 8px 分隔以示"是视图开关不是粒度" */
+.lp-toggle {
+  margin-left: 8px;
 }
 
 .timeline-chart {
