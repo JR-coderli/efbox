@@ -129,13 +129,32 @@
               :class="{ active: timelineBucket === b }"
               @click="switchTimelineBucket(b)"
             >{{ b }}</button>
-            <!-- LP 到达率视图开关：with_lp=1，看有多少点击真正进了 LP（域名被标记/LP 服务器挂时到达率断崖） -->
+            <!-- 四个视图开关: 总点击(clicks) / 独立点击(u_clicks) / LP展示(到达的点击数) / LP到达率(%)
+                 任一 LP 开关开启 → 请求带 with_lp=1；用于发现域名被标记 / LP 服务器挂导致的到达率断崖 -->
             <button
               class="timeline-bucket-btn lp-toggle"
-              :class="{ active: timelineLP }"
-              @click="toggleTimelineLP"
-              title="LP 到达率"
-            >LP 到达率</button>
+              :class="{ active: timelineShowTotal }"
+              @click="toggleTimelineSeries('total')"
+              title="总点击：clicks（不去重的点击行数，与点击日志页一致）"
+            >总点击</button>
+            <button
+              class="timeline-bucket-btn"
+              :class="{ active: timelineShowUnique }"
+              @click="toggleTimelineSeries('unique')"
+              title="独立点击：u_clicks（media_click_id 去重）"
+            >独立点击</button>
+            <button
+              class="timeline-bucket-btn"
+              :class="{ active: timelineShowLP }"
+              @click="toggleTimelineSeries('lp')"
+              title="LP展示：到达的点击数（着陆按系统点击 id 去重），开启后请求带 with_lp"
+            >LP展示</button>
+            <button
+              class="timeline-bucket-btn"
+              :class="{ active: timelineShowRate }"
+              @click="toggleTimelineSeries('rate')"
+              title="LP到达率：到达率% = 到达的点击数 ÷ 点击数（分母不去重、分子按点击去重）"
+            >LP到达率</button>
           </div>
         </div>
         <div ref="timelineChartRef" class="timeline-chart"></div>
@@ -938,12 +957,15 @@ onUnmounted(() => {
 })
 
 // ===== 时间桶点击量统计（/query/stats/timeline，排查负载告警用）=====
-// 弹层形式：双折线（clicks 总点击 / u_clicks 独立点击）。
-// 「LP 到达率」开关（2026-11-06，with_lp=1）：加一条"到达的点击数"折线 + 右轴一条到达率%
-// （到达率 = lp_reached_clicks ÷ clicks，分母不去重分子按点击去重）——用于发现域名被谷歌
-// 标记 / LP 服务器挂导致的"点了进不去"：clicks 平稳 + 到达率断崖 = LP 侧问题。
+// 弹层形式：折线图，四个视图开关独立控制画哪些线——
+//   总点击   = clicks（不去重的点击行数，默认开，纯画线开关）
+//   独立点击 = u_clicks（media_click_id 去重，默认开，纯画线开关）
+//   LP展示   = 到达的点击数（着陆按系统点击 id 去重；开启时请求带 with_lp=1）
+//   LP到达率 = 右轴到达率%（= lp_reached_clicks ÷ clicks，分母不去重分子按点击去重）——
+//              用于发现域名被谷歌标记 / LP 服务器挂导致的"点了进不去"：clicks 平稳 +
+//              到达率断崖 = LP 侧问题（所有 LP 一起跌=域名级，单个 LP 跌=该 LP 服务器）。
 // 默认：昨天此时~现在（近 24 小时）、UTC+8、30m 桶；时间范围四个预设，桶粒度随范围联动。
-// 四个状态（是否打开 / 时间范围 / 时间桶 / LP 到达率开关）持久化到 localStorage，切走再切回保留
+// 状态（是否打开 / 时间范围 / 时间桶 / 四个视图开关）持久化到 localStorage，切走再切回保留
 const TIMELINE_STATE_KEY = 'ef_clicks_timeline'
 
 // 时间范围预设：key + 标签 + 该范围允许的桶粒度 + 默认桶（切到该范围时自动选中）
@@ -975,7 +997,14 @@ const timelineVisible = ref(savedTimeline.visible === true)
 const timelineLoading = ref(false)
 const timelineBucket = ref(savedBucket || '30m') // 默认 30m
 const timelineRange = ref(savedRange || '24h') // 默认：昨天此时 ~ 现在
-const timelineLP = ref(savedTimeline.with_lp === true) // LP 到达率视图（with_lp=1），默认关
+// 四个视图开关：总点击(clicks) / 独立点击(u_clicks) / LP展示(到达的点击数) / LP到达率(%)
+// 任一 LP 开关开启 → 请求带 with_lp=1；旧存档单开关 with_lp=true 迁移为两个 LP 开关全开
+const legacyLP = savedTimeline.with_lp === true
+const timelineShowTotal = ref(savedTimeline.show_total !== false && savedTimeline.show_clicks !== false) // 默认开
+const timelineShowUnique = ref(savedTimeline.show_unique !== false && savedTimeline.show_clicks !== false) // 默认开
+const timelineShowLP = ref(savedTimeline.show_lp === true || legacyLP)
+const timelineShowRate = ref(savedTimeline.show_rate === true || legacyLP)
+const timelineNeedLP = computed(() => timelineShowLP.value || timelineShowRate.value)
 const timelineData = ref(null)
 const timelineChartRef = ref(null)
 let timelineChart = null
@@ -985,9 +1014,9 @@ const timelineBuckets = computed(() => {
   return TIMELINE_RANGES.find((r) => r.key === timelineRange.value)?.buckets || []
 })
 
-// 底部口径提示随视图切换：默认(流量排查) / LP 到达率(到达侧诊断)
+// 底部口径提示随视图切换：默认(流量排查) / 任一 LP 开关开启(到达侧诊断)
 const timelineHint = computed(() =>
-  timelineLP.value
+  timelineNeedLP.value
     ? '到达率 = 到达的点击数 ÷ 点击数（分母不去重、分子按点击去重）；clicks 平稳 + 到达率断崖 = LP 侧问题（所有 LP 一起跌 = 域名被标记，单个 LP 跌 = 该 LP 服务器挂）；基线本就 <100%，看相对变化；偶发单桶 >100% 是跨桶错位，属预期'
     : 'clicks 尖峰 + u_clicks 平 = 可疑流量(刷量)；两条同涨 = 真实流量上涨'
 )
@@ -997,7 +1026,10 @@ function saveTimelineState() {
     visible: timelineVisible.value,
     range: timelineRange.value,
     bucket: timelineBucket.value,
-    with_lp: timelineLP.value
+    show_total: timelineShowTotal.value,
+    show_unique: timelineShowUnique.value,
+    show_lp: timelineShowLP.value,
+    show_rate: timelineShowRate.value
   }))
 }
 
@@ -1039,7 +1071,7 @@ async function loadTimeline() {
   try {
     const { start, end } = timelineWindow()
     const p = { bucket: timelineBucket.value, tz: 8, start, end } // 时间线固定 UTC+8，不随页面筛选区的 tz 走
-    if (timelineLP.value) p.with_lp = 1
+    if (timelineNeedLP.value) p.with_lp = 1
     const res = await getClicksTimeline(p)
     timelineData.value = res
     await nextTick()
@@ -1057,9 +1089,18 @@ function switchTimelineBucket(b) {
   loadTimeline()
 }
 
-// LP 到达率视图开关：切换即重载（带/不带 with_lp 的返回结构不同）
-function toggleTimelineLP() {
-  timelineLP.value = !timelineLP.value
+// 视图开关切换：总点击/独立点击是纯画线开关（不改变请求参数，本地重画即可）；
+// 两个 LP 开关改变 with_lp 参数（返回结构不同），必须重载
+function toggleTimelineSeries(kind) {
+  if (kind === 'total' || kind === 'unique') {
+    if (kind === 'total') timelineShowTotal.value = !timelineShowTotal.value
+    else timelineShowUnique.value = !timelineShowUnique.value
+    saveTimelineState()
+    renderTimelineChart()
+    return
+  }
+  if (kind === 'lp') timelineShowLP.value = !timelineShowLP.value
+  if (kind === 'rate') timelineShowRate.value = !timelineShowRate.value
   saveTimelineState()
   loadTimeline()
 }
@@ -1079,27 +1120,33 @@ function renderTimelineChart() {
     timelineChart = echarts.init(timelineChartRef.value)
   }
   const list = timelineData.value?.list || []
-  // LP 到达率视图：数据带 lp_reached_clicks 才画（旧响应/关闭时不画，兼容无字段数据）
-  const lpOn = timelineLP.value && list.some(i => i.lp_reached_clicks != null)
+  // LP 数据可用 = 任一 LP 开关开着 且 响应确实带 lp_reached_clicks（不带 with_lp 的旧响应没这字段）
+  const lpReady = timelineNeedLP.value && list.some(i => i.lp_reached_clicks != null)
   // 到达率 = 到达的点击数 ÷ 点击数（%），分母为 0 的桶置 null（折线断开，不画误导性的 0%）
-  const ratio = lpOn
+  const ratio = lpReady
     ? list.map(i => (i.clicks > 0 ? Math.round((i.lp_reached_clicks / i.clicks) * 1000) / 10 : null))
     : []
   const yAxis = [
     { type: 'value', axisLabel: { fontSize: 11, color: '#5f6368' }, splitLine: { lineStyle: { color: '#f1f3f4' } } }
   ]
-  const series = [
-    { name: 'clicks（总点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.clicks), lineStyle: { color: '#1a73e8', width: 2 }, itemStyle: { color: '#1a73e8' } },
-    { name: 'u_clicks（独立点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.u_clicks), lineStyle: { color: '#1e8e3e', width: 2 }, itemStyle: { color: '#1e8e3e' } }
-  ]
-  if (lpOn) {
+  const series = []
+  if (timelineShowTotal.value) {
+    series.push({ name: 'clicks（总点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.clicks), lineStyle: { color: '#1a73e8', width: 2 }, itemStyle: { color: '#1a73e8' } })
+  }
+  if (timelineShowUnique.value) {
+    series.push({ name: 'u_clicks（独立点击）', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.u_clicks), lineStyle: { color: '#1e8e3e', width: 2 }, itemStyle: { color: '#1e8e3e' } })
+  }
+  if (lpReady && timelineShowLP.value) {
     series.push({ name: '到达的点击数', type: 'line', smooth: true, symbol: 'none', data: list.map(i => i.lp_reached_clicks), lineStyle: { color: '#f9ab00', width: 2 }, itemStyle: { color: '#f9ab00' } })
+  }
+  const rateOn = lpReady && timelineShowRate.value
+  if (rateOn) {
     series.push({ name: '到达率 %', type: 'line', smooth: true, symbol: 'none', yAxisIndex: 1, data: ratio, lineStyle: { color: '#d93025', width: 2 }, itemStyle: { color: '#d93025' } })
     // 右轴百分比：正常封顶 100，偶发滞后错位超 100 时自动抬高，不裁剪
     yAxis.push({ type: 'value', min: 0, max: v => Math.max(100, Math.ceil(v.max)), axisLabel: { fontSize: 11, color: '#5f6368', formatter: '{value}%' }, splitLine: { show: false } })
   }
   timelineChart.setOption({
-    grid: { top: 30, bottom: 24, left: 40, right: lpOn ? 52 : 16, containLabel: true },
+    grid: { top: 30, bottom: 24, left: 40, right: rateOn ? 52 : 16, containLabel: true },
     xAxis: { type: 'category', data: list.map(i => i.key), axisLabel: { fontSize: 11, color: '#5f6368' } },
     yAxis,
     tooltip: { trigger: 'axis', backgroundColor: '#2c2c2c', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 } },
