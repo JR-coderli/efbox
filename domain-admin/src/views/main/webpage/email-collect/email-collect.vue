@@ -18,6 +18,32 @@
 
     <!-- 内容卡片 -->
     <div class="content-card">
+      <!-- 筛选区: 四个归因维度, 输入纯数字=精确 id(mid/tid/oid/lid), 其余=名称模糊(media_name 等, 后端 ILIKE) -->
+      <div class="filter-section">
+        <div class="filter-row">
+          <div class="filter-items">
+            <el-form :inline="true" class="filter-form" @submit.prevent>
+              <el-form-item label="Media">
+                <el-input v-model="filters.media" placeholder="ID 或名称" clearable style="width: 170px" @keyup.enter="handleSearch" @clear="handleSearch" />
+              </el-form-item>
+              <el-form-item label="Tracker">
+                <el-input v-model="filters.tracker" placeholder="ID 或名称" clearable style="width: 170px" @keyup.enter="handleSearch" @clear="handleSearch" />
+              </el-form-item>
+              <el-form-item label="Lander">
+                <el-input v-model="filters.lander" placeholder="ID 或名称" clearable style="width: 170px" @keyup.enter="handleSearch" @clear="handleSearch" />
+              </el-form-item>
+              <el-form-item label="Offer">
+                <el-input v-model="filters.offer" placeholder="ID 或名称" clearable style="width: 170px" @keyup.enter="handleSearch" @clear="handleSearch" />
+              </el-form-item>
+            </el-form>
+          </div>
+          <div class="filter-actions">
+            <button class="google-btn google-btn-primary" @click="handleSearch">搜索</button>
+            <button class="google-btn google-btn-secondary" @click="handleReset">重置</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 邮箱表格 -->
       <div class="table-wrapper">
         <el-table
@@ -35,6 +61,27 @@
           <el-table-column label="邮箱" prop="email" min-width="100" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="email-text">{{ row.email || '-' }}</span>
+            </template>
+          </el-table-column>
+          <!-- 归因名称列: 接口 with_names=true 返回的 names 对象; 光杆邮箱(无归因)显示 - -->
+          <el-table-column label="Media" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span :class="row.names?.media ? 'name-text' : 'empty-text'">{{ row.names?.media || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Tracker" min-width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span :class="row.names?.tracker ? 'name-text' : 'empty-text'">{{ row.names?.tracker || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Lander" min-width="110" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span :class="row.names?.lander ? 'name-text' : 'empty-text'">{{ row.names?.lander || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="Offer" min-width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span :class="row.names?.offer ? 'name-text' : 'empty-text'">{{ row.names?.offer || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column label="落地页地址" prop="lander_url" min-width="320">
@@ -86,6 +133,26 @@ const loading = ref(false)
 const tableData = ref([])
 const total = ref(0)
 
+// 四个归因维度筛选: 纯数字 → 精确 id 参数(mid/tid/oid/lid), 其余 → 名称模糊参数(media_name 等, 后端 ILIKE)
+const filters = reactive({ media: '', tracker: '', lander: '', offer: '' })
+
+const FILTER_PARAM_MAP = {
+  media: ['mid', 'media_name'],
+  tracker: ['tid', 'tracker_name'],
+  lander: ['lid', 'lander_name'],
+  offer: ['oid', 'offer_name']
+}
+
+function buildFilterParams() {
+  const p = {}
+  for (const key in FILTER_PARAM_MAP) {
+    const v = String(filters[key] || '').trim()
+    if (!v) continue
+    p[/^\d+$/.test(v) ? FILTER_PARAM_MAP[key][0] : FILTER_PARAM_MAP[key][1]] = v
+  }
+  return p
+}
+
 // 服务端分页：page 从 1 开始，limit 为每页条数（接口上限 100）
 const pagination = reactive({
   page: 1,
@@ -132,7 +199,9 @@ async function loadData() {
   try {
     const result = await getEmailList({
       page: pagination.page,
-      limit: pagination.pageSize
+      limit: pagination.pageSize,
+      with_names: true, // 带归因名称: names.{media,tracker,offer,lander,advertiser}
+      ...buildFilterParams() // 维度筛选: 纯数字=精确id, 其余=名称模糊
     })
     // 接口返回结构: { count, list, page, pages, size, total }
     tableData.value = result?.list || []
@@ -142,6 +211,20 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+function handleSearch() {
+  pagination.page = 1
+  loadData()
+}
+
+function handleReset() {
+  filters.media = ''
+  filters.tracker = ''
+  filters.lander = ''
+  filters.offer = ''
+  pagination.page = 1
+  loadData()
 }
 
 function handleSizeChange(size) {
@@ -436,6 +519,12 @@ onMounted(() => {
 
 .empty-text {
   color: #9aa0a6;
+  font-size: 13px;
+}
+
+
+.name-text {
+  color: #3c4043;
   font-size: 13px;
 }
 
