@@ -504,7 +504,15 @@ onMounted(() => {
 })
 
 // 日期范围（el-date-picker daterange，元素为 Date 对象）
-const dateRange = ref([])
+// 默认选「近三天」(前天~今天)：不带时间过滤时后端要对整张分区表全表 COUNT，列表要 10s+
+// daysAgo(0)=今天 0 点、daysAgo(2)=前天 0 点；rangeToParams 会对 end 再 +1 天，恰好盖住今天全天
+function daysAgo(n) {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - n)
+  return d
+}
+const dateRange = ref([daysAgo(2), daysAgo(0)])
 
 // 时间显示：接口已按 tz 返回带偏移的 ISO 串，这里只把 T 换成空格方便阅读
 function fmtTime(s) {

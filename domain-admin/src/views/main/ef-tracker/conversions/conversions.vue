@@ -339,7 +339,15 @@ const filters = reactive({
   should_postback: ''
 })
 
-const dateRange = ref([])
+// 默认选「近三天」(前天~今天)：不带时间过滤时后端要对整张分区表全表 COUNT，列表要 10s+
+// daysAgo(0)=今天 0 点、daysAgo(2)=前天 0 点；rangeToParams 会对 end 再 +1 天，恰好盖住今天全天
+function daysAgo(n) {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - n)
+  return d
+}
+const dateRange = ref([daysAgo(2), daysAgo(0)])
 
 // 下发状态胶囊配色：2xx 成功(绿) / 3xx 重定向(蓝) / 4xx 客户端错(橙) / 5xx 服务端错(红) / 空(灰)
 function statusChipClass(code) {

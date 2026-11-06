@@ -195,7 +195,15 @@ const filters = reactive({
   lid: ''
 })
 
-const dateRange = ref([])
+// 默认选「近三天」(前天~今天)：不带时间过滤时后端要对整张分区表全表 COUNT，列表要 10s+
+// daysAgo(0)=今天 0 点、daysAgo(2)=前天 0 点；rangeToParams 会对 end 再 +1 天，恰好盖住今天全天
+function daysAgo(n) {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - n)
+  return d
+}
+const dateRange = ref([daysAgo(2), daysAgo(0)])
 
 // ===== 列配置（数据驱动，配合齿轮面板做显隐 / 拖拽排序）=====
 // type：plain 纯字段 / time 时间格式化 / names 名称映射(row.names[nameKey])
