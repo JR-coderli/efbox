@@ -25,6 +25,21 @@
       <span class="ve-btn ve-clear" title="清除选中文字的所有格式" @click="exec('removeFormat')">清除格式</span>
     </div>
 
+    <!-- 图片工具条: 点击正文里的图片后出现(图片按元素引用操作, 不依赖 iframe 选区, 不需要 mousedown.prevent) -->
+    <div v-if="selectedImg" class="ve-toolbar ve-imgbar">
+      <span class="ve-img-label">🖼 图片</span>
+      <span class="ve-img-item">宽 <el-input-number v-model="imgW" :min="20" :max="4000" size="small" controls-position="right" style="width: 100px" /> px</span>
+      <span class="ve-img-item">高 <el-input-number v-model="imgH" :min="0" :max="4000" size="small" controls-position="right" style="width: 100px" /> px<span class="ve-img-tip">(0=按宽自动)</span></span>
+      <span class="ve-btn ve-apply" @click="applyImgSize">应用</span>
+      <span class="ve-img-sep"></span>
+      <span class="ve-img-label">快捷宽度</span>
+      <span v-for="pct in [25, 50, 75, 100]" :key="pct" class="ve-btn" @click="applyImgPct(pct)">{{ pct }}%</span>
+      <span class="ve-img-sep"></span>
+      <span class="ve-btn" :class="{ active: imgRounded }" @click="toggleRounded">圆角</span>
+      <span class="ve-btn" :class="{ active: imgCentered }" @click="toggleCenter">居中</span>
+      <span class="ve-btn ve-clear" @click="clearImgSelect">取消选择</span>
+    </div>
+
     <iframe ref="iframeRef" class="ve-frame" :srcdoc="doc" sandbox="allow-same-origin" :style="{ height: height }" @load="bindSelectionTracking"></iframe>
   </div>
 </template>
@@ -108,6 +123,80 @@ function bindSelectionTracking() {
     }
     refreshStyleState()
   })
+  // 点击图片 → 选中它(出图片工具条); 点其他地方 → 取消图片选中
+  idoc.addEventListener('click', (e) => {
+    if (e.target && e.target.tagName === 'IMG') selectImg(e.target)
+    else clearImgSelect()
+  })
+}
+
+// —— 图片编辑: 选中正文里的图片后调整宽高/快捷样式 ——
+// 编辑器的选中描边(style.outline)在 getHtml 前会被清掉, 不会存进内容
+const selectedImg = ref(null)
+const imgW = ref(0)
+const imgH = ref(0)
+const imgRounded = ref(false)
+const imgCentered = ref(false)
+
+function selectImg(el) {
+  if (selectedImg.value && selectedImg.value !== el) selectedImg.value.style.outline = ''
+  selectedImg.value = el
+  el.style.outline = '2px solid #409eff'
+  const r = el.getBoundingClientRect()
+  imgW.value = Math.round(r.width)
+  imgH.value = Math.round(r.height)
+  imgRounded.value = /[^0]\S*px/.test(el.style.borderRadius || '')
+  imgCentered.value = el.style.display === 'block' && (el.style.marginLeft === 'auto' || el.style.margin === '0px auto' || el.style.marginRight === 'auto')
+}
+
+function clearImgSelect() {
+  if (selectedImg.value) selectedImg.value.style.outline = ''
+  selectedImg.value = null
+}
+
+// 应用自定义宽高: 高填 0 表示按宽度等比(height:auto); 同步移除 width/height 属性,
+// 避免"属性 100x20"和"style 宽高"并存造成困惑(style 优先生效, 属性残留误导)
+function applyImgSize() {
+  const el = selectedImg.value
+  if (!el || !imgW.value) { ElMessage.warning('请填写图片宽度'); return }
+  el.removeAttribute('width')
+  el.removeAttribute('height')
+  el.style.width = imgW.value + 'px'
+  el.style.height = imgH.value > 0 ? imgH.value + 'px' : 'auto'
+  ElMessage.success('已应用图片尺寸')
+}
+
+// 快捷宽度: 按容器百分比, 响应式(手机上也按比例), 高度等比自适应
+function applyImgPct(pct) {
+  const el = selectedImg.value
+  if (!el) return
+  el.removeAttribute('width')
+  el.removeAttribute('height')
+  el.style.width = pct + '%'
+  el.style.height = 'auto'
+  const r = el.getBoundingClientRect()
+  imgW.value = Math.round(r.width)
+  imgH.value = Math.round(r.height)
+}
+
+function toggleRounded() {
+  const el = selectedImg.value
+  if (!el) return
+  imgRounded.value = !imgRounded.value
+  el.style.borderRadius = imgRounded.value ? '8px' : ''
+}
+
+function toggleCenter() {
+  const el = selectedImg.value
+  if (!el) return
+  imgCentered.value = !imgCentered.value
+  if (imgCentered.value) {
+    el.style.display = 'block'
+    el.style.margin = '0 auto'
+  } else {
+    el.style.display = ''
+    el.style.margin = ''
+  }
 }
 
 function restoreSelection() {
@@ -158,6 +247,7 @@ function applyColor(hex) {
 
 // 供父组件取编辑结果(已还原为存储格式; iframe 未加载完/内容为空返回 '')
 function getHtml() {
+  clearImgSelect() // 先去掉图片选中描边, 避免存进内容
   const el = iframeRef.value?.contentDocument?.querySelector('.smb-section-main')
   const html = el ? el.innerHTML.trim() : ''
   return html ? fromDisplayHtml(html) : ''
@@ -179,6 +269,12 @@ onBeforeUnmount(() => {
 .ve-btn:hover { color: #409eff; }
 .ve-btn.active { color: #409eff; background: #ecf5ff; }
 .ve-clear { font-size: 12px; color: #909399; margin-left: 4px; }
+.ve-imgbar { border-top: none; border-bottom: none; border-radius: 0; background: #f0f7ff; }
+.ve-img-label { font-size: 12px; color: #409eff; font-weight: 600; }
+.ve-img-item { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #606266; }
+.ve-img-tip { color: #c0c4cc; font-size: 11px; }
+.ve-img-sep { width: 1px; height: 14px; background: #dcdfe6; display: inline-block; }
+.ve-apply { color: #409eff; font-weight: 600; }
 .ve-color-wrap { display: inline-flex; align-items: center; gap: 4px; }
 .ve-color-dot { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #dcdfe6; display: inline-block; }
 .ve-frame { width: 100%; border: 1px solid #dcdfe6; border-radius: 0 0 4px 4px; background: #fff; display: block; }

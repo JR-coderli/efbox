@@ -30,9 +30,11 @@ const RENDER_SCRIPT = `  // ===== 礼品清单 LP 动态渲染(数据来自后�
       return 'onclick="Goto(\\'' + attr(link) + '\\')" href="javascript:void(0);"'
     }
     function mediaHtml(p) {
+      // 产品主图显示样式(后台"显示大小"设置): 图片直接应用; 视频保留原 max-width 基础上叠加
+      var extra = p.media_style ? ' ' + attr(p.media_style) : ''
       return p.media_type === 2
-        ? '<video src="' + attr(p.media_url) + '" style="max-width:100%;" autoplay="autoplay" muted="muted" loop="loop"></video>'
-        : '<img src="' + attr(p.media_url) + '">'
+        ? '<video src="' + attr(p.media_url) + '" style="max-width:100%;' + extra + '" autoplay="autoplay" muted="muted" loop="loop"></video>'
+        : '<img src="' + attr(p.media_url) + '"' + (p.media_style ? ' style="' + attr(p.media_style) + '"' : '') + '>'
     }
 
     // 单个产品板块(结构与原静态页一致; num=主列表编号(逆序), null=New Arrivals)
@@ -235,6 +237,8 @@ html = html.replace(cssLink, cssLink + `
     #lp-intro [style*="white-space: pre"], #lp-intro [style*="white-space:pre"] { white-space: normal !important; }
     .smb-section-main, #lp-intro { overflow-wrap: anywhere; }
     .smb-section-main *, #lp-intro * { max-width: 100%; }
+    /* 产品主图: 无论后台设置多大宽度, 都压在内容区内, 不撑破排版 */
+    .smb-product-source img, .smb-product-source video { max-width: 100%; }
   </style>`)
 
 fs.writeFileSync(OUT, html)

@@ -95,12 +95,27 @@
           </div>
           <div v-if="form.media_url" class="media-line">
             <template v-if="form.media_type === 2">
-              <video :src="previewUrl(form.media_url)" controls style="width: 260px; border-radius: 6px" />
+              <video :src="previewUrl(form.media_url)" controls :style="[{ width: '260px' }, form.media_style || '']" />
             </template>
             <template v-else-if="previewUrl(form.media_url)">
-              <el-image :src="previewUrl(form.media_url)" fit="cover" style="width: 260px; border-radius: 6px" />
+              <el-image :src="previewUrl(form.media_url)" fit="cover" :style="[{ width: '260px' }, form.media_style || '']" />
             </template>
             <div v-else class="media-path">LP 相对路径(后台不预览): {{ form.media_url }}</div>
+          </div>
+          <!-- 产品主图显示设置: 生成内联样式存 media_style, 页面渲染时应用; 宽度无论多大都被 max-width 100% 压在内容区内 -->
+          <div class="media-size-bar">
+            <span class="bar-label">显示大小</span>
+            <el-button v-for="pct in [25, 50, 75, 100]" :key="pct" size="small" @click="setMediaPct(pct)">{{ pct }}%</el-button>
+            <span class="bar-sep"></span>
+            <el-input-number v-model="mediaW" :min="0" :max="4000" size="small" controls-position="right" style="width: 98px" placeholder="宽" />
+            <span class="bar-text">px ×</span>
+            <el-input-number v-model="mediaH" :min="0" :max="4000" size="small" controls-position="right" style="width: 98px" placeholder="高" />
+            <el-button size="small" type="primary" @click="applyMediaPx">应用</el-button>
+            <span class="bar-sep"></span>
+            <el-button size="small" :type="mediaRounded ? 'primary' : ''" @click="toggleMediaStyle('rounded')">圆角</el-button>
+            <el-button size="small" :type="mediaCentered ? 'primary' : ''" @click="toggleMediaStyle('center')">居中</el-button>
+            <el-button size="small" text @click="resetMediaStyle">还原</el-button>
+            <span class="bar-text">(高 0 = 按宽度等比;线上宽度不会超出内容区)</span>
           </div>
         </el-form-item>
         <el-row :gutter="16">
@@ -228,6 +243,63 @@ const uploading = ref(false)
 const form = ref({})
 const configForm = ref({})
 
+// —— 产品主图(媒体)显示设置: 控件状态 ↔ form.media_style(内联样式串)互转 ——
+const mediaW = ref(0)
+const mediaH = ref(0)
+const mediaUnit = ref('px') // 'px' 自定义像素 | '%' 快捷百分比
+const mediaRounded = ref(false)
+const mediaCentered = ref(false)
+
+function readMediaStyle() {
+  const s = form.value.media_style || ''
+  const w = s.match(/width:\s*([\d.]+)(px|%)/)
+  const h = s.match(/height:\s*([\d.]+)px/)
+  mediaW.value = w ? Number(w[1]) : 0
+  mediaUnit.value = w && w[2] === '%' ? '%' : 'px'
+  mediaH.value = h ? Number(h[1]) : 0
+  mediaRounded.value = /border-radius/.test(s)
+  mediaCentered.value = /display:\s*block/.test(s)
+}
+
+function composeMediaStyle() {
+  const parts = []
+  if (mediaW.value > 0) {
+    parts.push('width: ' + mediaW.value + (mediaUnit.value === '%' ? '%' : 'px'))
+    parts.push('height: ' + (mediaH.value > 0 ? mediaH.value + 'px' : 'auto'))
+  }
+  if (mediaRounded.value) parts.push('border-radius: 8px')
+  if (mediaCentered.value) { parts.push('display: block'); parts.push('margin: 0 auto') }
+  form.value.media_style = parts.join('; ')
+}
+
+function setMediaPct(pct) {
+  mediaUnit.value = '%'
+  mediaW.value = pct
+  mediaH.value = 0
+  composeMediaStyle()
+}
+
+function applyMediaPx() {
+  if (!mediaW.value) { ElMessage.warning('请填写宽度'); return }
+  mediaUnit.value = 'px'
+  composeMediaStyle()
+}
+
+function toggleMediaStyle(kind) {
+  if (kind === 'rounded') mediaRounded.value = !mediaRounded.value
+  if (kind === 'center') mediaCentered.value = !mediaCentered.value
+  composeMediaStyle()
+}
+
+function resetMediaStyle() {
+  mediaW.value = 0
+  mediaH.value = 0
+  mediaUnit.value = 'px'
+  mediaRounded.value = false
+  mediaCentered.value = false
+  form.value.media_style = ''
+}
+
 // 统一字号(批量把正文内联 font-size 刷成一致)
 const FONT_SIZES = ['16px', '18px', '20px', '22px', '24px', '28px', '32px']
 const unifyVisible = ref(false)
@@ -294,14 +366,16 @@ async function fetchList() {
 }
 
 function openCreate() {
-  form.value = { group_type: 1, title: '', product_name: '', media_type: 1, media_url: '', content: '', link: '', soldOutBool: false, enabledBool: true }
+  form.value = { group_type: 1, title: '', product_name: '', media_type: 1, media_url: '', media_style: '', content: '', link: '', soldOutBool: false, enabledBool: true }
   contentMode.value = 'visual'
+  readMediaStyle()
   drawerVisible.value = true
 }
 
 function openEdit(row) {
   form.value = { ...row, soldOutBool: row.sold_out === 1, enabledBool: row.enabled === 1 }
   contentMode.value = 'visual'
+  readMediaStyle()
   drawerVisible.value = true
 }
 
@@ -313,8 +387,8 @@ async function handleSave() {
   try {
     const payload = {
       group_type: Number(f.group_type) || 1, title: f.title, product_name: f.product_name,
-      media_type: Number(f.media_type) || 1, media_url: f.media_url, content: f.content,
-      link: f.link, sold_out: f.soldOutBool ? 1 : 0, enabled: f.enabledBool ? 1 : 0
+      media_type: Number(f.media_type) || 1, media_url: f.media_url, media_style: f.media_style || '',
+      content: f.content, link: f.link, sold_out: f.soldOutBool ? 1 : 0, enabled: f.enabledBool ? 1 : 0
     }
     const res = f.id ? await updateGiftProduct(f.id, payload) : await createGiftProduct(payload)
     if (res.code === 0) {
@@ -405,6 +479,10 @@ onMounted(async () => {
 .no-media { color: #c0c4cc; font-size: 12px; }
 .media-line { margin-top: 8px; }
 .media-path { color: #909399; font-size: 12px; margin-top: 4px; word-break: break-all; }
+.media-size-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; padding: 8px; background: #f5f7fa; border-radius: 4px; }
+.media-size-bar .bar-label { font-size: 12px; color: #606266; font-weight: 600; }
+.media-size-bar .bar-text { font-size: 12px; color: #909399; }
+.media-size-bar .bar-sep { width: 1px; height: 14px; background: #dcdfe6; }
 .unify-tip { color: #909399; font-size: 12px; line-height: 1.6; }
 .content-label { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; }
 .content-label > span { color: #606266; font-weight: 600; }

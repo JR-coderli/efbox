@@ -55,7 +55,7 @@ class LpGiftService {
 
   async list() {
     const statement = `
-      SELECT id, \`sort\`, group_type, title, product_name, media_type, media_url,
+      SELECT id, \`sort\`, group_type, title, product_name, media_type, media_url, media_style,
              content, link, sold_out, enabled, createAt, updateAt
       FROM lp_gift_products
       ORDER BY \`sort\` ASC, id ASC;
@@ -66,26 +66,26 @@ class LpGiftService {
 
 
   async create(data) {
-    const { sort, group_type, title, product_name, media_type, media_url, content, link, sold_out, enabled } = data
+    const { sort, group_type, title, product_name, media_type, media_url, media_style, content, link, sold_out, enabled } = data
     let nextSort = sort
     if (nextSort === undefined || nextSort === null) {
       const [maxRow] = await connection.execute('SELECT MAX(`sort`) AS maxSort FROM lp_gift_products;')
       nextSort = (maxRow[0].maxSort || 0) + 1
     }
     const statement = `
-      INSERT INTO lp_gift_products (\`sort\`, group_type, title, product_name, media_type, media_url, content, link, sold_out, enabled)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      INSERT INTO lp_gift_products (\`sort\`, group_type, title, product_name, media_type, media_url, media_style, content, link, sold_out, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     `
     const [result] = await connection.execute(statement, [
       nextSort, group_type ?? 1, title || null, product_name || null, media_type || 1,
-      media_url || null, content || null, link || null, sold_out ?? 0, enabled ?? 1
+      media_url || null, media_style || null, content || null, link || null, sold_out ?? 0, enabled ?? 1
     ])
     return { id: result.insertId, sort: nextSort }
   }
 
 
   async update(id, data) {
-    const fields = ['sort', 'group_type', 'title', 'product_name', 'media_type', 'media_url', 'content', 'link', 'sold_out', 'enabled']
+    const fields = ['sort', 'group_type', 'title', 'product_name', 'media_type', 'media_url', 'media_style', 'content', 'link', 'sold_out', 'enabled']
     const sets = []
     const params = []
     for (const f of fields) {
@@ -175,7 +175,7 @@ class LpGiftService {
 
   async getPublicData() {
     const statement = `
-      SELECT \`sort\`, group_type, title, product_name, media_type, media_url, content, link, sold_out, updateAt
+      SELECT \`sort\`, group_type, title, product_name, media_type, media_url, media_style, content, link, sold_out, updateAt
       FROM lp_gift_products
       WHERE enabled = 1
       ORDER BY \`sort\` ASC, id ASC;
@@ -191,6 +191,7 @@ class LpGiftService {
       product_name: r.product_name,
       media_type: r.media_type,
       media_url: this.composeMediaUrl(r.media_url),
+      media_style: r.media_style,
       content: r.content,
       link: r.link,
       sold_out: r.sold_out

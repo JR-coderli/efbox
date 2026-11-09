@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS `lp_gift_products` (
   `product_name` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT 'CTA按钮完整文案(如 Learn More About X »)',
   `media_type` tinyint NOT NULL DEFAULT 1 COMMENT '媒体类型: 1=图片 2=视频',
   `media_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '媒体地址: LP相对路径(images/x.jpg)或本服务路径(/lp/uploads/x.mp4)',
+  `media_style` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '媒体显示样式(内联CSS): 如 width: 50%; height: auto; border-radius: 8px; display: block; margin: 0 auto;',
   `content` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '板块正文HTML(.smb-section-main 原始innerHTML)',
   `link` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '跳转链接(Goto onclick 的 cf/click 地址)',
   `sold_out` tinyint(1) NOT NULL DEFAULT 0 COMMENT '售罄: 1=CTA按钮加 sold-out-button 样式',

@@ -28,6 +28,17 @@ async function main() {
     }
   }
 
+  // 增量迁移: 老库补列(MySQL 5.7 不支持 ADD COLUMN IF NOT EXISTS, 先查 information_schema)
+  const [cols] = await connection.query(
+    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lp_gift_products' AND COLUMN_NAME = 'media_style'"
+  )
+  if (cols.length === 0) {
+    await connection.query("ALTER TABLE lp_gift_products ADD COLUMN `media_style` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '媒体显示样式(内联CSS)' AFTER `media_url`")
+    console.log('\n迁移: lp_gift_products 已新增 media_style 列')
+  } else {
+    console.log('\n迁移: media_style 列已存在, 跳过')
+  }
+
   // 校验
   const [tables] = await connection.query("SHOW TABLES LIKE 'lp_%'")
   const [count] = await connection.query('SELECT COUNT(*) AS c FROM lp_products')
