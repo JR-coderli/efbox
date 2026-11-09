@@ -142,7 +142,7 @@
           </template>
           <div v-if="contentMode === 'visual'" class="visual-edit">
             <div class="edit-hint">下方就是这一段在页面上的真实效果:点击文字即可直接修改;选中文字后可用上方工具栏调整字号、颜色、加粗等。改完点右下角保存。</div>
-            <LpVisualEditor ref="contentEditorRef" v-model="form.content" height="520px" />
+            <LpVisualEditor ref="contentEditorRef" v-model="form.content" height="520px" :default-link="form.link || ''" />
           </div>
           <el-input v-else v-model="form.content" type="textarea" :rows="22" class="code-input" spellcheck="false" />
         </el-form-item>

@@ -76,6 +76,10 @@ const RENDER_SCRIPT = `  // ===== 礼品清单 LP 动态渲染(数据来自后�
         html += arrivals.map(function (p) { return sectionHtml(p, null) }).join('\\n')
       }
       document.getElementById('lp-sections').innerHTML = html
+      // 正文里的产品内链补 href(与原页 setSectionProductLink 行为一致, 显示手型指针)
+      document.querySelectorAll('#lp-sections a.product_link:not([href])').forEach(function (a) {
+        a.setAttribute('href', 'javascript:void(0);')
+      })
 
       // 侧栏: Quick Links(主列表, ol reversed) + Bonus(New Arrivals, ul)
       var quick = document.getElementById('lp-quick-links')

@@ -19,6 +19,21 @@
         <el-color-picker v-model="pickedColor" :predefine="PRESET_COLORS" size="small" @change="applyColor" />
       </span>
 
+      <el-dropdown trigger="click" @command="applyLineHeight">
+        <span class="ve-btn">
+          行高 <el-icon><ArrowDown /></el-icon>
+        </span>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item v-for="h in ['1.5', '1.8', '2', '2.5']" :key="h" :command="h">{{ Number(h).toFixed(1) }} 倍</el-dropdown-item>
+            <el-dropdown-item command="">默认(移除行高)</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+
+      <span class="ve-btn" title="给选中文字加跳转链接(与产品跳转同机制,当前窗口打开)" @click="addLink">链接</span>
+      <span class="ve-btn" title="去掉选中文字的跳转链接" @click="removeLink">取消链接</span>
+
       <span class="ve-btn" :class="{ active: curBold }" title="加粗" @click="exec('bold')"><b>B</b></span>
       <span class="ve-btn" :class="{ active: curItalic }" title="斜体" @click="exec('italic')"><i>I</i></span>
       <span class="ve-btn" :class="{ active: curUnderline }" title="下划线" @click="exec('underline')"><u>U</u></span>
@@ -47,12 +62,14 @@
 <script setup>
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { GIFT_LP_BASE, toDisplayHtml, fromDisplayHtml } from '../gift-html'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  height: { type: String, default: '520px' }
+  height: { type: String, default: '520px' },
+  // 加链接弹窗的默认值(当前产品的跳转链接, 常用场景就是与产品同链)
+  defaultLink: { type: String, default: '' }
 })
 
 // 正文常用字号(现内容以 24px 为主, 评分行 18px)与常用颜色
@@ -243,6 +260,59 @@ function applyFontSize(px) {
 function applyColor(hex) {
   if (!hex) return
   exec('foreColor', hex)
+}
+
+// 行高: 作用于选区覆盖到的所有段落(p / 飞书 rich-text-paragraph)。
+// 段落级设置才是"不同产品行距不一致"的病根(有的段落带 line-height:29px !important),
+// 用 setProperty(...,'important') 保证能覆盖已存在的 !important 行高; 空值=移除
+function applyLineHeight(val) {
+  const idoc = iframeRef.value?.contentDocument
+  if (!idoc || !restoreSelection()) {
+    ElMessage.warning('请先选中要调整行高的文字')
+    return
+  }
+  const range = idoc.getSelection().getRangeAt(0)
+  const root = idoc.querySelector('.smb-section-main')
+  let touched = 0
+  root.querySelectorAll('p, div.rich-text-paragraph').forEach((p) => {
+    if (!range.intersectsNode(p)) return
+    if (val) p.style.setProperty('line-height', val, 'important')
+    else p.style.removeProperty('line-height')
+    touched++
+  })
+  if (!touched) ElMessage.warning('没找到选中文字所在的段落')
+}
+
+// 给选中文字加跳转链接: 编辑器里先生成普通 <a href>, 保存时由 fromDisplayHtml
+// 还原成产品内链标准形式(onclick Goto)——线上点击与产品按钮同机制, 当前窗口打开
+async function addLink() {
+  if (!restoreSelection()) {
+    ElMessage.warning('请先选中要加链接的文字')
+    return
+  }
+  let url
+  try {
+    const res = await ElMessageBox.prompt(
+      '填短链接(与产品跳转链接同机制: 线上自动变长链, 点击在当前窗口打开)',
+      '添加跳转链接',
+      { inputValue: props.defaultLink || '', confirmButtonText: '确定', cancelButtonText: '取消' }
+    )
+    url = String(res.value || '').trim()
+  } catch { return /* 用户取消 */ }
+  if (!url) return
+  restoreSelection() // 弹窗会夺走焦点, 应用前再恢复一次选区
+  const idoc = iframeRef.value.contentDocument
+  idoc.execCommand('styleWithCSS', false, true)
+  idoc.execCommand('createLink', false, url)
+}
+
+function removeLink() {
+  if (!restoreSelection()) {
+    ElMessage.warning('请先选中要取消链接的文字')
+    return
+  }
+  const idoc = iframeRef.value.contentDocument
+  idoc.execCommand('unlink', false, null)
 }
 
 // 供父组件取编辑结果(已还原为存储格式; iframe 未加载完/内容为空返回 '')

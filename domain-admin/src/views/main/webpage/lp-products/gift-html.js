@@ -38,6 +38,10 @@ export function fromDisplayHtml(html) {
   out = out.replace(/&nbsp;/g, ' ')
   out = out.replace(/<br>/g, '<br/>')
   out = out.replace(/<img([^>]*[^/])>/g, '<img$1/>')
+  // 编辑器里新加的跳转链接(createLink 只生成裸 href): 还原成产品内链标准形式,
+  // 与正文已有内链一致(线上点击走 Goto → clickflare 长链 → 当前窗口打开)
+  out = out.replace(/<a href="([^"]*\/cf\/click\/[^"]*)">/g,
+    (m, url) => "<a class='product_link' onclick='Goto(\"" + url + "\")'>")
   // 产品内链: 浏览器把单引号属性序列化成双引号+&quot;, 还原成原始写法。
   // 用"原地改写这两个属性"而不是重建整个标签: 编辑操作可能给 <a> 加上别的属性
   // (如给内链整体加粗的 style) 或改变属性顺序, 重建会把它们丢掉
