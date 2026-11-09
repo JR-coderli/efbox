@@ -74,7 +74,7 @@ const props = defineProps({
 
 // 正文常用字号(现内容以 24px 为主, 评分行 18px)与常用颜色
 const FONT_SIZES = ['16px', '18px', '20px', '22px', '24px', '28px', '32px']
-const PRESET_COLORS = ['#333333', '#000000', '#c5221f', '#e65100', '#188038', '#1a73e8', '#5f6368', '#ffffff']
+const PRESET_COLORS = ['#333333', '#000000', '#c5221f', '#e65100', '#188038', '#007bff', '#5f6368', '#ffffff']
 
 const iframeRef = ref(null)
 const pickedColor = ref(null)
