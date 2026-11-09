@@ -163,6 +163,9 @@ function getHtml() {
   return html ? fromDisplayHtml(html) : ''
 }
 
+// script setup 默认对外封闭, 必须显式暴露, 否则父组件 ref 拿不到 getHtml(保存时报 not a function)
+defineExpose({ getHtml })
+
 onBeforeUnmount(() => {
   iframeRef.value = null
   savedRange = null
