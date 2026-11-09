@@ -38,8 +38,10 @@ export function fromDisplayHtml(html) {
   out = out.replace(/&nbsp;/g, ' ')
   out = out.replace(/<br>/g, '<br/>')
   out = out.replace(/<img([^>]*[^/])>/g, '<img$1/>')
-  // 产品内链: 浏览器把单引号属性序列化成双引号+&quot;, 还原成原始写法
-  out = out.replace(/<a class="product_link" onclick="Goto\(&quot;([^"]*)&quot;\)">/g,
-    "<a class='product_link' onclick='Goto(\"$1\")'>")
+  // 产品内链: 浏览器把单引号属性序列化成双引号+&quot;, 还原成原始写法。
+  // 用"原地改写这两个属性"而不是重建整个标签: 编辑操作可能给 <a> 加上别的属性
+  // (如给内链整体加粗的 style) 或改变属性顺序, 重建会把它们丢掉
+  out = out.replace(/class="product_link"/g, "class='product_link'")
+  out = out.replace(/onclick="Goto\(&quot;([^"]*)&quot;\)"/g, "onclick='Goto(\"$1\")'")
   return out
 }

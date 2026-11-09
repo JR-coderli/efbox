@@ -74,6 +74,11 @@ export function updateGiftSort(products) {
   return hyRequest.patch({ url: '/lp/manage/gift/products-sort', data: { products } })
 }
 
+// 批量统一正文字号 { size: '24px', group_type?: 1|2 }
+export function unifyGiftFontSize(data) {
+  return hyRequest.post({ url: '/lp/manage/gift/unify-fontsize', data })
+}
+
 // 页面配置
 export function getGiftConfig() {
   return hyRequest.get({ url: '/lp/manage/gift/config' })

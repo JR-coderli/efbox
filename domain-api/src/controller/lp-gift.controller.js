@@ -49,6 +49,22 @@ class LpGiftController {
   }
 
 
+  // 批量统一正文字号: { size: '24px', group_type?: 1|2 }
+  async unifyFontSize(ctx) {
+    const { size, group_type } = ctx.request.body || {}
+    if (!size) {
+      ctx.body = { code: 1, message: '请指定字号' }
+      return
+    }
+    try {
+      const result = await lpGiftService.unifyFontSize(size, group_type)
+      ctx.body = { code: 0, message: `已统一 ${result.updated}/${result.total} 个产品的正文字号`, data: result }
+    } catch (err) {
+      ctx.body = { code: 1, message: err.message || '统一字号失败' }
+    }
+  }
+
+
   async getPageConfig(ctx) {
     const result = await lpGiftService.getPageConfig()
     ctx.body = { code: 0, message: '获取页面配置成功', data: result }

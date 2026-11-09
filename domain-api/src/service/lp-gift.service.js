@@ -4,6 +4,51 @@ const connection = require('../app/database')
 const LP_PUBLIC_BASE_URL = process.env.LP_PUBLIC_BASE_URL || 'https://zorfell.com'
 
 
+// 统一正文段落字号。
+// 内容来源三类, 分别处理:
+// 1) px 字号: <p> 段落内替换(跳过含 <img 的评分行段落, 保留其小字号)
+// 2) rem 字号(飞书等粘贴): 常出现在非 <p> 结构(div.rich-text-paragraph/h1 等),
+//    这类结构没有评分行, p 外的字号直接替换
+// 3) 完全没有字号的产品(靠页面默认字号渲染, 显示偏小): 给段落标签注入字号
+function unifyBodyFontSize(content, px) {
+  const re = /<p\b[^>]*>[\s\S]*?<\/p>/g
+  let out = ''
+  let last = 0
+  let m
+  while ((m = re.exec(content))) {
+    // <p> 之前的部分(非 p 结构)——没有星级图评分行, 字号直接替换
+    out += m.index > last ? unifySeg(content.slice(last, m.index), px) : ''
+    // <p> 本身: 评分行(含 img)跳过, 其余统一
+    out += m[0].includes('<img')
+      ? m[0]
+      : m[0].replace(/font-size:\s*[\d.]+(?:px|rem|em)/g, 'font-size: ' + px)
+    last = m.index + m[0].length
+  }
+  out += unifySeg(content.slice(last), px)
+  return out
+}
+
+// 非段落区间的字号替换(px/rem/em → 目标 px, !important 等后缀保留)
+function unifySeg(seg, px) {
+  return seg.replace(/font-size:\s*[\d.]+(?:px|rem|em)/g, 'font-size: ' + px)
+}
+
+// 给完全没有字号的产品注入字号: 给 p / 飞书 rich-text-paragraph div 开标签
+// 加 font-size(已有 style 则前插, 文本靠继承生效)
+function injectFontSize(content, px) {
+  const inject = (tag, name, attrs) => {
+    if (/font-size:/.test(attrs)) return tag
+    if (/style="[^"]*"/.test(attrs)) {
+      return '<' + name + attrs.replace(/style="([^"]*)"/, (s, v) => 'style="font-size: ' + px + '; ' + v + '"') + '>'
+    }
+    return '<' + name + attrs + ' style="font-size: ' + px + '">'
+  }
+  return content
+    .replace(/<p\b([^>]*)>/g, (t, a) => inject(t, 'p', a))
+    .replace(/<div\b([^>]*rich-text-paragraph[^>]*)>/g, (t, a) => inject(t, 'div', a))
+}
+
+
 class LpGiftService {
 
   // ============ 管理端 ============
@@ -72,6 +117,33 @@ class LpGiftService {
     })
     await Promise.all(promises)
     return true
+  }
+
+
+  // 批量统一正文字号: 只统一正文段落, 评分行(Rating: ★★★★ 带星级图的那种段落)保留原小字号。
+  // 三类内容都处理: px 字号替换 / rem·em 字号(飞书粘贴)替换 / 完全无字号的产品注入字号
+  // size: 如 '24px'; groupType: 1=仅主列表 2=仅New Arrivals 不传=全部
+  async unifyFontSize(size, groupType) {
+    const px = String(size || '').trim()
+    if (!/^\d+(\.\d+)?px$/.test(px)) throw new Error('字号格式错误, 应如 24px')
+    let sql = 'SELECT id, content FROM lp_gift_products'
+    const params = []
+    if (groupType === 1 || groupType === 2) {
+      sql += ' WHERE group_type = ?'
+      params.push(groupType)
+    }
+    const [rows] = await connection.execute(sql, params)
+    let updated = 0
+    for (const r of rows) {
+      if (!r.content) continue
+      const hasFontSize = /font-size:\s*[\d.]+(?:px|rem|em)/.test(r.content)
+      const next = hasFontSize ? unifyBodyFontSize(r.content, px) : injectFontSize(r.content, px)
+      if (next !== r.content) {
+        await connection.execute('UPDATE lp_gift_products SET content = ? WHERE id = ?', [next, r.id])
+        updated++
+      }
+    }
+    return { total: rows.length, updated }
   }
 
 

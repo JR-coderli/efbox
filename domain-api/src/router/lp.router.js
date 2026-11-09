@@ -40,5 +40,8 @@ lpRouter.patch('/gift/products-sort', verifyAuth, (ctx) => lpGiftController.upda
 lpRouter.get('/gift/config', verifyAuth, (ctx) => lpGiftController.getPageConfig(ctx))
 lpRouter.patch('/gift/config', verifyAuth, (ctx) => lpGiftController.updatePageConfig(ctx))
 
+// 批量统一正文字号
+lpRouter.post('/gift/unify-fontsize', verifyAuth, (ctx) => lpGiftController.unifyFontSize(ctx))
+
 
 module.exports = lpRouter

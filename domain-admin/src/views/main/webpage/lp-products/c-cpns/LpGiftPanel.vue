@@ -5,6 +5,7 @@
       <div class="desc">管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效。页面: pro2.winrab.com/s2/1/ecomlistical/v6/</div>
       <div class="actions">
         <el-button @click="openConfig">页面配置</el-button>
+        <el-button @click="unifyVisible = true">统一字号</el-button>
         <el-button type="primary" @click="openCreate">新增产品</el-button>
       </div>
     </div>
@@ -125,8 +126,8 @@
             </div>
           </template>
           <div v-if="contentMode === 'visual'" class="visual-edit">
-            <div class="edit-hint">下方就是这一段在页面上的真实效果:点击文字即可直接修改(选中后 Ctrl+B 加粗)。没把握的改动不要做,改完点右下角保存。</div>
-            <iframe ref="contentFrameRef" class="edit-frame" :srcdoc="contentDoc" sandbox="allow-same-origin"></iframe>
+            <div class="edit-hint">下方就是这一段在页面上的真实效果:点击文字即可直接修改;选中文字后可用上方工具栏调整字号、颜色、加粗等。改完点右下角保存。</div>
+            <LpVisualEditor ref="contentEditorRef" v-model="form.content" height="520px" />
           </div>
           <el-input v-else v-model="form.content" type="textarea" :rows="22" class="code-input" spellcheck="false" />
         </el-form-item>
@@ -165,8 +166,8 @@
             </div>
           </template>
           <div v-if="introMode === 'visual'" class="visual-edit">
-            <div class="edit-hint">点击文字直接修改,效果即页面真实样式。</div>
-            <iframe ref="introFrameRef" class="edit-frame edit-frame--short" :srcdoc="introDoc" sandbox="allow-same-origin"></iframe>
+            <div class="edit-hint">点击文字直接修改,效果即页面真实样式;选中文字可用上方工具栏调整字号、颜色等。</div>
+            <LpVisualEditor ref="introEditorRef" v-model="configForm.intro_html" height="300px" />
           </div>
           <el-input v-else v-model="configForm.intro_html" type="textarea" :rows="12" class="code-input" spellcheck="false" />
         </el-form-item>
@@ -176,19 +177,45 @@
         <el-button type="primary" @click="saveConfig">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 统一字号: 批量把正文内联字号刷成一致 -->
+    <el-dialog v-model="unifyVisible" title="统一正文字号" width="440px">
+      <el-form label-position="top">
+        <el-form-item label="统一为">
+          <el-select v-model="unifyForm.size" style="width: 140px">
+            <el-option v-for="s in FONT_SIZES" :key="s" :label="s" :value="s" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="范围">
+          <el-radio-group v-model="unifyForm.scope">
+            <el-radio value="">全部产品</el-radio>
+            <el-radio :value="1">仅主列表</el-radio>
+            <el-radio :value="2">仅 New Arrivals</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <div class="unify-tip">
+          只统一正文段落的字体大小;评分行(Rating 星级图那种小字)保持原样不改动。
+          保存后立即对线上生效, 请谨慎操作。
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="unifyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="unifying" @click="handleUnify">执行</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, watch, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Rank } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
 import {
   getGiftProducts, createGiftProduct, updateGiftProduct, removeGiftProduct,
-  updateGiftSort, getGiftConfig, updateGiftConfig, uploadLpMedia
+  updateGiftSort, getGiftConfig, updateGiftConfig, uploadLpMedia, unifyGiftFontSize
 } from '@/services/main/webpage/lp-products'
-import { GIFT_LP_BASE, toDisplayHtml, fromDisplayHtml } from '../gift-html'
+import LpVisualEditor from './LpVisualEditor.vue'
 
 const LP_PUBLIC_BASE = 'https://zorfell.com'
 
@@ -201,32 +228,47 @@ const uploading = ref(false)
 const form = ref({})
 const configForm = ref({})
 
-// 正文/导语编辑模式: 默认可视化(直接在真实效果上改字), 源码模式兜底
+// 统一字号(批量把正文内联 font-size 刷成一致)
+const FONT_SIZES = ['16px', '18px', '20px', '22px', '24px', '28px', '32px']
+const unifyVisible = ref(false)
+const unifying = ref(false)
+const unifyForm = ref({ size: '24px', scope: '' })
+
+async function handleUnify() {
+  const scopeName = unifyForm.value.scope === 1 ? '主列表' : unifyForm.value.scope === 2 ? 'New Arrivals' : '全部产品'
+  try {
+    await ElMessageBox.confirm(`确定把「${scopeName}」每个产品正文的字体大小统一为 ${unifyForm.value.size} ? 执行后立即对线上生效。`, '批量操作确认', { type: 'warning' })
+  } catch { return }
+  unifying.value = true
+  try {
+    const res = await unifyGiftFontSize({
+      size: unifyForm.value.size,
+      group_type: unifyForm.value.scope === '' ? undefined : Number(unifyForm.value.scope)
+    })
+    if (res.code === 0) {
+      ElMessage.success(res.message)
+      unifyVisible.value = false
+      fetchList()
+    }
+  } finally {
+    unifying.value = false
+  }
+}
+
+// 正文/导语编辑模式: 默认可视化(直接在真实效果上改字+工具栏调格式), 源码模式兜底
 const contentMode = ref('visual')
 const introMode = ref('visual')
-const contentFrameRef = ref(null)
-const introFrameRef = ref(null)
+const contentEditorRef = ref(null)
+const introEditorRef = ref(null)
 
-// 可视化编辑文档: 用线上 LP 的 CSS 渲染 + contenteditable 直接改字。
-// 不用富文本编辑器: 它会重写 HTML, 正文里的内链/星级图/嵌套样式会被破坏(实测)。
-function buildEditDoc(html) {
-  return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-    '<link rel="stylesheet" href="' + GIFT_LP_BASE + '/css/smb-index.css">' +
-    '</head><body contenteditable="true" spellcheck="false" style="margin:12px;background:#fff;outline:none;">' +
-    '<div class="smb-section-main">' + (toDisplayHtml(html) || '') + '</div></body></html>'
-}
-
-const contentDoc = computed(() => buildEditDoc(form.value.content))
-const introDoc = computed(() => buildEditDoc(configForm.value.intro_html))
-
-// 把可视化 iframe 里的内容取回 form(仅在 iframe 已渲染出内容时, 避免覆盖为空)
+// 把可视化编辑器里的内容取回 form(getHtml 返回存储格式; 空结果不覆盖, 避免加载未完成时清掉内容)
 function pullVisualContent() {
-  const el = contentFrameRef.value?.contentDocument?.querySelector('.smb-section-main')
-  if (el && el.innerHTML.trim()) form.value.content = fromDisplayHtml(el.innerHTML)
+  const html = contentEditorRef.value?.getHtml()
+  if (html) form.value.content = html
 }
 function pullVisualIntro() {
-  const el = introFrameRef.value?.contentDocument?.querySelector('.smb-section-main')
-  if (el && el.innerHTML.trim()) configForm.value.intro_html = fromDisplayHtml(el.innerHTML)
+  const html = introEditorRef.value?.getHtml()
+  if (html) configForm.value.intro_html = html
 }
 
 // 切到源码模式前, 先把可视化编辑的改动取回(watch 在 DOM 更新前触发, iframe 还在)
@@ -363,11 +405,10 @@ onMounted(async () => {
 .no-media { color: #c0c4cc; font-size: 12px; }
 .media-line { margin-top: 8px; }
 .media-path { color: #909399; font-size: 12px; margin-top: 4px; word-break: break-all; }
+.unify-tip { color: #909399; font-size: 12px; line-height: 1.6; }
 .content-label { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; }
 .content-label > span { color: #606266; font-weight: 600; }
 .visual-edit { width: 100%; }
 .edit-hint { color: #909399; font-size: 12px; margin-bottom: 6px; }
-.edit-frame { width: 100%; height: 520px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; }
-.edit-frame--short { height: 300px; }
 .code-input :deep(textarea) { font-family: Consolas, Monaco, monospace; font-size: 12px; }
 </style>

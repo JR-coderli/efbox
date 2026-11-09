@@ -109,6 +109,44 @@ const RENDER_SCRIPT = `  // ===== 礼品清单 LP 动态渲染(数据来自后�
 `
 
 
+// ================= Goto 委托版(替换原函数, 见下方第 7 步说明) =================
+const GOTO_FN = `function Goto(url) {
+      try {
+        gtag('event', 'list_product', {
+          'event_label': 'List Product',
+          'event_category': 'ecommerce'
+        });
+      } catch (e) { /* GTM 未启用时 gtag 不存在, 不影响跳转 */ }
+
+      // clickflare 长链: 委托同序号隐藏锚点(.cta-btn001...)的真实点击。
+      // 锚点已被 clickflare 改写时, href 是 javascript:window.clickflare.l=... (由 clickflare 接管带参跳转);
+      // 未被改写时点击锚点仍直达短链, 与原行为一致
+      var cf = String(url).match(/\\/cf\\/click\\/(\\d+)/);
+      if (cf) {
+        var cfA = document.querySelector('.cta-btn' + ('00' + cf[1]).slice(-3));
+        if (cfA) { cfA.click(); return; }
+      }
+
+      if(url.indexOf('?') != -1){
+        if(url.lastIndexOf('?') == (url.length -1)){
+          url = url;
+        }else if(url.lastIndexOf('&') == (url.length -1)){
+          url = url;
+        }else{
+          url = url + '&';
+        }
+      }else{
+        url = url + '?';
+      }
+
+      var link = url + GetRequest();
+      if (window.clickflare && window.clickflare.push) {
+        window.clickflare.push("jump");
+      }
+      window.location.href = link;
+    }`
+
+
 let html = fs.readFileSync(SRC, 'utf8')
 const assert = (cond, msg) => { if (!cond) { console.error('转换失败: ' + msg); process.exit(1) } }
 
@@ -163,6 +201,41 @@ const endIdx = html.indexOf(endMarker)
 assert(endIdx > scriptStart, '未找到 setSectionProductLink 结束锚点')
 
 html = html.slice(0, scriptStart) + RENDER_SCRIPT + html.slice(endIdx + endMarker.length)
+
+// ---------- 7. clickflare 长链支持: 隐藏锚点池 + Goto 委托 ----------
+// clickflare 只在页面加载阶段把 <a href="短链"> 改写为长链 js-href; 动态渲染的产品锚点
+// (onclick=Goto) 永远不会被改写, 导致投放时产品跳转仍是短链。
+// 解决: 在 <body> 顶部(clickflare 脚本之前)放一个静态隐藏锚点池(序号 1-60)供其改写,
+// Goto 点击产品时按序号委托锚点真实点击(改写后 href 是 javascript:window.clickflare.l=...,
+// 配合锚点自身的 onclick push('jump') 走完整长链跳转, 与 zorfell LP 同款机制)。
+// 注意: 产品链接序号上限 60, 超出则回退直接跳短链
+const CF_POOL = Array.from({ length: 60 }, (_, i) => {
+  const n = i + 1
+  const id = ('00' + n).slice(-3)
+  return '  <a class="cta-btn' + id + '" style="display: none;" href="https://eco.tsavros.com/cf/click/' + n + '" onclick="window.clickflare&&window.clickflare.push(\'jump\')"></a>'
+}).join('\n')
+const bodyOpen = html.indexOf('<body>')
+assert(bodyOpen > -1, '未找到 <body>')
+html = html.slice(0, bodyOpen + 6) + '\n\n  <!-- clickflare 长链隐藏锚点池(序号1-60): Goto 按序号委托点击 -->\n' + CF_POOL + '\n' + html.slice(bodyOpen + 6)
+
+// Goto 函数替换为委托版(保留原短链逻辑作兜底)
+const gotoStart = html.indexOf('function Goto(url) {')
+const gotoEndMarker = '      window.location.href = link;\n    }'
+const gotoEnd = html.indexOf(gotoEndMarker)
+assert(gotoStart > -1 && gotoEnd > gotoStart, 'Goto 函数定位失败')
+html = html.slice(0, gotoStart) + GOTO_FN + html.slice(gotoEnd + gotoEndMarker.length)
+
+// ---------- 8. 防御样式: 后台粘贴的外部正文可能带 white-space:pre(整段不换行), 会把页面撑出横向滚动 ----------
+const cssLink = '<link rel="stylesheet" href="css/smb-index.css">'
+assert(html.includes(cssLink), '未找到 css link')
+html = html.replace(cssLink, cssLink + `
+  <style>
+    /* 防御: 后台粘贴的外部正文(飞书等)可能带内联 white-space:pre(整段不换行)或超宽元素, 会把页面撑出横向滚动条 */
+    .smb-section-main [style*="white-space: pre"], .smb-section-main [style*="white-space:pre"],
+    #lp-intro [style*="white-space: pre"], #lp-intro [style*="white-space:pre"] { white-space: normal !important; }
+    .smb-section-main, #lp-intro { overflow-wrap: anywhere; }
+    .smb-section-main *, #lp-intro * { max-width: 100%; }
+  </style>`)
 
 fs.writeFileSync(OUT, html)
 console.log('已生成动态版:', OUT, `(${(fs.statSync(OUT).size / 1024).toFixed(1)} KB)`)
