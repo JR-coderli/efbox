@@ -7,33 +7,6 @@
         <div class="filter-row">
           <div class="filter-items">
             <el-form :inline="true" class="filter-form" @submit.prevent>
-              <el-form-item label="关键词">
-                <el-input
-                  v-model="filters.keyword"
-                  placeholder="campaign_name / adset_name / creative_name / ip_address（两个 click_id 请用表头精确查询）"
-                  clearable
-                  style="width: 240px"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                >
-                  <template #suffix>
-                    <el-tooltip
-                      effect="light"
-                      placement="bottom-start"
-                      :show-after="300"
-                      popper-class="clicks-keyword-tip"
-                    >
-                      <template #content>
-                        <div class="keyword-tip-content">
-                          <div class="keyword-tip-title">Keyword searches these columns (OR):</div>
-                          <div v-for="f in KEYWORD_FIELDS" :key="f" class="keyword-tip-field">{{ f }}</div>
-                        </div>
-                      </template>
-                      <el-icon class="keyword-tip-icon"><QuestionFilled /></el-icon>
-                    </el-tooltip>
-                  </template>
-                </el-input>
-              </el-form-item>
               <el-form-item label="时区">
                 <el-select v-model="tz" style="width: 130px" @change="handleSearch">
                   <el-option v-for="o in tzOptions" :key="o.value" :label="o.label" :value="o.value" />
@@ -315,7 +288,29 @@
               :show-overflow-tooltip="col.overflow"
             >
               <template #header>
+                <!-- suggest='recent'(code 列)：聚焦弹出"最近创建的 code+创建时间"快捷面板，点选即填入并搜索 -->
+                <el-autocomplete
+                  v-if="col.suggest === 'recent'"
+                  v-model="filters[col.filterKey]"
+                  size="small"
+                  :fetch-suggestions="fetchRecentPathCodes"
+                  :placeholder="col.label"
+                  clearable
+                  popper-class="clicks-code-popper"
+                  class="header-filter-input"
+                  @keyup.enter="handleSearch"
+                  @clear="handleSearch"
+                  @select="handleSearch"
+                >
+                  <template #default="{ item }">
+                    <div class="recent-code-item">
+                      <span class="recent-code-value">{{ item.code }}</span>
+                      <span class="recent-code-time">{{ fmtTime(item.created_at) }}</span>
+                    </div>
+                  </template>
+                </el-autocomplete>
                 <el-input
+                  v-else
                   v-model="filters[col.filterKey]"
                   size="small"
                   :placeholder="col.label"
@@ -368,20 +363,12 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { QuestionFilled } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
 import useSystemStore from '@/stores/main/system/system'
-
-// keyword 可搜索的列（与后端 /query/clicks keyword 搜索范围一致，任一字段命中即返回）。
-// campaign_name/adset_name/creative_name/ip_address/media_click_id/system_click_id 均有表头
-// 精确输入框（走专用查询串），keyword 已无独占字段，仅保留提示说明。
-const KEYWORD_FIELDS = [
-  'campaign_name',
-  'adset_name',
-  'creative_name',
-  'ip_address'
-]
-import { getClicks, getEfLanderScreenshots, getClicksTimeline } from '@/services/main/ef-tracker'
+// keyword 关键词搜索框已于 2026-11-11 移除：6 列 ILIKE 模糊扫性能差，且全部字段已有
+// 表头专属精确查询框（campaign/adset/creative/ip/两个 click_id），keyword 无独占价值。
+// 后端 keyword 参数保留（对外 API 兼容），仅前端不再提供入口。
+import { getClicks, getEfLanderScreenshots, getClicksTimeline, getRecentPathCodes } from '@/services/main/ef-tracker'
 import { BASE_URL } from '@/services/request/config'
 import SparkMD5 from 'spark-md5'
 import CellLoading from './cell-loading.vue'
@@ -427,7 +414,6 @@ const tzOptions = [
 // 该表精确过滤参数（全部可选，不传即不过滤）
 // mid/tid/oid/lid 仅允许数字：输入时实时剔除非数字字符（接口对非法值会返回 400）
 const filters = reactive({
-  keyword: '',
   mid: '',
   tid: '',
   oid: '',
@@ -438,7 +424,7 @@ const filters = reactive({
   campaign_name: '',    // 表头精确查询：广告系列名（2026-09-03 接口新增的专属查询串）
   adset_name: '',       // 表头精确查询：广告组名（同上）
   creative_name: '',    // 表头精确查询：广告创意名（同上）
-  ip_address: ''        // 表头精确查询：客户端 IP（同上）
+  ip_address: ''        // 表头查询：客户端 IP（2026-11-11 起模糊, 可搜网段前缀）
 })
 
 // 表头过滤输入框统一入口：digits 列（mid/tid/oid/lid）只保留数字，其余原样
@@ -740,8 +726,10 @@ const DEFAULT_COLUMNS = [
   { key: 'names.tracker', label: 'Tracker_name', type: 'names', nameKey: 'tracker', prop: 'names.tracker', minWidth: 210, overflow: true },
   { key: 'names.lander', label: 'Lander_name', type: 'names', nameKey: 'lander', prop: 'names.lander', minWidth: 210, overflow: true },
   { key: 'names.offer', label: 'Offer_name', type: 'names', nameKey: 'offer', prop: 'names.offer', minWidth: 210, overflow: true },
-  { key: 'path_code', label: 'code', type: 'filter', prop: 'path_code', filterKey: 'path_code', width: 140, overflow: true, defaultHidden: true },
-  // campaign_name/adset_name/creative_name/ip_address：2026-09-03 接口新增的专属精确查询串 → 表头过滤列
+  // suggest='recent'：表头输入框聚焦时弹出最近创建的 5 个 code 快捷面板(/query/path-codes)
+  { key: 'path_code', label: 'code', type: 'filter', prop: 'path_code', filterKey: 'path_code', suggest: 'recent', width: 140, overflow: true, defaultHidden: true },
+  // campaign_name/adset_name/creative_name/ip_address：2026-09-03 接口新增的专属查询串 → 表头过滤列;
+  // 2026-11-11 起接口为**模糊(包含)**匹配, 两个 click_id 仍精确
   { key: 'campaign_name', label: 'campaign_name', type: 'filter', prop: 'campaign_name', filterKey: 'campaign_name', minWidth: 160, overflow: true, defaultHidden: true },
   { key: 'campaign_id', label: 'campaign_id', type: 'plain', prop: 'campaign_id', minWidth: 120, overflow: true, defaultHidden: true },
   { key: 'adset_name', label: 'adset_name', type: 'filter', prop: 'adset_name', filterKey: 'adset_name', minWidth: 140, overflow: true, defaultHidden: true },
@@ -864,13 +852,38 @@ function rangeToParams(range) {
   return { start: fmt(d1), end: fmt(end) }
 }
 
+// code 列筛选框聚焦时的快捷选项：最近创建的 5 个 code(/query/path-codes, 2026-11-11)。
+// 按当前 tz 缓存（切时区重拉一次）；面板内再输入则本地过滤（包含匹配），不再发请求。
+let recentPathCodes = null
+let recentPathCodesTz = null
+function filterRecentPathCodes(qs, list) {
+  const kw = String(qs || '').trim().toLowerCase()
+  return kw ? list.filter(i => i.code.toLowerCase().includes(kw)) : list
+}
+function fetchRecentPathCodes(qs, cb) {
+  if (recentPathCodes && recentPathCodesTz === tz.value) {
+    cb(filterRecentPathCodes(qs, recentPathCodes))
+    return
+  }
+  getRecentPathCodes({ tz: tz.value })
+    .then(res => {
+      recentPathCodesTz = tz.value
+      recentPathCodes = (res?.list || []).map(r => ({ value: r.code, code: r.code, created_at: r.created_at }))
+      cb(filterRecentPathCodes(qs, recentPathCodes))
+    })
+    .catch(() => {
+      recentPathCodesTz = tz.value
+      recentPathCodes = []
+      cb([])
+    })
+}
+
 function buildParams() {
   const p = {
     page: pagination.page,
     size: pagination.pageSize,
     tz: tz.value
   }
-  if (filters.keyword) p.keyword = filters.keyword
   if (filters.mid) p.mid = filters.mid
   if (filters.tid) p.tid = filters.tid
   if (filters.oid) p.oid = filters.oid
@@ -1517,17 +1530,6 @@ function renderTimelineChart() {
   font-size: 13px;
 }
 
-// 输入框 suffix 的问号图标：与 clearable 的清除图标并排，悬停提示可搜索字段
-.keyword-tip-icon {
-  color: #9aa0a6;
-  cursor: help;
-  margin-right: 2px;
-
-  &:hover {
-    color: #5f6368;
-  }
-}
-
 // 金额列用等宽数字字体（tabular figures），数字对齐、便于比较金额
 :deep(.google-table td.col-money .cell) {
   font-family: 'Roboto Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -1727,29 +1729,30 @@ function renderTimelineChart() {
   word-break: break-all;
 }
 
-/* 关键词可搜索字段提示（el-tooltip 传送到 body，scoped 选不中，写在全局） */
-.clicks-keyword-tip.el-popper {
-  font-family: 'Google Sans', Roboto, Arial, sans-serif;
-}
-
-.keyword-tip-content {
-  .keyword-tip-title {
-    font-size: 12px;
-    font-weight: 500;
-    color: #3c4043;
-    margin-bottom: 4px;
-  }
-
-  .keyword-tip-field {
-    font-family: 'Roboto Mono', 'Consolas', monospace;
-    font-size: 12px;
-    color: #202124;
-    line-height: 1.7;
-  }
-}
-
 /* 列配置面板（el-popover teleported 到 body，scoped 选不中，写在全局） */
 .clicks-col-popover.el-popper {
   padding: 0 !important;
+}
+
+/* code 列"最近创建"快捷面板（el-autocomplete popper 传送到 body，写在全局）：code 等宽字体 + 右侧灰色时间 */
+.clicks-code-popper {
+  .recent-code-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 0 4px;
+  }
+
+  .recent-code-value {
+    font-family: 'Roboto Mono', 'Consolas', monospace;
+    font-size: 12px;
+    color: #202124;
+  }
+
+  .recent-code-time {
+    font-size: 11px;
+    color: #9aa0a6;
+  }
 }
 </style>

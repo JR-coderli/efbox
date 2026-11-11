@@ -88,6 +88,12 @@ export function getLanders(params = {}) {
   return query('/query/landers', params)
 }
 
+// 6.5 最近创建的投放 code —— /query/path-codes(2026-11-11, 后台 code 列筛选框聚焦时的快捷选项)
+// params: { limit(默认5上限20), tz }  返回 { tz, count, list: [{ code, created_at }] }
+export function getRecentPathCodes(params = {}) {
+  return query('/query/path-codes', params)
+}
+
 // 7. 单维度分组聚合报表 —— /query/stats/group(2026-09-03 上线,替代已废弃的 /query/stats/breakdown)
 // params: by(必填,本次分组维度,如 lander)、range|start/end、tz、
 //         以及下钻过滤(已展开的上层维度传具体值,如 lander=10、date=2026-09-03)
