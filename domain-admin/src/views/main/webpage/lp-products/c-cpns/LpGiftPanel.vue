@@ -1,8 +1,8 @@
 <template>
   <div class="lp-gift-panel">
     <div class="header">
-      <div class="title">清单页LP · v6</div>
-      <div class="desc">管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效。页面: pro2.winrab.com/s2/1/ecomlistical/v6/</div>
+      <div class="title">{{ pageTitle }}</div>
+      <div class="desc">{{ pageDesc }}</div>
       <div class="actions">
         <el-button @click="openConfig">页面配置</el-button>
         <el-button @click="unifyVisible = true">统一字号</el-button>
@@ -228,9 +228,33 @@ import { Rank } from '@element-plus/icons-vue'
 import Sortable from 'sortablejs'
 import {
   getGiftProducts, createGiftProduct, updateGiftProduct, removeGiftProduct,
-  updateGiftSort, getGiftConfig, updateGiftConfig, uploadLpMedia, unifyGiftFontSize
+  updateGiftSort, getGiftConfig, updateGiftConfig, uploadLpMedia, unifyGiftFontSize,
+  getGift7Products, createGift7Product, updateGift7Product, removeGift7Product,
+  updateGift7Sort, getGift7Config, updateGift7Config, unifyGift7FontSize
 } from '@/services/main/webpage/lp-products'
 import LpVisualEditor from './LpVisualEditor.vue'
+
+// 实例选择: 'gift'=清单页LP v6(默认, 传不传 prop 行为不变) | 'gift7'=清单页LP v7(独立数据)
+const props = defineProps({
+  page: { type: String, default: 'gift' }
+})
+
+const isV7 = props.page === 'gift7'
+const pageTitle = isV7 ? '清单页LP · v7' : '清单页LP · v6'
+const pageDesc = isV7
+  ? '管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效(与 v6 数据完全独立)。页面: pro2.winrab.com/s2/1/ecomlistical/v7/'
+  : '管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效。页面: pro2.winrab.com/s2/1/ecomlistical/v6/'
+
+// 本实例使用的接口集合(两套数据互不影响)
+const api = isV7
+  ? {
+      list: getGift7Products, create: createGift7Product, update: updateGift7Product, remove: removeGift7Product,
+      sort: updateGift7Sort, getConfig: getGift7Config, config: updateGift7Config, unify: unifyGift7FontSize
+    }
+  : {
+      list: getGiftProducts, create: createGiftProduct, update: updateGiftProduct, remove: removeGiftProduct,
+      sort: updateGiftSort, getConfig: getGiftConfig, config: updateGiftConfig, unify: unifyGiftFontSize
+    }
 
 const LP_PUBLIC_BASE = 'https://zorfell.com'
 
@@ -313,7 +337,7 @@ async function handleUnify() {
   } catch { return }
   unifying.value = true
   try {
-    const res = await unifyGiftFontSize({
+    const res = await api.unify({
       size: unifyForm.value.size,
       group_type: unifyForm.value.scope === '' ? undefined : Number(unifyForm.value.scope)
     })
@@ -358,7 +382,7 @@ function previewUrl(url) {
 async function fetchList() {
   loading.value = true
   try {
-    const res = await getGiftProducts()
+    const res = await api.list()
     if (res.code === 0) products.value = res.data
   } finally {
     loading.value = false
@@ -390,7 +414,7 @@ async function handleSave() {
       media_type: Number(f.media_type) || 1, media_url: f.media_url, media_style: f.media_style || '',
       content: f.content, link: f.link, sold_out: f.soldOutBool ? 1 : 0, enabled: f.enabledBool ? 1 : 0
     }
-    const res = f.id ? await updateGiftProduct(f.id, payload) : await createGiftProduct(payload)
+    const res = f.id ? await api.update(f.id, payload) : await api.create(payload)
     if (res.code === 0) {
       ElMessage.success('保存成功')
       drawerVisible.value = false
@@ -403,7 +427,7 @@ async function handleSave() {
 
 async function handleRemove(row) {
   await ElMessageBox.confirm(`确定删除产品「${row.title}」?`, '提示', { type: 'warning' })
-  const res = await removeGiftProduct(row.id)
+  const res = await api.remove(row.id)
   if (res.code === 0) { ElMessage.success('已删除'); fetchList() }
 }
 
@@ -433,13 +457,13 @@ async function handleUpload(option, forBanner = false) {
 }
 
 async function openConfig() {
-  const res = await getGiftConfig()
+  const res = await api.getConfig()
   if (res.code === 0) { configForm.value = res.data || {}; introMode.value = 'visual'; configVisible.value = true }
 }
 
 async function saveConfig() {
   if (introMode.value === 'visual') pullVisualIntro()
-  const res = await updateGiftConfig({
+  const res = await api.config({
     title: configForm.value.title, hero_url: configForm.value.hero_url, intro_html: configForm.value.intro_html
   })
   if (res.code === 0) { ElMessage.success('保存成功'); configVisible.value = false }
@@ -459,7 +483,7 @@ function initSortable() {
       const [moved] = list.splice(oldIndex, 1)
       list.splice(newIndex, 0, moved)
       products.value = list
-      const res = await updateGiftSort(list.map((p, i) => ({ id: p.id, sort: i + 1 })))
+      const res = await api.sort(list.map((p, i) => ({ id: p.id, sort: i + 1 })))
       if (res.code === 0) ElMessage.success('排序已保存')
     }
   })

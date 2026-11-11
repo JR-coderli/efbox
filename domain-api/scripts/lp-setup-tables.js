@@ -6,8 +6,8 @@ const fs = require('fs')
 const path = require('path')
 const connection = require('../src/app/database')
 
-// zorfell 电商LP + 礼品清单LP(gift) 两套表
-const SQL_FILES = ['create_lp_tables.sql', 'create_lp_gift_tables.sql']
+// zorfell 电商LP + 清单页LP v6(gift) + 清单页LP v7(gift7) 三套表
+const SQL_FILES = ['create_lp_tables.sql', 'create_lp_gift_tables.sql', 'create_lp_gift7_tables.sql']
 
 async function main() {
   for (const file of SQL_FILES) {
@@ -43,10 +43,12 @@ async function main() {
   const [tables] = await connection.query("SHOW TABLES LIKE 'lp_%'")
   const [count] = await connection.query('SELECT COUNT(*) AS c FROM lp_products')
   const [giftCount] = await connection.query('SELECT COUNT(*) AS c FROM lp_gift_products')
+  const [gift7Count] = await connection.query('SELECT COUNT(*) AS c FROM lp_gift7_products')
   const [menus] = await connection.query("SELECT id, name, url FROM menu WHERE url = '/main/webpage/lp-products'")
   console.log('\nlp_ 开头的表:', tables.map((t) => Object.values(t)[0]))
   console.log('lp_products 现有行数:', count[0].c)
   console.log('lp_gift_products 现有行数:', giftCount[0].c)
+  console.log('lp_gift7_products 现有行数:', gift7Count[0].c)
   console.log('菜单:', menus)
   process.exit(0)
 }

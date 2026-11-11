@@ -294,6 +294,7 @@
                   v-model="filters[col.filterKey]"
                   size="small"
                   :fetch-suggestions="fetchRecentPathCodes"
+                  :debounce="300"
                   :placeholder="col.label"
                   clearable
                   popper-class="clicks-code-popper"
@@ -852,24 +853,32 @@ function rangeToParams(range) {
   return { start: fmt(d1), end: fmt(end) }
 }
 
-// code 列筛选框聚焦时的快捷选项：最近创建的 5 个 code(/query/path-codes, 2026-11-11)。
-// 按当前 tz 缓存（切时区重拉一次）；面板内再输入则本地过滤（包含匹配），不再发请求。
+// code 列筛选框的快捷选项(2026-11-11)：
+//   空输入聚焦 = 最近创建的 5 个 code（按 tz 缓存，切时区重拉一次）；
+//   键入内容   = 实时请求**全量模糊匹配**的 code(/query/path-codes?kw=, 按创建时间倒序最多 20 条)，
+//               点选某条即精确按该 code 搜索（el-autocomplete 的 debounce=300 防抖已够，表仅数百行）。
 let recentPathCodes = null
 let recentPathCodesTz = null
-function filterRecentPathCodes(qs, list) {
-  const kw = String(qs || '').trim().toLowerCase()
-  return kw ? list.filter(i => i.code.toLowerCase().includes(kw)) : list
+function toSuggestItems(res) {
+  return (res?.list || []).map(r => ({ value: r.code, code: r.code, created_at: r.created_at }))
 }
 function fetchRecentPathCodes(qs, cb) {
+  const kw = String(qs || '').trim()
+  if (kw) {
+    getRecentPathCodes({ tz: tz.value, kw, limit: 20 })
+      .then(res => cb(toSuggestItems(res)))
+      .catch(() => cb([]))
+    return
+  }
   if (recentPathCodes && recentPathCodesTz === tz.value) {
-    cb(filterRecentPathCodes(qs, recentPathCodes))
+    cb(recentPathCodes)
     return
   }
   getRecentPathCodes({ tz: tz.value })
     .then(res => {
       recentPathCodesTz = tz.value
-      recentPathCodes = (res?.list || []).map(r => ({ value: r.code, code: r.code, created_at: r.created_at }))
-      cb(filterRecentPathCodes(qs, recentPathCodes))
+      recentPathCodes = toSuggestItems(res)
+      cb(recentPathCodes)
     })
     .catch(() => {
       recentPathCodesTz = tz.value

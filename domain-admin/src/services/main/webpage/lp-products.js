@@ -87,3 +87,41 @@ export function getGiftConfig() {
 export function updateGiftConfig(data) {
   return hyRequest.patch({ url: '/lp/manage/gift/config', data })
 }
+
+
+/**
+ * 清单页LP v7 接口(独立数据, 与 v6/gift 互不影响)
+ * 静态页部署在 pro2.winrab.com/s2/1/ecomlistical/v7/, 数据表 lp_gift7_products / lp_gift7_page_config
+ */
+
+export function getGift7Products() {
+  return hyRequest.get({ url: '/lp/manage/gift7/products' })
+}
+
+export function createGift7Product(data) {
+  return hyRequest.post({ url: '/lp/manage/gift7/products', data })
+}
+
+export function updateGift7Product(id, data) {
+  return hyRequest.patch({ url: `/lp/manage/gift7/products/${id}`, data })
+}
+
+export function removeGift7Product(id) {
+  return hyRequest.delete({ url: `/lp/manage/gift7/products/${id}` })
+}
+
+export function updateGift7Sort(products) {
+  return hyRequest.patch({ url: '/lp/manage/gift7/products-sort', data: { products } })
+}
+
+export function getGift7Config() {
+  return hyRequest.get({ url: '/lp/manage/gift7/config' })
+}
+
+export function updateGift7Config(data) {
+  return hyRequest.patch({ url: '/lp/manage/gift7/config', data })
+}
+
+export function unifyGift7FontSize(data) {
+  return hyRequest.post({ url: '/lp/manage/gift7/unify-fontsize', data })
+}

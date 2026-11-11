@@ -25,6 +25,15 @@
             <div class="card-desc">{{ giftCount }} 个产品 · 板块/正文/跳转链接/分组/排序</div>
           </div>
         </div>
+        <div class="lp-card" @click="view = 'gift7'">
+          <div class="card-preview">
+            <iframe :src="GIFT7_LP_URL" sandbox="allow-scripts" loading="lazy" tabindex="-1"></iframe>
+          </div>
+          <div class="card-info">
+            <div class="card-name">清单页LP <span class="card-sub">v7</span></div>
+            <div class="card-desc">{{ gift7Count }} 个产品 · 数据独立于 v6, 可自由改版</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -33,6 +42,7 @@
       <el-button class="back-btn" :icon="ArrowLeft" text @click="view = 'select'">返回选择落地页</el-button>
       <LpZorfellPanel v-if="view === 'zorfell'" />
       <LpGiftPanel v-if="view === 'gift'" />
+      <LpGiftPanel v-if="view === 'gift7'" page="gift7" />
     </template>
   </div>
 </template>
@@ -42,23 +52,26 @@ import { ref, onMounted } from 'vue'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import LpZorfellPanel from './c-cpns/LpZorfellPanel.vue'
 import LpGiftPanel from './c-cpns/LpGiftPanel.vue'
-import { getLpProducts, getGiftProducts } from '@/services/main/webpage/lp-products'
+import { getLpProducts, getGiftProducts, getGift7Products } from '@/services/main/webpage/lp-products'
 
-// 两个 LP 的线上静态页地址(卡片实时预览用) —— 同类清单页,按版本区分
+// 各 LP 的线上静态页地址(卡片实时预览用) —— 同类清单页,按版本区分
 const ZORFELL_LP_URL = 'https://pro2.winrab.com/s2/1/ecomlistical/v2/'
 const GIFT_LP_URL = 'https://pro2.winrab.com/s2/1/ecomlistical/v6/'
+const GIFT7_LP_URL = 'https://pro2.winrab.com/s2/1/ecomlistical/v7/'
 
-const view = ref('select') // select=卡片选择页 / zorfell / gift
+const view = ref('select') // select=卡片选择页 / zorfell / gift / gift7
 const zorfellCount = ref('—')
 const giftCount = ref('—')
+const gift7Count = ref('—')
 const countsLoading = ref(false)
 
 // 卡片上展示各自产品数(拉取失败显示 —,不影响进入管理)
 onMounted(async () => {
   countsLoading.value = true
-  const [a, b] = await Promise.allSettled([getLpProducts(), getGiftProducts()])
+  const [a, b, c] = await Promise.allSettled([getLpProducts(), getGiftProducts(), getGift7Products()])
   if (a.status === 'fulfilled' && a.value?.code === 0) zorfellCount.value = (a.value.data || []).length
   if (b.status === 'fulfilled' && b.value?.code === 0) giftCount.value = (b.value.data || []).length
+  if (c.status === 'fulfilled' && c.value?.code === 0) gift7Count.value = (c.value.data || []).length
   countsLoading.value = false
 })
 </script>

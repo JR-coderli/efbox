@@ -88,8 +88,9 @@ export function getLanders(params = {}) {
   return query('/query/landers', params)
 }
 
-// 6.5 最近创建的投放 code —— /query/path-codes(2026-11-11, 后台 code 列筛选框聚焦时的快捷选项)
-// params: { limit(默认5上限20), tz }  返回 { tz, count, list: [{ code, created_at }] }
+// 6.5 投放 code 快捷选项 —— /query/path-codes(2026-11-11, 后台 code 列筛选框)
+// params: { limit(默认5上限50), kw(code模糊搜索, 传入=全量模糊模式), tz }
+// 返回 { tz, count, list: [{ code, created_at }] }——按创建时间倒序
 export function getRecentPathCodes(params = {}) {
   return query('/query/path-codes', params)
 }
