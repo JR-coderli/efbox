@@ -142,7 +142,7 @@
           </template>
           <div v-if="contentMode === 'visual'" class="visual-edit">
             <div class="edit-hint">下方就是这一段在页面上的真实效果:点击文字即可直接修改;选中文字后可用上方工具栏调整字号、颜色、加粗等。改完点右下角保存。</div>
-            <LpVisualEditor ref="contentEditorRef" v-model="form.content" height="520px" :default-link="form.link || ''" />
+            <LpVisualEditor ref="contentEditorRef" v-model="form.content" height="520px" :default-link="form.link || ''" :lp-base="lpBase" />
           </div>
           <el-input v-else v-model="form.content" type="textarea" :rows="22" class="code-input" spellcheck="false" />
         </el-form-item>
@@ -182,7 +182,7 @@
           </template>
           <div v-if="introMode === 'visual'" class="visual-edit">
             <div class="edit-hint">点击文字直接修改,效果即页面真实样式;选中文字可用上方工具栏调整字号、颜色等。</div>
-            <LpVisualEditor ref="introEditorRef" v-model="configForm.intro_html" height="300px" />
+            <LpVisualEditor ref="introEditorRef" v-model="configForm.intro_html" height="300px" :lp-base="lpBase" />
           </div>
           <el-input v-else v-model="configForm.intro_html" type="textarea" :rows="12" class="code-input" spellcheck="false" />
         </el-form-item>
@@ -233,6 +233,7 @@ import {
   updateGift7Sort, getGift7Config, updateGift7Config, unifyGift7FontSize
 } from '@/services/main/webpage/lp-products'
 import LpVisualEditor from './LpVisualEditor.vue'
+import { GIFT_LP_BASE, GIFT7_LP_BASE } from '../gift-html'
 
 // 实例选择: 'gift'=清单页LP v6(默认, 传不传 prop 行为不变) | 'gift7'=清单页LP v7(独立数据)
 const props = defineProps({
@@ -240,6 +241,8 @@ const props = defineProps({
 })
 
 const isV7 = props.page === 'gift7'
+// 可视化编辑器引用的线上静态页地址(CSS + 相对图片补全), 按版本区分, 互不影响
+const lpBase = isV7 ? GIFT7_LP_BASE : GIFT_LP_BASE
 const pageTitle = isV7 ? '清单页LP · v7' : '清单页LP · v6'
 const pageDesc = isV7
   ? '管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效(与 v6 数据完全独立)。页面: pro2.winrab.com/s2/1/ecomlistical/v7/'

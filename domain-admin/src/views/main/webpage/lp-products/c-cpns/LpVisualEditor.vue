@@ -69,7 +69,9 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   height: { type: String, default: '520px' },
   // 加链接弹窗的默认值(当前产品的跳转链接, 常用场景就是与产品同链)
-  defaultLink: { type: String, default: '' }
+  defaultLink: { type: String, default: '' },
+  // 线上静态页地址(引用其 CSS + 补全相对图片路径): 默认 v6, v7 面板传 GIFT7_LP_BASE
+  lpBase: { type: String, default: GIFT_LP_BASE }
 })
 
 // 正文常用字号(现内容以 24px 为主, 评分行 18px)与常用颜色
@@ -115,9 +117,9 @@ function refreshStyleState() {
 // 用线上 LP 的 CSS 渲染 + contenteditable 直接改字(与线上页面效果一致)
 // 附带与线上页面相同的防御样式: 粘贴内容带 white-space:pre 时在编辑器里同样正常换行, 所见即所得
 const doc = computed(() => {
-  const html = toDisplayHtml(props.modelValue)
+  const html = toDisplayHtml(props.modelValue, props.lpBase)
   return '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-    '<link rel="stylesheet" href="' + GIFT_LP_BASE + '/css/smb-index.css">' +
+    '<link rel="stylesheet" href="' + props.lpBase + '/css/smb-index.css">' +
     '<style>' +
     '.smb-section-main [style*="white-space: pre"], .smb-section-main [style*="white-space:pre"] { white-space: normal !important; }' +
     '.smb-section-main { overflow-wrap: anywhere; }' +
@@ -320,7 +322,7 @@ function getHtml() {
   clearImgSelect() // 先去掉图片选中描边, 避免存进内容
   const el = iframeRef.value?.contentDocument?.querySelector('.smb-section-main')
   const html = el ? el.innerHTML.trim() : ''
-  return html ? fromDisplayHtml(html) : ''
+  return html ? fromDisplayHtml(html, props.lpBase) : ''
 }
 
 // script setup 默认对外封闭, 必须显式暴露, 否则父组件 ref 拿不到 getHtml(保存时报 not a function)

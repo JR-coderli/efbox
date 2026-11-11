@@ -17,20 +17,23 @@
 // 线上静态页地址(可视化编辑时引用其 CSS 并补全相对图片路径)
 // 注意: 随投放版本升级同步更新(当前投放 v6, 资源结构与 v5 相同)
 export const GIFT_LP_BASE = 'https://pro2.winrab.com/s2/1/ecomlistical/v6'
+// v7 静态页地址(v7 面板可视化编辑时用, 资源结构与 v6 相同)
+export const GIFT7_LP_BASE = 'https://pro2.winrab.com/s2/1/ecomlistical/v7'
 
 // 存储格式 → 显示格式: img 的相对路径(images/、videos/)拼上线上域名
-export function toDisplayHtml(html) {
+// base 默认 v6, 传 GIFT7_LP_BASE 则按 v7 页面补全(不影响默认调用方)
+export function toDisplayHtml(html, base = GIFT_LP_BASE) {
   if (!html) return html
   return html.replace(
     /(<img[^>]*\ssrc=")(images\/|videos\/)/g,
-    (m, pre, rel) => pre + GIFT_LP_BASE + '/' + rel
+    (m, pre, rel) => pre + base + '/' + rel
   )
 }
 
-// 显示格式 → 存储格式
-export function fromDisplayHtml(html) {
+// 显示格式 → 存储格式(base 需与 toDisplayHtml 时一致, 才能正确还原)
+export function fromDisplayHtml(html, lpBase = GIFT_LP_BASE) {
   if (!html) return html
-  const base = GIFT_LP_BASE.replace(/\//g, '\\/')
+  const base = lpBase.replace(/\//g, '\\/')
   let out = html.replace(
     new RegExp('(<img[^>]*\\ssrc=")' + base + '\\/(images\\/|videos\\/)', 'g'),
     (m, pre, rel) => pre + rel
