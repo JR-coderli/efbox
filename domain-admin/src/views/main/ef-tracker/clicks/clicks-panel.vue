@@ -654,11 +654,19 @@ function postbackTitle(v, at) {
   return `媒体下发：${PB_LABEL[v] || v || '-'}${at ? ' · ' + fmtTime(at) : ''}`
 }
 
-// 直连路径判定：已转化但完全没碰 LP（reached_lp / lp_click 都为 false）
-// → 媒体点击直接进 Offer 转化、不经 LP，漏斗按路径2（媒体点击 › Offer › 转化 › 下发）渲染
-// 其余（含尚未转化、判断不出路径）一律按路径1（媒体点击 › LP展示 › LP点击 › 转化 › 下发）渲染
+// 直连路径判定（2026-11-11 起用配置事实）：优先读后端 funnel.path_destination
+//   0=经 LP（路径1），1=直跳 Offer（路径2），-1=path 查不到（老数据）回退启发式
+// 启发式兜底（旧响应/查不到）：已转化但完全没碰 LP → 按直连渲染
+//   （缺陷：未转化的直跳点击会被判成路径1，仅作兜底，正常情况都走配置事实）
 function isDirectPath(f) {
-  return !!(f && f.converted && !f.reached_lp && !f.lp_click)
+  if (!f) return false
+  if (typeof f.path_destination === 'number') {
+    if (f.path_destination === -1) {
+      return !!(f.converted && !f.reached_lp && !f.lp_click)
+    }
+    return f.path_destination === 1
+  }
+  return !!(f.converted && !f.reached_lp && !f.lp_click)
 }
 
 // 漏斗徽章悬浮提示：事件委托在 funnel-chain 上，单浮层跟随鼠标（比原生 title 醒目，不限行数）
