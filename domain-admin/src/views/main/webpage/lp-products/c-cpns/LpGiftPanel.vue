@@ -432,7 +432,7 @@ async function handleRemove(row) {
 }
 
 async function toggleEnabled(row, v) {
-  const res = await updateGiftProduct(row.id, { enabled: v ? 1 : 0 })
+  const res = await api.update(row.id, { enabled: v ? 1 : 0 })
   if (res.code === 0) row.enabled = v ? 1 : 0
 }
 
