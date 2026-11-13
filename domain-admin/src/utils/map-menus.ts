@@ -31,6 +31,7 @@ import efLanders from '@/router/main/ef-tracker/landers/landers'
 import efOverview from '@/router/main/ef-tracker/overview/overview'
 import efDatapanel from '@/router/main/ef-tracker/datapanel/datapanel'
 import efStatus from '@/router/main/ef-tracker/status/status'
+import efLpEventDict from '@/router/main/ef-tracker/lp-event-dict/lp-event-dict'
 
 
 function loadLocalRoutes() {
@@ -72,6 +73,7 @@ function loadLocalRoutes() {
   localRoutes.push(efOverview)
   localRoutes.push(efDatapanel)
   localRoutes.push(efStatus)
+  localRoutes.push(efLpEventDict)
 
   return localRoutes
 }

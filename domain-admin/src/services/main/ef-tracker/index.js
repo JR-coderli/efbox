@@ -122,6 +122,28 @@ export function replaceLanderUrl(payload) {
     .then((res) => res.data)
 }
 
+// 新建落地页(2026-11-13): 直接插 ab_landers; is_external 0=本系统投放/1=外部系统行为收集(docs/32)
+// payload: { name(必填), url(必填 http(s)://), is_external(0/1) } → { id, name, is_external }
+// 同名已存在返回 409
+export function createLander(payload) {
+  return queryRequest
+    .post('/landers/create', payload)
+    .then((res) => res.data)
+}
+
+// LP 行为事件字典 列表(2026-11-13): 可选 lid 过滤(0=全局通用) → { count, list:[{id,lid,event_name,display_name,description,is_standard,...}] }
+export function getLpEventDict(params = {}) {
+  return query('/query/lp-event-dict', params)
+}
+
+// LP 行为事件字典 新建/更新(UPSERT, 2026-11-13): { lid, event_name, display_name, description }
+// (lid,event_name) 已存在时只更新说明字段, 不动 is_standard
+export function upsertLpEventDict(payload) {
+  return queryRequest
+    .post('/landers/event-dict-upsert', payload)
+    .then((res) => res.data)
+}
+
 // ============================================================
 // 13. 服务器状态面板 —— /query/status（唯一带鉴权的查询接口）
 // 返回 { local: { server, db, partitions, archive }, peer?: { reachable, status, error, addr } }

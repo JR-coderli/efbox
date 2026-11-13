@@ -27,6 +27,7 @@
         <!-- 供合并页壳组件（landers-tabs.vue）插入系统切换 tab；单独使用时无此插槽内容，不影响布局 -->
         <slot name="tabs"></slot>
         <div class="toolbar-actions">
+          <el-button v-if="hasCreateLanderPermission" class="icon-btn" :icon="Plus" circle title="新建落地页" @click="openCreateDialog" />
           <el-button v-if="hasEfBatchReplacePermission" class="icon-btn" :icon="Edit" circle title="批量替换域名" @click="openReplaceDialog" />
           <!-- 列设置 -->
           <el-dropdown trigger="click" :hide-on-click="false">
@@ -79,8 +80,12 @@
             :show-overflow-tooltip="col.showOverflowTooltip"
             :class-name="col.className"
           >
+            <!-- Lander 名称列: 外部 LP(is_external=1)名称开头内联"外部"标识(像名称前缀, 非左右分列) -->
+            <template v-if="col.key === 'name'" #default="{ row }">
+              <span class="name-cell"><el-tag v-if="row.is_external === 1" type="warning" size="small" effect="plain" class="ext-badge">外部</el-tag>{{ row.name }}</span>
+            </template>
             <!-- 截图列 -->
-            <template v-if="col.key === 'screenshot'" #default="{ row }">
+            <template v-else-if="col.key === 'screenshot'" #default="{ row }">
               <div class="shot-wrap">
                 <el-image
                   v-if="getImageUrl(row)"
@@ -187,15 +192,41 @@
         <el-button type="primary" @click="handleReplace" :loading="replaceLoading" :disabled="!replaceForm.old.trim()">替换</el-button>
       </template>
     </el-dialog>
+
+    <!-- 新建落地页弹窗（谷歌风; 直接插 ab_landers, is_external 由切换按钮控制） -->
+    <el-dialog v-model="createDialogVisible" width="520px" :close-on-click-modal="false" class="google-dialog">
+      <template #header><div class="g-dialog-header">新建落地页</div></template>
+      <div class="g-form">
+        <div class="g-form-item">
+          <label class="g-label">Lander 名称</label>
+          <input v-model="createForm.name" class="g-input" :placeholder="namePlaceholder" maxlength="255" />
+        </div>
+        <div class="g-form-item">
+          <label class="g-label">URL 地址</label>
+          <input v-model="createForm.url" class="g-input" placeholder="https://..." />
+        </div>
+        <div class="g-form-item">
+          <label class="g-label">LP 归属</label>
+          <div class="g-switch-row">
+            <button type="button" class="g-switch" :class="{ active: !createForm.isExternal }" @click="createForm.isExternal = false">eftracker</button>
+            <button type="button" class="g-switch" :class="{ active: createForm.isExternal }" @click="createForm.isExternal = true">外部系统</button>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <button class="google-btn google-btn-secondary" @click="createDialogVisible = false">取消</button>
+        <button class="google-btn google-btn-primary" @click="handleCreate" :disabled="createLoading || !createForm.name.trim() || !createForm.url.trim()">{{ createLoading ? '创建中…' : '创建' }}</button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Setting, Edit } from '@element-plus/icons-vue'
+import { Search, Setting, Edit, Plus } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
-import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot } from '@/services/main/ef-tracker'
+import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot, createLander } from '@/services/main/ef-tracker'
 import { previewEfManualReplace, efManualReplace } from '@/services/main/webpage/landers'
 import { createOperationLog } from '@/services/main/system/operation-log'
 import { BASE_URL } from '@/services/request/config'
@@ -206,6 +237,8 @@ const loginStore = useLoginStore()
 const userPermissions = computed(() => loginStore.permissions || [])
 // ef 批量替换域名：权限码 system:ef-tracker:batch，未分配该节点的角色不显示按钮
 const hasEfBatchReplacePermission = computed(() => userPermissions.value.includes('system:ef-tracker:batch'))
+// 新建落地页（2026-11-13）独立权限码；LP行为字典已独立成页（网页管理菜单），列表不再放入口
+const hasCreateLanderPermission = computed(() => userPermissions.value.includes('system:ef-tracker:lander-create'))
 
 const loading = ref(false)
 const tableData = ref([])
@@ -436,6 +469,49 @@ function handleCurrentChange(page) {
 onMounted(() => {
   loadData()
 })
+
+// ===== 新建落地页（POST /landers/create，直接插 ab_landers；is_external 开关控制归属） =====
+const createDialogVisible = ref(false)
+const createLoading = ref(false)
+const createForm = reactive({ name: '', url: '', isExternal: false })
+
+// 名称占位随归属切换: 外部系统加【external】前缀提示(运营命名惯例)
+const NAME_TPL = '【rapidsupplys】Cashapp [V9 cashdeposit] # S3 # s3/1/cashapp/v3'
+const namePlaceholder = computed(() => createForm.isExternal ? `【external】${NAME_TPL}` : NAME_TPL)
+
+function openCreateDialog() {
+  createForm.name = ''
+  createForm.url = ''
+  createForm.isExternal = false
+  createDialogVisible.value = true
+}
+
+async function handleCreate() {
+  createLoading.value = true
+  try {
+    const res = await createLander({
+      name: createForm.name.trim(),
+      url: createForm.url.trim(),
+      is_external: createForm.isExternal ? 1 : 0
+    })
+    ElMessage.success(`创建成功：id=${res.id}（${createForm.isExternal ? '外部' : '本系统'}）${createForm.isExternal ? '，接入码 data-lid=' + res.id : ''}`)
+    createDialogVisible.value = false
+    pagination.page = 1
+    loadData()
+    // 记操作日志（与打开 URL 同机制）
+    createOperationLog({
+      module: 'ef-lander',
+      operation: 'create_lander',
+      description: `新建落地页 #${res.id}: ${createForm.name.trim()} (is_external=${createForm.isExternal ? 1 : 0})`,
+      details: { id: res.id, name: createForm.name.trim(), url: createForm.url.trim(), is_external: createForm.isExternal ? 1 : 0 }
+    }).catch(() => {})
+  } catch (e) {
+    // 409=同名已存在, 后端 error 信息原样透出
+    ElMessage.error('创建失败: ' + (e?.response?.data?.error || e?.message || '网络错误'))
+  } finally {
+    createLoading.value = false
+  }
+}
 
 // ===== 批量替换域名（POST /landers/replace-url） =====
 const replaceDialogVisible = ref(false)
@@ -1028,5 +1104,153 @@ async function handleReplace() {
   .el-checkbox {
     flex: 1;
   }
+}
+
+/* 名称列: "外部"标识内联在名称开头, 像名称前缀(非 flex 布局, 长名称换行时标识仍在文本首行开头) */
+.name-cell {
+  display: inline;
+
+  .ext-badge {
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+}
+
+/* ===== 谷歌风弹窗（新建落地页 / 事件字典, 2026-11-13）: 与 clicks 面板同一设计语言 ===== */
+
+/* 谷歌按钮（从 clicks-panel 同款复制） */
+.google-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  transition: background-color 0.2s;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.google-btn-primary {
+  background-color: #1a73e8;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background-color: #1557b0;
+  }
+}
+
+.google-btn-secondary {
+  background-color: #fff;
+  color: #5f6368;
+  border: 1px solid #dadce0;
+
+  &:hover:not(:disabled) {
+    background-color: #f1f3f4;
+    color: #202124;
+  }
+}
+
+/* 弹窗容器: 谷歌标题(左对齐/中字重)+圆角; el-dialog 只当遮罩与关闭行为用 */
+:deep(.google-dialog) {
+  border-radius: 12px;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+
+  .el-dialog__header {
+    padding: 18px 24px 8px;
+  }
+
+  .el-dialog__body {
+    padding: 8px 24px 16px;
+  }
+
+  .el-dialog__footer {
+    padding: 8px 24px 18px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 16px;
+  }
+}
+
+.g-dialog-header {
+  font-size: 18px;
+  font-weight: 500;
+  color: #202124;
+}
+
+/* 谷歌风表单原子 */
+.g-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.g-form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.g-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #5f6368;
+}
+
+.g-input {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #202124;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+
+  &::placeholder { color: #9aa0a6; }
+  &:focus { border-color: #1a73e8; box-shadow: 0 0 0 1px #1a73e8 inset; }
+  &:disabled { background: #f1f3f4; color: #80868b; cursor: not-allowed; }
+}
+
+/* 归属切换(本系统/外部): 分段按钮, 选中蓝底白字 */
+.g-switch-row {
+  display: inline-flex;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.g-switch {
+  padding: 7px 16px;
+  border: none;
+  background: #fff;
+  color: #5f6368;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+
+  &.active { background: #1a73e8; color: #fff; }
+  &:not(.active):hover { background: #f1f3f4; }
+}
+
+/* 浅蓝信息条 */
+.g-alert {
+  background: #e8f0fe;
+  color: #174ea6;
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 10px 14px;
+  border-radius: 8px;
 }
 </style>
