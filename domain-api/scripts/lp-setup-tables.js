@@ -39,6 +39,28 @@ async function main() {
     console.log('\n迁移: media_style 列已存在, 跳过')
   }
 
+  // v7 表补 subtitle 列(标题下描述)
+  const [cols7] = await connection.query(
+    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lp_gift7_products' AND COLUMN_NAME = 'subtitle'"
+  )
+  if (cols7.length === 0) {
+    await connection.query("ALTER TABLE lp_gift7_products ADD COLUMN `subtitle` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '标题下描述(可选, 显示在标题和图片之间)' AFTER `title`")
+    console.log('迁移: lp_gift7_products 已新增 subtitle 列')
+  } else {
+    console.log('迁移: lp_gift7 的 subtitle 列已存在, 跳过')
+  }
+
+  // v7 表补 subtitle_size 列(描述字号, 2-60px)
+  const [cols7s] = await connection.query(
+    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lp_gift7_products' AND COLUMN_NAME = 'subtitle_size'"
+  )
+  if (cols7s.length === 0) {
+    await connection.query("ALTER TABLE lp_gift7_products ADD COLUMN `subtitle_size` smallint NULL DEFAULT NULL COMMENT '标题下描述字号(px, 2-60; 空=默认18)' AFTER `subtitle`")
+    console.log('迁移: lp_gift7_products 已新增 subtitle_size 列')
+  } else {
+    console.log('迁移: lp_gift7 的 subtitle_size 列已存在, 跳过')
+  }
+
   // 校验
   const [tables] = await connection.query("SHOW TABLES LIKE 'lp_%'")
   const [count] = await connection.query('SELECT COUNT(*) AS c FROM lp_products')

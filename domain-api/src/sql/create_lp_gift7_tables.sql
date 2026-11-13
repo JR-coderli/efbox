@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS `lp_gift7_products` (
   `sort` int NOT NULL DEFAULT 0 COMMENT '排序号,越小越靠前(全局排序,渲染时按分组分段)',
   `group_type` tinyint NOT NULL DEFAULT 1 COMMENT '分组: 1=主列表(带编号) 2=New Arrivals(无编号)',
   `title` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '板块标题(.smb-section-title 文本)',
+  `subtitle` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '标题下描述(可选, 显示在标题和图片之间; 空则不显示)',
+  `subtitle_size` smallint NULL DEFAULT NULL COMMENT '标题下描述字号(px, 2-60; 空=默认18)',
   `product_name` varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT 'CTA按钮完整文案(如 Learn More About X »)',
   `media_type` tinyint NOT NULL DEFAULT 1 COMMENT '媒体类型: 1=图片 2=视频',
   `media_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '媒体地址: LP相对路径(images/x.jpg)或本服务路径(/lp/uploads/x.mp4)',

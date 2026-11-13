@@ -79,6 +79,14 @@
         <el-form-item label="板块标题(.smb-section-title 文本)">
           <el-input v-model="form.title" placeholder="Sherum OptiReaders Pro - The Reading Glasses That Bring Words Back to Life" />
         </el-form-item>
+        <el-form-item v-if="isV7" label="标题下描述(可选, 显示在标题和图片之间, 留空则不显示)">
+          <el-input v-model="form.subtitle" type="textarea" :rows="2" placeholder="例如: ⭐ 4.8 (7,283 Reviews) · #1 Best Seller in Reading Glasses" />
+          <div class="subtitle-size-bar">
+            <span class="bar-label">描述字号</span>
+            <el-input-number v-model="form.subtitle_size" :min="2" :max="60" size="small" controls-position="right" style="width: 110px" />
+            <span class="bar-text">px (最小可到 2; 清空则用默认 18)</span>
+          </div>
+        </el-form-item>
         <el-form-item label="CTA 按钮完整文案(如 Learn More About Sherum OptiReaders Pro »)">
           <el-input v-model="form.product_name" placeholder="Learn More About Sherum OptiReaders Pro »" />
         </el-form-item>
@@ -393,7 +401,7 @@ async function fetchList() {
 }
 
 function openCreate() {
-  form.value = { group_type: 1, title: '', product_name: '', media_type: 1, media_url: '', media_style: '', content: '', link: '', soldOutBool: false, enabledBool: true }
+  form.value = { group_type: 1, title: '', subtitle: '', subtitle_size: null, product_name: '', media_type: 1, media_url: '', media_style: '', content: '', link: '', soldOutBool: false, enabledBool: true }
   contentMode.value = 'visual'
   readMediaStyle()
   drawerVisible.value = true
@@ -416,6 +424,11 @@ async function handleSave() {
       group_type: Number(f.group_type) || 1, title: f.title, product_name: f.product_name,
       media_type: Number(f.media_type) || 1, media_url: f.media_url, media_style: f.media_style || '',
       content: f.content, link: f.link, sold_out: f.soldOutBool ? 1 : 0, enabled: f.enabledBool ? 1 : 0
+    }
+    // 标题下描述: 仅 v7 支持(v6 接口无此字段, 不下发避免歧义)
+    if (isV7) {
+      payload.subtitle = f.subtitle || ''
+      payload.subtitle_size = f.subtitle_size || null // 清空/null = 页面默认 18px
     }
     const res = f.id ? await api.update(f.id, payload) : await api.create(payload)
     if (res.code === 0) {
@@ -510,6 +523,7 @@ onMounted(async () => {
 .media-size-bar .bar-label { font-size: 12px; color: #606266; font-weight: 600; }
 .media-size-bar .bar-text { font-size: 12px; color: #909399; }
 .media-size-bar .bar-sep { width: 1px; height: 14px; background: #dcdfe6; }
+.subtitle-size-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .unify-tip { color: #909399; font-size: 12px; line-height: 1.6; }
 .content-label { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px; }
 .content-label > span { color: #606266; font-weight: 600; }
