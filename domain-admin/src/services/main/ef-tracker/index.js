@@ -151,6 +151,15 @@ export function getLpEvents(params = {}) {
   return query('/query/lp-events', params)
 }
 
+// 对话路径分布(2026-11-16, v84 分支树对话分析): GET /query/lp-events/paths
+// params: lid(必填) + start/end/date/tz(end 排他, 查整天要 +1 天)
+// 返回 { tz, lid, totals:{sessions,answered,scan_enter,scan_done,jumped,jumped_cta,jumped_auto,left},
+//        steps:[{step,question,answered,drop_here}],
+//        paths:[{key,steps:[{step,choice}],users,scan_done,jumped,left}] }
+export function getLpEventPaths(params = {}) {
+  return query('/query/lp-events/paths', params)
+}
+
 // ============================================================
 // 13. 服务器状态面板 —— /query/status（唯一带鉴权的查询接口）
 // 返回 { local: { server, db, partitions, archive }, peer?: { reachable, status, error, addr } }

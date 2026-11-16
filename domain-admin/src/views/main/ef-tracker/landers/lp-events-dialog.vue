@@ -89,6 +89,47 @@
               <div ref="readRateRef" class="chart-box tall"></div>
             </div>
           </div>
+
+          <!-- 第二行: 路径分布(全宽, 按作答会话的路径组合统计) -->
+          <div class="charts-row">
+            <div class="chart-card">
+              <div class="chart-title">路径分布 <span class="chart-sub">按作答会话统计 · Top10</span></div>
+              <template v-if="pathData && pathData.paths && pathData.paths.length">
+                <div class="path-summary">
+                  <span>作答会话 <b>{{ pathData.totals.answered }}</b></span>
+                  <span class="divider">|</span>
+                  <span>跳出 <b class="c-green">{{ pathData.totals.jumped }}</b>(点击 {{ pathData.totals.jumped_cta }} / 重定向 {{ pathData.totals.jumped_auto }})</span>
+                  <span class="divider">|</span>
+                  <span>中途离开 <b class="c-gray">{{ pathData.totals.left }}</b></span>
+                  <span v-if="maxDropStep" class="drop-hint">⚠ 流失最多: 第{{ maxDropStep.step }}题后({{ maxDropStep.drop_here }}人)</span>
+                </div>
+                <div class="path-list">
+                  <div v-for="p in pathRows" :key="p.key" class="path-row">
+                    <div class="path-steps">
+                      <template v-for="(s, i) in p.steps" :key="i">
+                        <el-tooltip :content="stepQuestion(s.step)" placement="top" :disabled="!stepQuestion(s.step)">
+                          <span class="path-chip" :class="s.choice">题{{ s.step }} {{ s.choice === 'yes' ? '是' : '否' }}</span>
+                        </el-tooltip>
+                        <span v-if="i < p.steps.length - 1" class="path-arrow">→</span>
+                      </template>
+                    </div>
+                    <div class="path-meta">
+                      <span class="path-outcome">
+                        <template v-if="p.jumped">跳出 {{ p.jumped }}</template>
+                        <template v-if="p.jumped && p.left"> · </template>
+                        <template v-if="p.left">离开 {{ p.left }}</template>
+                      </span>
+                      <div class="path-bar-track">
+                        <div class="path-bar" :style="{ width: pathPct(p) + '%' }"></div>
+                      </div>
+                      <span class="path-users"><b>{{ p.users }}</b> 人</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="chart-empty">暂无路径数据(老数据无题号不计入)</div>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -199,7 +240,7 @@ import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'v
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { getLpEvents, getLpEventDict } from '@/services/main/ef-tracker'
+import { getLpEvents, getLpEventDict, getLpEventPaths } from '@/services/main/ef-tracker'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -234,6 +275,22 @@ const lpType = ref('ecom')                                     // 'ecom'(滚动�
 const dialogFunnel = reactive({ enter: 0, done: 0, jump: 0, jumpCta: 0, jumpAuto: 0 })  // 进入/扫完/跳出(=点击+重定向)
 const avgDwellSec = ref(null)   // 平均停留秒数(仅计有进入+跳出的完整会话)
 const dialogAnswers = ref([])                                  // 对话选择分布 [{name: 问题→答案, value}]
+const pathData = ref(null)                                     // 路径分布(/query/lp-events/paths 返回)
+
+// 路径分布派生: Top10 行 / 占比条 / 题干 tooltip / 最大流失位
+const pathRows = computed(() => (pathData.value?.paths || []).slice(0, 10))
+const maxDropStep = computed(() => {
+  const steps = (pathData.value?.steps || []).filter((s) => s.drop_here > 0)
+  if (!steps.length) return null
+  return steps.reduce((a, b) => (b.drop_here > a.drop_here ? b : a))
+})
+function pathPct(p) {
+  const top = pathRows.value[0]?.users || 1
+  return Math.max(Math.round((p.users / top) * 100), 4)
+}
+function stepQuestion(step) {
+  return (pathData.value?.steps || []).find((s) => s.step === step)?.question || ''
+}
 
 // 对话气泡: 按问题分组, 每个问题一行(问题气泡 + Yes/No 两个回答气泡带数量)
 // note 格式 = "问题前30字 → 是/否", 按 " → " 拆分; 同题的是/否合并到一行
@@ -533,6 +590,7 @@ async function loadStats() {
   eventDist.value = []
   productTop.value = []
   dialogAnswers.value = []
+  pathData.value = null
   dialogFunnel.enter = dialogFunnel.done = dialogFunnel.jump = dialogFunnel.jumpCta = dialogFunnel.jumpAuto = 0
   try {
     const countOf = async (name) => {
@@ -612,6 +670,9 @@ async function loadStats() {
           .sort((a, b) => b.value - a.value)
           .slice(0, 8)
       }
+
+      // 路径分布: 一次聚合查询(老数据无题号不计入, 卡片内会提示)
+      pathData.value = await getLpEventPaths(baseParams()).catch(() => null)
     } else {
       // 电商型: 阅读深度 + 产品点击
       if (countMap.scroll_depth) {
@@ -891,6 +952,103 @@ function fmtPayload(p) {
 .chat-a-count {
   font-size: 13px;
   font-weight: 700;
+}
+
+/* ===== 路径分布卡(对话型第二行) ===== */
+.path-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #5f6368;
+  margin-bottom: 10px;
+
+  b { color: #202124; }
+  .divider { color: #dadce0; }
+  .c-green { color: #188038; }
+  .c-gray { color: #9aa0a6; }
+
+  .drop-hint {
+    margin-left: auto;
+    padding: 2px 10px;
+    border-radius: 11px;
+    background: #fef7e0;
+    color: #b06000;
+  }
+}
+
+.path-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.path-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  .path-steps {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+
+    .path-chip {
+      padding: 2px 10px;
+      border-radius: 11px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: default;
+
+      &.yes { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+      &.no { background: #fce8e6; color: #c5221f; border: 1px solid #f6d5d3; }
+    }
+
+    .path-arrow {
+      font-size: 11px;
+      color: #9aa0a6;
+    }
+  }
+
+  .path-meta {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    .path-outcome {
+      font-size: 11px;
+      color: #9aa0a6;
+      white-space: nowrap;
+    }
+
+    .path-bar-track {
+      width: 90px;
+      height: 5px;
+      border-radius: 3px;
+      background: #f1f3f4;
+      overflow: hidden;
+
+      .path-bar {
+        height: 100%;
+        border-radius: 3px;
+        background: #1a73e8;
+      }
+    }
+
+    .path-users {
+      font-size: 12px;
+      color: #5f6368;
+      white-space: nowrap;
+
+      b { color: #202124; }
+    }
+  }
 }
 
 /* 对话型一行三卡: 漏斗窄(固定) | 对话选择宽 | 跳转率窄 */
