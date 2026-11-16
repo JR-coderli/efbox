@@ -46,30 +46,31 @@
     <!-- ===== 图表视图: 根据 LP 类型自动切换(电商滚动型 / 对话切屏型) ===== -->
     <template v-if="viewMode === 'chart'">
 
-      <!-- ===== 对话型布局: 顶部漏斗横条 + 下方两卡(选择分布 + 跳转率) ===== -->
+      <!-- ===== 对话型布局: 一行三卡(垂直漏斗 | 对话选择 | 跳转率), 紧凑 ===== -->
       <template v-if="lpType === 'dialog'">
         <div v-if="!statsLoading && noData" class="empty-hint">当日暂无行为数据</div>
         <div v-show="!noData" v-loading="statsLoading">
-          <!-- 漏斗: 三段横条 + 平均停留统计 -->
-          <div class="dialog-funnel-card">
-            <div class="funnel-title">
-              核心漏斗 <span class="chart-sub">进入 → 扫完 → 跳出</span>
-              <span v-if="avgDwellSec != null" class="dwell-badge" title="仅统计有进入且有跳出的完整会话">
-                平均停留 <b>{{ avgDwellSec >= 60 ? Math.floor(avgDwellSec / 60) + 'm' + (avgDwellSec % 60) + 's' : avgDwellSec + 's' }}</b>
-              </span>
-            </div>
-            <div class="funnel-track">
-              <div class="funnel-stage" v-for="s in funnelStages" :key="s.label">
-                <div class="funnel-bar" :style="{ width: s.pct + '%', background: s.color }">
-                  <span class="funnel-count">{{ s.value }}</span>
+          <div class="charts-row dialog-row">
+            <!-- 核心漏斗: 垂直柱, 跳出拆"点击按钮/重定向"两条路径 -->
+            <div class="chart-card funnel-card">
+              <div class="chart-title">
+                核心漏斗
+                <span v-if="avgDwellSec != null" class="dwell-badge" title="仅统计有进入且有跳出的完整会话">
+                  平均停留 <b>{{ avgDwellSec >= 60 ? Math.floor(avgDwellSec / 60) + 'm' + (avgDwellSec % 60) + 's' : avgDwellSec + 's' }}</b>
+                </span>
+              </div>
+              <div class="vcols">
+                <div class="vcol" v-for="s in funnelCols" :key="s.label">
+                  <span class="vcol-count">{{ s.value }}</span>
+                  <div class="vcol-track">
+                    <div class="vcol-bar" :style="{ height: s.pct + '%', background: s.color }"></div>
+                  </div>
+                  <span class="vcol-label">{{ s.label }}</span>
+                  <span class="vcol-pct">{{ s.share }}%</span>
                 </div>
-                <div class="funnel-label">{{ s.label }}</div>
-                <div class="funnel-pct">{{ s.pct }}%</div>
               </div>
             </div>
-          </div>
-          <!-- 下行: 对话选择气泡(宽) + 跳转率(窄) -->
-          <div class="charts-row dialog-row">
+            <!-- 对话选择气泡(宽) -->
             <div class="chart-card wide">
               <div class="chart-title">对话选择 <span class="chart-sub">各问题回答分布</span></div>
               <div v-if="dialogBubbles.length" class="chat-list">
@@ -238,7 +239,7 @@ const productTop = ref([])                                    // 产品点击 [{
 
 // 对话型 LP(v84杀毒等): 类型检测 + 对话专属数据
 const lpType = ref('ecom')                                     // 'ecom'(滚动电商) | 'dialog'(对话切屏)
-const dialogFunnel = reactive({ enter: 0, done: 0, jump: 0 })  // 进入/扫完/跳出
+const dialogFunnel = reactive({ enter: 0, done: 0, jump: 0, jumpCta: 0, jumpAuto: 0 })  // 进入/扫完/跳出(=点击+重定向)
 const avgDwellSec = ref(null)   // 平均停留秒数(仅计有进入+跳出的完整会话)
 const dialogAnswers = ref([])                                  // 对话选择分布 [{name: 问题→答案, value}]
 
@@ -258,14 +259,16 @@ const dialogBubbles = computed(() => {
   return [...byQ.values()]
 })
 
-// 漏斗三段(进入为基准100%, 后续按占比缩放宽度)
-const funnelStages = computed(() => {
+// 漏斗垂直柱(柱高以进入为基准100%, 跳出拆点击/重定向两条路径; share=占进入的百分比)
+const funnelCols = computed(() => {
   const e = dialogFunnel.enter || 1
-  const pct = (v) => Math.max(v > 0 ? Math.round((v / e) * 100) : 0, v > 0 ? 2 : 0)
+  const h = (v) => (v > 0 ? Math.max(Math.round((v / e) * 100), 4) : 0) // 有值最小露 4% 柱
+  const share = (v) => Math.round((v / e) * 100)
   return [
-    { label: '进入', value: dialogFunnel.enter, pct: 100, color: '#1a73e8' },
-    { label: '扫完', value: dialogFunnel.done, pct: pct(dialogFunnel.done), color: '#fbbc04' },
-    { label: '跳出', value: dialogFunnel.jump, pct: pct(dialogFunnel.jump), color: '#34a853' }
+    { label: '进入', value: dialogFunnel.enter, pct: 100, share: 100, color: '#1a73e8' },
+    { label: '扫完', value: dialogFunnel.done, pct: h(dialogFunnel.done), share: share(dialogFunnel.done), color: '#fbbc04' },
+    { label: '点击跳出', value: dialogFunnel.jumpCta, pct: h(dialogFunnel.jumpCta), share: share(dialogFunnel.jumpCta), color: '#34a853' },
+    { label: '重定向跳出', value: dialogFunnel.jumpAuto, pct: h(dialogFunnel.jumpAuto), share: share(dialogFunnel.jumpAuto), color: '#00acc1' }
   ]
 })
 
@@ -526,7 +529,7 @@ async function loadStats() {
   eventDist.value = []
   productTop.value = []
   dialogAnswers.value = []
-  dialogFunnel.enter = dialogFunnel.done = dialogFunnel.jump = 0
+  dialogFunnel.enter = dialogFunnel.done = dialogFunnel.jump = dialogFunnel.jumpCta = dialogFunnel.jumpAuto = 0
   try {
     const countOf = async (name) => {
       const res = await getLpEvents({ ...baseParams(), event_name: name, size: 1 })
@@ -555,7 +558,9 @@ async function loadStats() {
       // 对话型: 漏斗(进入/扫完/跳出) + 对话选择分布 + 平均停留
       dialogFunnel.enter = statCounts.page_view
       dialogFunnel.done = countMap.scan_done || 0
-      dialogFunnel.jump = (countMap.cta_click || 0) + (countMap.auto_redirect || 0)
+      dialogFunnel.jumpCta = countMap.cta_click || 0       // 点击按钮跳出
+      dialogFunnel.jumpAuto = countMap.auto_redirect || 0  // 倒计时重定向跳出
+      dialogFunnel.jump = dialogFunnel.jumpCta + dialogFunnel.jumpAuto
       avgDwellSec.value = null
 
       // 平均停留: 按 session 逐次配对(进入→紧跟的跳出), 而非取最早/最晚
@@ -744,6 +749,8 @@ function fmtPayload(p) {
       font-weight: 600;
       color: #202124;
       margin-bottom: 2px;
+      display: flex;
+      align-items: center;
 
       .chart-sub {
         font-weight: 400;
@@ -769,94 +776,81 @@ function fmtPayload(p) {
       color: #9aa0a6;
     }
 
+    &.funnel-card { flex: 0 0 260px; } /* 核心漏斗: 垂直柱, 窄卡固定宽 */
     &.wide { flex: 3; }
     &.narrow { flex: 2; }
   }
 }
 
-/* ===== 对话型: 漏斗横条卡片(纯 HTML/CSS, 不用 echarts) ===== */
-.dialog-funnel-card {
-  border: 1px solid #e8eaed;
-  border-radius: 10px;
-  padding: 12px 16px;
-  background: #fff;
-  margin-bottom: 12px;
-
-  .funnel-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #202124;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    .chart-sub { font-weight: 400; color: #9aa0a6; margin-left: 0; }
-
-    .dwell-badge {
-      margin-left: auto;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 3px 12px;
-      border-radius: 12px;
-      background: #e8f0fe;
-      color: #174ea6;
-      font-size: 11px;
-      font-weight: 400;
-      cursor: default;
-
-      b {
-        font-size: 13px;
-        font-weight: 700;
-        color: #1a73e8;
-      }
-    }
-  }
+/* ===== 对话型: 核心漏斗垂直柱(纯 HTML/CSS, 不用 echarts) ===== */
+.vcols {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding-top: 8px;
 }
 
-.funnel-track {
+.vcol {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.funnel-stage {
-  display: flex;
   align-items: center;
-  gap: 10px;
-}
+  gap: 4px;
+  width: 56px;
 
-.funnel-bar {
-  height: 28px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-right: 8px;
-  min-width: 36px;
-  transition: width 0.3s ease;
+  .vcol-count {
+    font-size: 14px;
+    font-weight: 700;
+    color: #202124;
+  }
 
-  .funnel-count {
-    color: #fff;
-    font-size: 12px;
-    font-weight: 600;
+  .vcol-track {
+    height: 130px;
+    width: 34px;
+    display: flex;
+    align-items: flex-end;
+    background: #f1f3f4;
+    border-radius: 6px;
+    overflow: hidden;
+
+    .vcol-bar {
+      width: 100%;
+      border-radius: 6px 6px 0 0;
+      transition: height 0.3s ease;
+    }
+  }
+
+  .vcol-label {
+    font-size: 11px;
+    color: #3c4043;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .vcol-pct {
+    font-size: 10px;
+    color: #9aa0a6;
   }
 }
 
-.funnel-label {
-  width: 36px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #3c4043;
-  text-align: right;
-  flex-shrink: 0;
-}
-
-.funnel-pct {
+/* 平均停留胶囊(核心漏斗卡标题右侧) */
+.dwell-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  border-radius: 12px;
+  background: #e8f0fe;
+  color: #174ea6;
   font-size: 11px;
-  color: #9aa0a6;
-  flex-shrink: 0;
+  font-weight: 400;
+  cursor: default;
+
+  b {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a73e8;
+  }
 }
 
 /* ===== 对话气泡列表(替代echarts横条) ===== */
@@ -952,8 +946,9 @@ function fmtPayload(p) {
   font-weight: 700;
 }
 
-/* 对话型下行: 左宽右窄 */
+/* 对话型一行三卡: 漏斗窄(固定) | 对话选择宽 | 跳转率窄 */
 .dialog-row {
+  .chart-card.funnel-card { flex: 0 0 260px; }
   .chart-card.wide { flex: 3; }
   .chart-card.narrow { flex: 2; }
 }
