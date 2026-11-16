@@ -189,8 +189,7 @@ async function runAutoReplacement(domain, isAccessible, isSafe, round) {
       notifiedUnused.add(domain)
       sendFeishuText(
         `【域名异常·无需替换】${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n` +
-        `- ${domain} 检测异常, 但 Clickflare 与 ef-tracker 均未使用该域名, 已跳过替换(备用域名未消耗)\n` +
-        `- 若该域名已废弃, 请将其移出监控列表; 若怀疑数据未同步, 请先同步 Lander 数据再看下一轮检测结果`
+        `- ${domain} 检测异常, 但 Clickflare 与 ef-tracker 均未使用该域名, 已跳过替换(备用域名未消耗)`
       )
       return
     }

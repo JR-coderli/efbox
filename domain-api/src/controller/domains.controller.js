@@ -167,8 +167,7 @@ class DomainsController {
           for (const receiveId of raw.split(',').map(s => s.trim()).filter(Boolean)) {
             feishuService.sendText(receiveId,
               `【域名已手动移出监控】${time}\n` +
-              `- ${domainName}(id=${domainId}) 已被手动移出检测列表(不再检测)\n` +
-              `- 若因域名废弃, 请确认两侧系统已无 lander 在使用; 若误移, 可在重要域名页改回继续监控`
+              `- ${domainName}(id=${domainId}) 已被手动移出检测列表(不再检测)`
             ).catch(err => console.log(`❌ 手动移出监控的飞书提醒发送失败: ${err.message}`))
           }
         } else {

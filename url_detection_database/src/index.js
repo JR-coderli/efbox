@@ -101,7 +101,7 @@ async function checkUrls(urlObjs, isComplete = false) {
               (replacedBefore
                 ? `- 该域名此前已替换完成, 本次移出属正常收尾`
                 : unusedBefore
-                  ? `- 该域名未被两个系统使用, 移出监控属清理存量, 无需处理`
+                  ? `- 该域名未被两个系统使用, 正常移出无需处理`
                   : `- ⚠️ 该域名未替换成功, 请人工检查处理(lander/标签/备用域名)`)
             )
           }
