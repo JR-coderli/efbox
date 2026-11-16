@@ -80,11 +80,11 @@
                     <span class="chat-q-text">{{ item.question }}</span>
                   </div>
                   <div class="chat-a-row">
-                    <span class="chat-a yes" :class="{ hot: item.yes >= item.no }">
+                    <span class="chat-a yes">
                       <span class="chat-a-label">Yes</span>
                       <span class="chat-a-count">{{ item.yes }}</span>
                     </span>
-                    <span class="chat-a no" :class="{ hot: item.no > item.yes }">
+                    <span class="chat-a no">
                       <span class="chat-a-label">No</span>
                       <span class="chat-a-count">{{ item.no }}</span>
                     </span>
@@ -146,7 +146,8 @@
           />
         </el-select>
       </div>
-      <el-table :data="tableData" v-loading="loading" size="small" border stripe class="events-table">
+      <!-- 固定高度+表头吸顶+表体内部滚动: 明细再长也不把弹窗撑出滚动条 -->
+      <el-table :data="tableData" v-loading="loading" size="small" border stripe class="events-table" max-height="460">
         <el-table-column label="时间" width="170" align="center">
           <template #default="{ row }">
             <span class="time-text">{{ fmtTime(row.created_at) }}</span>
@@ -921,24 +922,12 @@ function fmtPayload(p) {
   background: #e6f4ea;
   color: #137333;
   border: 1px solid #ceead6;
-
-  &.hot {
-    background: #34a853;
-    color: #fff;
-    border-color: #34a853;
-  }
 }
 
 .chat-a.no {
   background: #fce8e6;
   color: #c5221f;
   border: 1px solid #f6d5d3;
-
-  &.hot {
-    background: #ea4335;
-    color: #fff;
-    border-color: #ea4335;
-  }
 }
 
 .chat-a-count {

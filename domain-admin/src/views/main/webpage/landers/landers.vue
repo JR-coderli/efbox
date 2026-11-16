@@ -1448,10 +1448,7 @@ function lpEventsIconTitle(name) {
 
 function openLpEventsDialog(row) {
   const lid = matchExternalLid(row.name)
-  if (!lid) {
-    ElMessage.info('该 Lander 未在 eftracker 登记外部收集，暂无行为数据')
-    return
-  }
+  if (!lid) return // 未登记行: 点击无反应(11-16 用户拍板去掉提示)
   lpEventsTarget.lid = lid
   lpEventsTarget.name = row.name
   lpEventsDialogVisible.value = true
