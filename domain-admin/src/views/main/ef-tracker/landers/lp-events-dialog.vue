@@ -59,16 +59,7 @@
                   平均停留 <b>{{ avgDwellSec >= 60 ? Math.floor(avgDwellSec / 60) + 'm' + (avgDwellSec % 60) + 's' : avgDwellSec + 's' }}</b>
                 </span>
               </div>
-              <div class="vcols">
-                <div class="vcol" v-for="s in funnelCols" :key="s.label">
-                  <span class="vcol-count">{{ s.value }}</span>
-                  <div class="vcol-track">
-                    <div class="vcol-bar" :style="{ height: s.pct + '%', background: s.color }"></div>
-                  </div>
-                  <span class="vcol-label">{{ s.label }}</span>
-                  <span class="vcol-pct">{{ s.share }}%</span>
-                </div>
-              </div>
+              <div ref="funnelRef" class="chart-box funnel-chart"></div>
             </div>
             <!-- 对话选择气泡(宽) -->
             <div class="chart-card wide">
@@ -260,19 +251,6 @@ const dialogBubbles = computed(() => {
   return [...byQ.values()]
 })
 
-// 漏斗垂直柱(柱高以进入为基准100%, 跳出拆点击/重定向两条路径; share=占进入的百分比)
-const funnelCols = computed(() => {
-  const e = dialogFunnel.enter || 1
-  const h = (v) => (v > 0 ? Math.max(Math.round((v / e) * 100), 4) : 0) // 有值最小露 4% 柱
-  const share = (v) => Math.round((v / e) * 100)
-  return [
-    { label: '进入', value: dialogFunnel.enter, pct: 100, share: 100, color: '#1a73e8' },
-    { label: '扫完', value: dialogFunnel.done, pct: h(dialogFunnel.done), share: share(dialogFunnel.done), color: '#fbbc04' },
-    { label: '点击跳出', value: dialogFunnel.jumpCta, pct: h(dialogFunnel.jumpCta), share: share(dialogFunnel.jumpCta), color: '#34a853' },
-    { label: '重定向跳出', value: dialogFunnel.jumpAuto, pct: h(dialogFunnel.jumpAuto), share: share(dialogFunnel.jumpAuto), color: '#00acc1' }
-  ]
-})
-
 const noData = computed(() => !statsLoading.value && !statCounts.page_view && !eventDist.value.length && !productTop.value.length && !dialogAnswers.value.length)
 // 深度图 100% 档用 page_bottom 充当: 没接 scroll_depth 但有读完数据时也出图
 const hasDepth = computed(() => depthSteps[1] + depthSteps[2] + depthSteps[3] > 0 || statCounts.page_bottom > 0)
@@ -284,6 +262,7 @@ const readRateRef = ref(null)
 const depthRef = ref(null)
 const distRef = ref(null)
 const productRef = ref(null)
+const funnelRef = ref(null)
 const charts = {} // key → echarts instance
 
 function renderChart(key, el, option) {
@@ -319,9 +298,33 @@ function renderAllCharts() {
   const isDialog = lpType.value === 'dialog'
 
   if (isDialog) {
-    // ===== 对话型: 只画两个 echarts(漏斗改为 HTML/CSS, 不用 echarts) =====
+    // ===== 对话型: 核心漏斗柱图 + 跳转率环图(对话选择=HTML气泡) =====
 
-    // ① 跳转率环图(右窄卡)
+    // ① 核心漏斗: echarts 垂直柱(进入/扫完/点击跳出/重定向跳出)
+    renderChart('funnel', funnelRef.value, {
+      grid: { left: 44, right: 12, top: 22, bottom: 28 },
+      xAxis: {
+        type: 'category',
+        data: ['进入', '扫完', '点击跳出', '重定向跳出'],
+        axisLabel: { interval: 0, fontSize: 10, color: C.text },
+        axisLine: { lineStyle: { color: C.gray } }
+      },
+      yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#f1f3f4' } } },
+      series: [{
+        type: 'bar',
+        barWidth: '52%',
+        data: [
+          { value: dialogFunnel.enter, itemStyle: { color: '#1a73e8' } },
+          { value: dialogFunnel.done, itemStyle: { color: '#fbbc04' } },
+          { value: dialogFunnel.jumpCta, itemStyle: { color: '#34a853' } },
+          { value: dialogFunnel.jumpAuto, itemStyle: { color: '#00acc1' } }
+        ],
+        itemStyle: { borderRadius: [4, 4, 0, 0] },
+        label: { show: true, position: 'top', color: C.text, fontSize: 11 }
+      }]
+    })
+
+    // ② 跳转率环图(右窄卡)
     const pv = statCounts.page_view
     const jump = dialogFunnel.jump
     const rate = pv ? ((jump / pv) * 100).toFixed(1) : '0.0'
@@ -783,54 +786,9 @@ function fmtPayload(p) {
   }
 }
 
-/* ===== 对话型: 核心漏斗垂直柱(纯 HTML/CSS, 不用 echarts) ===== */
-.vcols {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-around;
-  padding-top: 8px;
-}
-
-.vcol {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 56px;
-
-  .vcol-count {
-    font-size: 14px;
-    font-weight: 700;
-    color: #202124;
-  }
-
-  .vcol-track {
-    height: 130px;
-    width: 34px;
-    display: flex;
-    align-items: flex-end;
-    background: #f1f3f4;
-    border-radius: 6px;
-    overflow: hidden;
-
-    .vcol-bar {
-      width: 100%;
-      border-radius: 6px 6px 0 0;
-      transition: height 0.3s ease;
-    }
-  }
-
-  .vcol-label {
-    font-size: 11px;
-    color: #3c4043;
-    text-align: center;
-    line-height: 1.2;
-  }
-
-  .vcol-pct {
-    font-size: 10px;
-    color: #9aa0a6;
-  }
+/* ===== 对话型: 核心漏斗 echarts 柱图 ===== */
+.funnel-chart {
+  height: 200px;
 }
 
 /* 平均停留胶囊(核心漏斗卡标题右侧) */
