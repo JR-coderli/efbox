@@ -414,11 +414,11 @@
                     <Star v-else />
                   </el-icon>
                   <span class="lander-name" :title="row.name">{{ row.name }}</span>
-                  <!-- LP 行为入口: 名称命中 eftracker 外部登记(【external】+同名)才显示 -->
+                  <!-- LP 行为入口(全部行显示): 有数据=浅蓝, 无数据/未登记=灰 -->
                   <el-icon
-                    v-if="matchExternalLid(row.name)"
                     class="lp-events-btn"
-                    title="查看LP行为"
+                    :class="{ 'has-data': rowLidHasData(row.name) }"
+                    :title="lpEventsIconTitle(row.name)"
                     @click.stop="openLpEventsDialog(row)"
                   >
                     <DataLine />
@@ -1055,7 +1055,7 @@ import {
 import { syncWorkspaces } from '@/services/main/webpage/workspaces'
 import { getLanderConfig, setLanderConfig } from '@/services/main/webpage/system-config'
 import { getDailyReportDetailByDate } from '@/services/main/webpage/report/report'
-import { getLanders } from '@/services/main/ef-tracker'
+import { getLanders, getLpEvents } from '@/services/main/ef-tracker'
 import LpEventsDialog from '@/views/main/ef-tracker/landers/lp-events-dialog.vue'
 import { BASE_URL } from '@/services/request/config'
 import useLoginStore from '@/stores/login/login'
@@ -1417,9 +1417,41 @@ function matchExternalLid(name) {
   return externalLanderMap.value.get(String(name).trim()) || 0
 }
 
+// ===== 入口图标配色: 每页行有 lid 的拉一次 size=1 计数(会话内缓存), >0=浅蓝 =====
+const lidEventCounts = reactive({}) // { [lid]: total }
+
+async function fetchLidCounts(lids) {
+  const missing = lids.filter((l) => l > 0 && lidEventCounts[l] === undefined)
+  if (!missing.length) return
+  await Promise.all(
+    missing.map(async (lid) => {
+      try {
+        const res = await getLpEvents({ lid, size: 1 })
+        lidEventCounts[lid] = res?.total ?? 0
+      } catch {
+        lidEventCounts[lid] = 0
+      }
+    })
+  )
+}
+
+function rowLidHasData(name) {
+  const lid = matchExternalLid(name)
+  return lid > 0 && (lidEventCounts[lid] || 0) > 0
+}
+
+function lpEventsIconTitle(name) {
+  const lid = matchExternalLid(name)
+  if (!lid) return '暂无数据'
+  return (lidEventCounts[lid] || 0) > 0 ? '用户行为' : '暂无行为数据'
+}
+
 function openLpEventsDialog(row) {
   const lid = matchExternalLid(row.name)
-  if (!lid) return
+  if (!lid) {
+    ElMessage.info('该 Lander 未在 eftracker 登记外部收集，暂无行为数据')
+    return
+  }
   lpEventsTarget.lid = lid
   lpEventsTarget.name = row.name
   lpEventsDialogVisible.value = true
@@ -1810,6 +1842,14 @@ const favoritesOnly = ref(false)
 
 const tableData = ref([])
 const loading = ref(false)
+
+
+// 表格数据或外部登记映射变化(翻页/搜索/刷新/映射异步加载完)后, 给本页已登记的行补 LP 行为计数
+// ⚠️ 必须同时盯 externalLanderMap: 列表通常比映射先回来, 只盯 tableData 会匹配全 0 永不补拉(全灰 bug)
+watch([tableData, externalLanderMap], ([rows]) => {
+  const lids = (rows || []).map((r) => matchExternalLid(r.name)).filter(Boolean)
+  fetchLidCounts(lids)
+})
 
 
 const pagination = reactive({
@@ -3553,14 +3593,18 @@ onUnmounted(() => {
           }
         }
 
-        /* LP 行为入口图标: 与收藏星同规格, 蓝色系 */
+        /* LP 行为入口图标: 默认灰(无数据/未登记), 有数据=浅蓝 */
         .lp-events-btn {
           flex-shrink: 0;
           margin-top: 3px;
           font-size: 16px;
-          color: #1a73e8;
+          color: #bdc1c6;
           cursor: pointer;
           transition: all 0.2s;
+
+          &.has-data {
+            color: #1a73e8;
+          }
 
           &:hover {
             transform: scale(1.15);

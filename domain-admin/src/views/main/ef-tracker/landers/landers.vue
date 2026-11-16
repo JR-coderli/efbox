@@ -81,10 +81,15 @@
             :class-name="col.className"
           >
             <!-- Lander 名称列: 外部 LP(is_external=1)名称开头内联"外部"标识(像名称前缀, 非左右分列);
-                 行尾行为入口图标(lid 行上现成, 全部行可点) -->
+                 行尾行为入口图标(全部行显示; 有数据=浅蓝, 无数据=灰) -->
             <template v-if="col.key === 'name'" #default="{ row }">
               <span class="name-cell"><el-tag v-if="row.is_external === 1" type="warning" size="small" effect="plain" class="ext-badge">外部</el-tag>{{ row.name }}
-                <el-icon class="lp-events-btn" title="查看LP行为" @click.stop="openLpEventsDialog(row)">
+                <el-icon
+                  class="lp-events-btn"
+                  :class="{ 'has-data': lidHasData(row.id) }"
+                  :title="lidHasData(row.id) ? '用户行为' : '暂无行为数据'"
+                  @click.stop="openLpEventsDialog(row)"
+                >
                   <DataLine />
                 </el-icon>
               </span>
@@ -235,11 +240,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, nextTick, onMounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Setting, Edit, Plus, DataLine } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
-import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot, createLander } from '@/services/main/ef-tracker'
+import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot, createLander, getLpEvents } from '@/services/main/ef-tracker'
 import LpEventsDialog from './lp-events-dialog.vue'
 import { previewEfManualReplace, efManualReplace } from '@/services/main/webpage/landers'
 import { createOperationLog } from '@/services/main/system/operation-log'
@@ -274,6 +279,33 @@ const filters = reactive({
 // ===== LP 行为入口(2026-11-13): 行自带 lid, 点击弹共享行为数据弹窗 =====
 const lpEventsDialogVisible = ref(false)
 const lpEventsTarget = reactive({ lid: 0, name: '', isExternal: false })
+
+// 入口图标配色(2026-11-16): 每页行的 lid 拉一次 size=1 计数(会话内缓存), >0=浅蓝
+const lidEventCounts = reactive({}) // { [lid]: total }
+
+function lidHasData(lid) {
+  return (lidEventCounts[lid] || 0) > 0
+}
+
+async function fetchLidCounts(lids) {
+  const missing = lids.filter((l) => l > 0 && lidEventCounts[l] === undefined)
+  if (!missing.length) return
+  await Promise.all(
+    missing.map(async (lid) => {
+      try {
+        const res = await getLpEvents({ lid, size: 1 })
+        lidEventCounts[lid] = res?.total ?? 0
+      } catch {
+        lidEventCounts[lid] = 0
+      }
+    })
+  )
+}
+
+// 表格数据变化(翻页/搜索/刷新)后, 给本页行补计数
+watch(tableData, (rows) => {
+  fetchLidCounts((rows || []).map((r) => r.id).filter(Boolean))
+})
 
 function openLpEventsDialog(row) {
   if (!row.id) return
@@ -1141,14 +1173,18 @@ async function handleReplace() {
     vertical-align: middle;
   }
 
-  /* LP 行为入口图标: 名称后内联, 蓝色 */
+  /* LP 行为入口图标: 名称后内联, 默认灰(无数据), 有数据=浅蓝 */
   .lp-events-btn {
     margin-left: 6px;
     font-size: 15px;
-    color: #1a73e8;
+    color: #bdc1c6;
     cursor: pointer;
     vertical-align: middle;
     transition: transform 0.2s;
+
+    &.has-data {
+      color: #1a73e8;
+    }
 
     &:hover {
       transform: scale(1.15);
