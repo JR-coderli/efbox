@@ -144,6 +144,13 @@ export function upsertLpEventDict(payload) {
     .then((res) => res.data)
 }
 
+// LP 行为事件 原始分页(2026-11-13, 落地页列表"查看LP行为"弹窗用): GET /query/lp-events
+// params: lid(精确)/event_name(模糊)/session_id/system_click_id(精确) + 通用 page/size/tz/date/start/end
+// 返回标准分页信封 { total, page, size, pages, count, tz, list }
+export function getLpEvents(params = {}) {
+  return query('/query/lp-events', params)
+}
+
 // ============================================================
 // 13. 服务器状态面板 —— /query/status（唯一带鉴权的查询接口）
 // 返回 { local: { server, db, partitions, archive }, peer?: { reachable, status, error, addr } }

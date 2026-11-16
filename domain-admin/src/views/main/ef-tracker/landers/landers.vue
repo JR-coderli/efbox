@@ -80,9 +80,14 @@
             :show-overflow-tooltip="col.showOverflowTooltip"
             :class-name="col.className"
           >
-            <!-- Lander 名称列: 外部 LP(is_external=1)名称开头内联"外部"标识(像名称前缀, 非左右分列) -->
+            <!-- Lander 名称列: 外部 LP(is_external=1)名称开头内联"外部"标识(像名称前缀, 非左右分列);
+                 行尾行为入口图标(lid 行上现成, 全部行可点) -->
             <template v-if="col.key === 'name'" #default="{ row }">
-              <span class="name-cell"><el-tag v-if="row.is_external === 1" type="warning" size="small" effect="plain" class="ext-badge">外部</el-tag>{{ row.name }}</span>
+              <span class="name-cell"><el-tag v-if="row.is_external === 1" type="warning" size="small" effect="plain" class="ext-badge">外部</el-tag>{{ row.name }}
+                <el-icon class="lp-events-btn" title="查看LP行为" @click.stop="openLpEventsDialog(row)">
+                  <DataLine />
+                </el-icon>
+              </span>
             </template>
             <!-- 截图列 -->
             <template v-else-if="col.key === 'screenshot'" #default="{ row }">
@@ -218,15 +223,24 @@
         <button class="google-btn google-btn-primary" @click="handleCreate" :disabled="createLoading || !createForm.name.trim() || !createForm.url.trim()">{{ createLoading ? '创建中…' : '创建' }}</button>
       </template>
     </el-dialog>
+
+    <!-- LP 行为数据弹窗(共享组件; clickflare 落地页列表同款) -->
+    <lp-events-dialog
+      v-model="lpEventsDialogVisible"
+      :lid="lpEventsTarget.lid"
+      :lander-name="lpEventsTarget.name"
+      :is-external="lpEventsTarget.isExternal"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Setting, Edit, Plus } from '@element-plus/icons-vue'
+import { Search, Setting, Edit, Plus, DataLine } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
 import { getLanders, getEfLanderScreenshots, uploadEfLanderScreenshot, createLander } from '@/services/main/ef-tracker'
+import LpEventsDialog from './lp-events-dialog.vue'
 import { previewEfManualReplace, efManualReplace } from '@/services/main/webpage/landers'
 import { createOperationLog } from '@/services/main/system/operation-log'
 import { BASE_URL } from '@/services/request/config'
@@ -256,6 +270,18 @@ const TZ_PLUS_8 = 8
 const filters = reactive({
   keyword: ''
 })
+
+// ===== LP 行为入口(2026-11-13): 行自带 lid, 点击弹共享行为数据弹窗 =====
+const lpEventsDialogVisible = ref(false)
+const lpEventsTarget = reactive({ lid: 0, name: '', isExternal: false })
+
+function openLpEventsDialog(row) {
+  if (!row.id) return
+  lpEventsTarget.lid = row.id
+  lpEventsTarget.name = row.name
+  lpEventsTarget.isExternal = row.is_external === 1
+  lpEventsDialogVisible.value = true
+}
 
 // 上传按钮的 per-row loading 状态
 const uploadLoading = reactive({})
@@ -1113,6 +1139,20 @@ async function handleReplace() {
   .ext-badge {
     margin-right: 4px;
     vertical-align: middle;
+  }
+
+  /* LP 行为入口图标: 名称后内联, 蓝色 */
+  .lp-events-btn {
+    margin-left: 6px;
+    font-size: 15px;
+    color: #1a73e8;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: transform 0.2s;
+
+    &:hover {
+      transform: scale(1.15);
+    }
   }
 }
 

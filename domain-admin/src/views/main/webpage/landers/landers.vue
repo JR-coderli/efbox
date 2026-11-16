@@ -414,6 +414,15 @@
                     <Star v-else />
                   </el-icon>
                   <span class="lander-name" :title="row.name">{{ row.name }}</span>
+                  <!-- LP 行为入口: 名称命中 eftracker 外部登记(【external】+同名)才显示 -->
+                  <el-icon
+                    v-if="matchExternalLid(row.name)"
+                    class="lp-events-btn"
+                    title="查看LP行为"
+                    @click.stop="openLpEventsDialog(row)"
+                  >
+                    <DataLine />
+                  </el-icon>
                   <!-- <a
                     v-if="row.url"
                     target="_blank"
@@ -1009,6 +1018,14 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- LP 行为数据弹窗(共享组件, 与 eftracker 落地页列表同款; 数据直连 eftracker /query/lp-events) -->
+    <lp-events-dialog
+      v-model="lpEventsDialogVisible"
+      :lid="lpEventsTarget.lid"
+      :lander-name="lpEventsTarget.name"
+      :is-external="true"
+    />
   </div>
 </template>
 
@@ -1016,7 +1033,7 @@
 import { ref, reactive, onMounted, onUnmounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  Refresh, Camera, Search, Picture, WarningFilled, Warning, Setting, Menu, Upload, Plus, InfoFilled, CirclePlusFilled, Edit, CircleCheck, CircleClose, Download, Loading, Star, StarFilled
+  Refresh, Camera, Search, Picture, WarningFilled, Warning, Setting, Menu, Upload, Plus, InfoFilled, CirclePlusFilled, Edit, CircleCheck, CircleClose, Download, Loading, Star, StarFilled, DataLine
 } from '@element-plus/icons-vue'
 import {
   getLanderList,
@@ -1038,6 +1055,8 @@ import {
 import { syncWorkspaces } from '@/services/main/webpage/workspaces'
 import { getLanderConfig, setLanderConfig } from '@/services/main/webpage/system-config'
 import { getDailyReportDetailByDate } from '@/services/main/webpage/report/report'
+import { getLanders } from '@/services/main/ef-tracker'
+import LpEventsDialog from '@/views/main/ef-tracker/landers/lp-events-dialog.vue'
 import { BASE_URL } from '@/services/request/config'
 import useLoginStore from '@/stores/login/login'
 import { createOperationLog } from '@/services/main/system/operation-log'
@@ -1352,6 +1371,59 @@ const editOriginalValues = ref({
 const deleteDialogVisible = ref(false)
 const deleteLoading = ref(false)
 const deleteTargetLander = ref(null)
+
+
+// ===== LP 行为入口(2026-11-13): clickflare 行名 精确匹配 eftracker 外部登记 =====
+// 规则: eftracker ab_landers 里 is_external=1 的行, 名称 = 【external】+ clickflare LP 原名。
+// 挂载时一次拉全外部登记(量小)建 map: 去前缀名称 → lid; 命中才在名称列显示入口。
+const externalLanderMap = ref(new Map())
+const lpEventsDialogVisible = ref(false)
+const lpEventsTarget = reactive({ lid: 0, name: '' })
+
+const EXTERNAL_PREFIXES = ['【external】', '【外部】']
+
+async function fetchExternalLanders() {
+  try {
+    // keyword 走 name/url 模糊, 【external】前缀只会命中名称; 分页拉全防超上限(轻接口 size≤200)
+    const map = new Map()
+    let page = 1
+    for (;;) {
+      const res = await getLanders({ keyword: '【external】', page, size: 200 })
+      const rows = res?.list || []
+      for (const r of rows) {
+        if (r.is_external !== 1 || !r.name) continue
+        let stripped = r.name
+        for (const p of EXTERNAL_PREFIXES) {
+          if (stripped.startsWith(p)) {
+            stripped = stripped.slice(p.length)
+            break
+          }
+        }
+        stripped = stripped.trim()
+        if (stripped) map.set(stripped, r.id)
+      }
+      if (rows.length < 200) break
+      page++
+    }
+    externalLanderMap.value = map
+  } catch {
+    // 拉取失败=本页不显示入口, 不影响列表本身
+    externalLanderMap.value = new Map()
+  }
+}
+
+function matchExternalLid(name) {
+  if (!name) return 0
+  return externalLanderMap.value.get(String(name).trim()) || 0
+}
+
+function openLpEventsDialog(row) {
+  const lid = matchExternalLid(row.name)
+  if (!lid) return
+  lpEventsTarget.lid = lid
+  lpEventsTarget.name = row.name
+  lpEventsDialogVisible.value = true
+}
 
 
 const urlValidator = (rule, value, callback) => {
@@ -3005,6 +3077,7 @@ onMounted(() => {
   getList()
   fetchSyncStatus()
   fetchScreenshotStats()
+  fetchExternalLanders()
 
 
   statusPollingTimer = setInterval(() => {
@@ -3477,6 +3550,20 @@ onUnmounted(() => {
 
           &.is-favorite {
             color: #f9ab00;
+          }
+        }
+
+        /* LP 行为入口图标: 与收藏星同规格, 蓝色系 */
+        .lp-events-btn {
+          flex-shrink: 0;
+          margin-top: 3px;
+          font-size: 16px;
+          color: #1a73e8;
+          cursor: pointer;
+          transition: all 0.2s;
+
+          &:hover {
+            transform: scale(1.15);
           }
         }
       }
