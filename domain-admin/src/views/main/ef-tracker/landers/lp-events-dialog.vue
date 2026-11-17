@@ -167,7 +167,7 @@
             <div ref="readRateRef" class="chart-box"></div>
           </div>
           <div class="chart-card">
-            <div class="chart-title">阅读深度 <span class="chart-sub">到达各档人数 · 100%=读完</span></div>
+            <div class="chart-title">阅读深度 <span class="chart-sub">最深读到各档的人数 · 100%=读完</span></div>
             <div v-if="hasDepth" ref="depthRef" class="chart-box"></div>
             <div v-else class="chart-empty">未接入/无数据</div>
           </div>
@@ -305,7 +305,8 @@ const pagination = reactive({ page: 1, size: 20, total: 0 })
 
 // ===== 图表数据 =====
 const statCounts = reactive({ page_view: 0, page_bottom: 0 }) // 完读率
-const depthSteps = reactive({ 1: 0, 2: 0, 3: 0 })             // 阅读深度 step=1/2/3 → 25/50/75%
+const depthSteps = reactive({ 1: 0, 2: 0, 3: 0 })             // 阅读深度分桶: 最深只到 25/50/75% 的会话数(11-17 起=最深到达口径)
+const depthFull = ref(0)                                       // 100% 桶: 触发过 page_bottom 的会话数(读完)
 const eventDist = ref([])                                     // 行为构成 [{name, value}]
 const productTop = ref([])                                    // 产品点击 [{name, value}] 已按次数倒序
 
@@ -332,7 +333,7 @@ function stepQuestion(step) {
 
 const noData = computed(() => !statsLoading.value && !statCounts.page_view && !eventDist.value.length && !productTop.value.length && !(pathData.value?.paths?.length))
 // 深度图 100% 档用 page_bottom 充当: 没接 scroll_depth 但有读完数据时也出图
-const hasDepth = computed(() => depthSteps[1] + depthSteps[2] + depthSteps[3] > 0 || statCounts.page_bottom > 0)
+const hasDepth = computed(() => depthSteps[1] + depthSteps[2] + depthSteps[3] + depthFull.value > 0)
 const hasEventDist = computed(() => eventDist.value.length > 0)
 const hasProduct = computed(() => productTop.value.length > 0)
 
@@ -462,7 +463,7 @@ function renderAllCharts() {
     }]
   })
 
-  // ② 阅读深度柱图
+  // ② 阅读深度柱图(最深到达分桶: 每个会话只计最深一档, 100%=读完)
   renderChart('depth', depthRef.value, {
     grid: { left: 40, right: 16, top: 16, bottom: 24 },
     xAxis: { type: 'category', data: ['25%', '50%', '75%', '100%'], axisLine: { lineStyle: { color: C.gray } } },
@@ -474,7 +475,7 @@ function renderAllCharts() {
         { value: depthSteps[1], itemStyle: { color: C.blue } },
         { value: depthSteps[2], itemStyle: { color: C.blue } },
         { value: depthSteps[3], itemStyle: { color: C.blue } },
-        { value: statCounts.page_bottom, itemStyle: { color: C.green } }
+        { value: depthFull.value, itemStyle: { color: C.green } }
       ],
       itemStyle: { borderRadius: [4, 4, 0, 0] },
       label: { show: true, position: 'top', color: C.text, fontSize: 11 }
@@ -609,6 +610,7 @@ async function loadStats() {
   statCounts.page_view = 0
   statCounts.page_bottom = 0
   depthSteps[1] = depthSteps[2] = depthSteps[3] = 0
+  depthFull.value = 0
   eventDist.value = []
   productTop.value = []
   pathData.value = null
@@ -689,10 +691,30 @@ async function loadStats() {
       pathData.value = await getLpEventPaths(baseParams()).catch(() => null)
     } else {
       // 电商型: 阅读深度 + 产品点击
-      if (countMap.scroll_depth) {
-        const res = await getLpEvents({ ...baseParams(), event_name: 'scroll_depth', size: 100 }).catch(() => null)
-        for (const r of res?.list || []) {
-          if (depthSteps[r.step] !== undefined) depthSteps[r.step]++
+      // 深度=最深到达分桶(11-17 用户拍板): 每个 session 只计最深那一档——
+      // page_bottom 的 session 归 100%; 其余按 scroll_depth 最大 step 归 25/50/75。
+      // (旧口径=到达过: 读完的人在四根柱都 +1, 现改成分布, 柱和=有滚动行为的会话数)
+      if (countMap.scroll_depth || countMap.page_bottom) {
+        const [depthRes, bottomRes] = await Promise.all([
+          countMap.scroll_depth
+            ? getLpEvents({ ...baseParams(), event_name: 'scroll_depth', size: 100 }).catch(() => null)
+            : Promise.resolve(null),
+          countMap.page_bottom
+            ? getLpEvents({ ...baseParams(), event_name: 'page_bottom', size: 100 }).catch(() => null)
+            : Promise.resolve(null)
+        ])
+        // ① 读完的 session 先进 100% 桶(page_bottom 优先, 不看 scroll_depth)
+        const bottomSids = new Set((bottomRes?.list || []).map((r) => r.session_id))
+        depthFull.value = bottomSids.size
+        // ② 其余 session 按 scroll_depth 最深 step 归桶
+        const sessMax = {}
+        for (const r of depthRes?.list || []) {
+          if (r.step >= 1 && r.step <= 3 && !bottomSids.has(r.session_id)) {
+            sessMax[r.session_id] = Math.max(sessMax[r.session_id] || 0, r.step)
+          }
+        }
+        for (const sid of Object.keys(sessMax)) {
+          depthSteps[sessMax[sid]]++
         }
       }
 
