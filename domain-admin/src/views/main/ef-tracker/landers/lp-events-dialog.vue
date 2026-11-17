@@ -5,7 +5,6 @@
        统计区=echarts 四卡片: 完读率环图 / 阅读深度柱图 / 行为构成饼图 / 产品点击 Top5 横条。 -->
   <el-dialog
     :model-value="modelValue"
-    title="LP 行为数据"
     fullscreen
     :close-on-click-modal="false"
     class="google-dialog lp-events-dialog"
@@ -13,11 +12,9 @@
     @update:model-value="(v) => emit('update:modelValue', v)"
     @open="handleOpen"
   >
-    <!-- LP 信息行 -->
+    <!-- LP 信息行(11-17: 去掉 lid/外部收集两个 tag, 只留名称) -->
     <div class="lp-info">
       <span class="lp-name" :title="landerName">{{ landerName }}</span>
-      <el-tag size="small" effect="plain" class="lid-tag">lid={{ lid }}</el-tag>
-      <el-tag v-if="isExternal" type="warning" size="small" effect="plain">外部收集</el-tag>
     </div>
 
     <!-- 控制行: 日期范围 + 图表/明细切换 + 刷新 -->
@@ -51,6 +48,12 @@
         <div v-if="!statsLoading && noData" class="empty-hint">当日暂无行为数据</div>
         <div v-show="!noData" v-loading="statsLoading">
           <div class="charts-row dialog-row">
+            <!-- LP 预览图(固定窄卡, 第一个图表左边): 点击放大(点遮罩关闭), 下方"查看"新窗口打开 LP -->
+            <div class="chart-card preview-card">
+              <img v-if="previewUrl" :src="previewUrl" class="preview-img" alt="LP预览" title="点击放大" @click="previewZoom = true" />
+              <div v-else class="chart-empty">暂无预览图</div>
+              <a v-if="lpUrl" class="preview-open" @click="openLp">查看</a>
+            </div>
             <!-- 核心漏斗: echarts 垂直柱, 五段(进入对话/进扫描页/扫完/点击跳出/重定向跳出) -->
             <div class="chart-card funnel-card">
               <div class="chart-title">
@@ -115,6 +118,11 @@
       <template v-else>
         <div v-if="!statsLoading && noData" class="empty-hint">当日暂无行为数据</div>
         <div v-show="!noData" class="charts-row" v-loading="statsLoading">
+          <!-- LP 预览图(固定窄卡, 第一个图表左边) -->
+          <div class="chart-card preview-card">
+            <img v-if="previewUrl" :src="previewUrl" class="preview-img" alt="LP预览" />
+            <div v-else class="chart-empty">暂无预览图</div>
+          </div>
           <div class="chart-card">
             <div class="chart-title">完读率</div>
             <div ref="readRateRef" class="chart-box"></div>
@@ -210,6 +218,13 @@
         />
       </div>
     </template>
+
+    <!-- LP 预览图放大层: 点周围遮罩自动关闭(点图本身不关) -->
+    <teleport to="body">
+      <div v-if="previewZoom" class="lp-preview-mask" @click="previewZoom = false">
+        <img :src="previewUrl" class="lp-preview-zoom" @click.stop alt="LP预览放大" />
+      </div>
+    </teleport>
   </el-dialog>
 </template>
 
@@ -218,19 +233,37 @@ import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'v
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import SparkMD5 from 'spark-md5'
 import { getLpEvents, getLpEventDict, getLpEventPaths } from '@/services/main/ef-tracker'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   lid: { type: Number, required: true },
   landerName: { type: String, default: '' },
-  isExternal: { type: Boolean, default: false }
+  isExternal: { type: Boolean, default: false },
+  previewUrl: { type: String, default: '' }, // LP 预览图(父面板传入完整 URL, 11-17)
+  lpUrl: { type: String, default: '' }       // LP 地址("查看"新窗口打开用, 带签名参数, 11-17)
 })
 const emit = defineEmits(['update:modelValue'])
 
+// 预览图放大层开关
+const previewZoom = ref(false)
+
+// "查看"打开 LP: 拼 eflp 访问签名(与两个落地页列表的打开逻辑同一套门禁)
+function openLp() {
+  if (!props.lpUrl) return
+  const t = Math.floor(Date.now() / 10000)
+  const n = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  const s = SparkMD5.hash(`eflp${t}${n}`).substring(0, 10)
+  const sep = props.lpUrl.includes('?') ? '&' : '?'
+  window.open(`${props.lpUrl}${sep}go=1&t=${t}&n=${n}&s=${s}&w=1`, '_blank')
+}
+
 const TZ = 8 // 与 ef-tracker 各页面一致, 按 +8 呈现/按 +8 墙钟取日期窗
 
-// 谷歌色系(与 efbox 各面板一致)
+// 谷歌色系(与 efbox 各面板一致; 11-17 试过卡片深色, 用户拍板回白)
 const C = { blue: '#1a73e8', green: '#34a853', yellow: '#fbbc04', red: '#ea4335', gray: '#dadce0', text: '#5f6368' }
 
 const dateRange = ref([]) // [开始, 结束] YYYY-MM-DD; 查 Go 时 end 要 +1 天(end 语义是排他 00:00)
@@ -806,6 +839,37 @@ function fmtPayload(p) {
   height: 200px;
 }
 
+/* LP 预览图窄卡(第一个图表左边, 两型通用): 图 + 下方"查看"链接 */
+.charts-row .chart-card.preview-card {
+  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+
+  .preview-img {
+    max-width: 100%;
+    max-height: 170px;
+    object-fit: contain;
+    border-radius: 6px;
+    display: block;
+    cursor: zoom-in;
+  }
+
+  .preview-open {
+    font-size: 12px;
+    color: #1a73e8;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
 /* 平均停留胶囊(核心漏斗卡标题右侧) */
 .dwell-badge {
   margin-left: auto;
@@ -969,12 +1033,48 @@ function fmtPayload(p) {
      固定高+内部滚动: 图表/明细切换或数据变多都不会把页面撑出滚动条 -->
 <style lang="less">
 /* 全屏弹窗(2026-11-16): body 占满剩余高度内部滚动; 内容限宽 1280 居中防超宽屏拉伸 */
+/* 11-17 用户拍板: 只卡片区域深色, 弹窗壳/明细表/控件保持原白 → 又回全白 */
 .lp-events-dialog {
+  /* 去掉标题栏文字, 只留关闭叉 */
+  .el-dialog__title {
+    display: none;
+  }
+
+  .el-dialog__header {
+    padding-bottom: 0;
+  }
+
+  /* 关闭叉: 白色叉 + 黑色圆底, 悬浮旋转动画 */
+  .el-dialog__headerbtn {
+    top: 14px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #202124;
+    border-radius: 50%;
+    z-index: 2;
+    transition: transform 0.25s ease, background-color 0.25s ease;
+
+    .el-dialog__close {
+      color: #fff !important; /* 叉号强制白(11-17 用户点名) */
+      font-size: 14px;
+    }
+
+    &:hover {
+      transform: rotate(90deg) scale(1.1);
+      background: #000;
+    }
+  }
+
   .el-dialog__body {
     height: calc(100vh - 110px);
     overflow-y: auto;
     padding-top: 4px;
   }
+
 
   /* 内容区限宽居中 */
   .lp-info,
@@ -987,6 +1087,27 @@ function fmtPayload(p) {
     max-width: 1280px;
     margin-left: auto;
     margin-right: auto;
+  }
+}
+
+/* LP 预览图放大层(teleport 到 body, 必须全局样式): 点遮罩关闭 */
+.lp-preview-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+
+  .lp-preview-zoom {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 8px;
+    cursor: default;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
   }
 }
 </style>

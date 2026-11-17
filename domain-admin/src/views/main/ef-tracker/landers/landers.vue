@@ -235,6 +235,8 @@
       :lid="lpEventsTarget.lid"
       :lander-name="lpEventsTarget.name"
       :is-external="lpEventsTarget.isExternal"
+      :preview-url="lpEventsTarget.previewUrl"
+      :lp-url="lpEventsTarget.lpUrl"
     />
   </div>
 </template>
@@ -278,7 +280,7 @@ const filters = reactive({
 
 // ===== LP 行为入口(2026-11-13): 行自带 lid, 点击弹共享行为数据弹窗 =====
 const lpEventsDialogVisible = ref(false)
-const lpEventsTarget = reactive({ lid: 0, name: '', isExternal: false })
+const lpEventsTarget = reactive({ lid: 0, name: '', isExternal: false, previewUrl: '', lpUrl: '' })
 
 // 入口图标配色(2026-11-16): 每页行的 lid 拉一次 size=1 计数(会话内缓存), >0=浅蓝
 const lidEventCounts = reactive({}) // { [lid]: total }
@@ -312,6 +314,8 @@ function openLpEventsDialog(row) {
   lpEventsTarget.lid = row.id
   lpEventsTarget.name = row.name
   lpEventsTarget.isExternal = row.is_external === 1
+  lpEventsTarget.previewUrl = getImageUrl(row) || '' // 弹窗左侧预览图(11-17)
+  lpEventsTarget.lpUrl = row.url || ''               // "查看"新窗口打开 LP(带签名参数)
   lpEventsDialogVisible.value = true
 }
 

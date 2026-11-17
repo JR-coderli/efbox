@@ -1025,6 +1025,8 @@
       :lid="lpEventsTarget.lid"
       :lander-name="lpEventsTarget.name"
       :is-external="true"
+      :preview-url="lpEventsTarget.previewUrl"
+      :lp-url="lpEventsTarget.lpUrl"
     />
   </div>
 </template>
@@ -1378,7 +1380,7 @@ const deleteTargetLander = ref(null)
 // 挂载时一次拉全外部登记(量小)建 map: 去前缀名称 → lid; 命中才在名称列显示入口。
 const externalLanderMap = ref(new Map())
 const lpEventsDialogVisible = ref(false)
-const lpEventsTarget = reactive({ lid: 0, name: '' })
+const lpEventsTarget = reactive({ lid: 0, name: '', previewUrl: '', lpUrl: '' })
 
 const EXTERNAL_PREFIXES = ['【external】', '【外部】']
 
@@ -1451,6 +1453,8 @@ function openLpEventsDialog(row) {
   if (!lid) return // 未登记行: 点击无反应(11-16 用户拍板去掉提示)
   lpEventsTarget.lid = lid
   lpEventsTarget.name = row.name
+  lpEventsTarget.previewUrl = getFullImageUrl(row.screenshot_url) || '' // 弹窗左侧预览图(11-17)
+  lpEventsTarget.lpUrl = row.url || ''               // "查看"新窗口打开 LP(带签名参数)
   lpEventsDialogVisible.value = true
 }
 
