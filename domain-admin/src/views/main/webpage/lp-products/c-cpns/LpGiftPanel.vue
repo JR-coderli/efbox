@@ -251,9 +251,9 @@ const props = defineProps({
 const isV7 = props.page === 'gift7'
 // 可视化编辑器引用的线上静态页地址(CSS + 相对图片补全), 按版本区分, 互不影响
 const lpBase = isV7 ? GIFT7_LP_BASE : GIFT_LP_BASE
-const pageTitle = isV7 ? '清单页LP · v7' : '清单页LP · v6'
+const pageTitle = isV7 ? '清单页LP · v1(eft)' : '清单页LP · v6'
 const pageDesc = isV7
-  ? '管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效(与 v6 数据完全独立)。页面: pro2.winrab.com/s2/1/ecomlistical/v7/'
+  ? '管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效(eft 电商 v1, eftracker 投放, 与 v6 数据完全独立)。页面: https://pro2.vorlark.com/s3/1/ecomlistical/v1/'
   : '管理清单页的板块标题、正文内容、图片视频、跳转链接与排序,保存后 LP 立即生效。页面: pro2.winrab.com/s2/1/ecomlistical/v6/'
 
 // 本实例使用的接口集合(两套数据互不影响)

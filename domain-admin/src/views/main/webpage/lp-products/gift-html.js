@@ -17,8 +17,9 @@
 // 线上静态页地址(可视化编辑时引用其 CSS 并补全相对图片路径)
 // 注意: 随投放版本升级同步更新(当前投放 v6, 资源结构与 v5 相同)
 export const GIFT_LP_BASE = 'https://pro2.winrab.com/s2/1/ecomlistical/v6'
-// v7 静态页地址(v7 面板可视化编辑时用, 资源结构与 v6 相同)
-export const GIFT7_LP_BASE = 'https://pro2.winrab.com/s2/1/ecomlistical/v7'
+// gift7 面板对应的线上页 = eftracker 投放的 ecomlistical v1(与 clickflare v7 同代码不同归因平台;
+// 可视化编辑时引用其 CSS 并补全相对图片路径)
+export const GIFT7_LP_BASE = 'https://pro2.vorlark.com/s3/1/ecomlistical/v1'
 
 // 存储格式 → 显示格式: img 的相对路径(images/、videos/)拼上线上域名
 // base 默认 v6, 传 GIFT7_LP_BASE 则按 v7 页面补全(不影响默认调用方)

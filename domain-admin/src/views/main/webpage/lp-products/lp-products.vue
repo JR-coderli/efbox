@@ -30,8 +30,8 @@
             <iframe :src="GIFT7_LP_URL" sandbox="allow-scripts" loading="lazy" tabindex="-1"></iframe>
           </div>
           <div class="card-info">
-            <div class="card-name">清单页LP <span class="card-sub">v7</span></div>
-            <div class="card-desc">{{ gift7Count }} 个产品 · 数据独立于 v6, 可自由改版</div>
+            <div class="card-name">清单页LP <span class="card-sub">v1(eft)</span></div>
+            <div class="card-desc">{{ gift7Count }} 个产品 · eft 电商 v1(eftracker 投放) · 数据独立于 v6</div>
           </div>
         </div>
       </div>
@@ -57,7 +57,8 @@ import { getLpProducts, getGiftProducts, getGift7Products } from '@/services/mai
 // 各 LP 的线上静态页地址(卡片实时预览用) —— 同类清单页,按版本区分
 const ZORFELL_LP_URL = 'https://pro2.winrab.com/s2/1/ecomlistical/v2/'
 const GIFT_LP_URL = 'https://pro2.winrab.com/s2/1/ecomlistical/v6/'
-const GIFT7_LP_URL = 'https://pro2.winrab.com/s2/1/ecomlistical/v7/'
+// gift7 面板管理的是 eftracker 投放的 ecomlistical v1(与 clickflare v7 同代码不同归因平台; 内部数据键仍叫 gift7)
+const GIFT7_LP_URL = 'https://pro2.vorlark.com/s3/1/ecomlistical/v1/'
 
 const view = ref('select') // select=卡片选择页 / zorfell / gift / gift7
 const zorfellCount = ref('—')
