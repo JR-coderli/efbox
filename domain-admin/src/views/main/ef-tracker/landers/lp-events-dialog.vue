@@ -51,7 +51,7 @@
         <div v-if="!statsLoading && noData" class="empty-hint">当日暂无行为数据</div>
         <div v-show="!noData" v-loading="statsLoading">
           <div class="charts-row dialog-row">
-            <!-- 核心漏斗: 垂直柱, 跳出拆"点击按钮/重定向"两条路径 -->
+            <!-- 核心漏斗: echarts 垂直柱, 五段(进入对话/进扫描页/扫完/点击跳出/重定向跳出) -->
             <div class="chart-card funnel-card">
               <div class="chart-title">
                 核心漏斗
@@ -61,31 +61,9 @@
               </div>
               <div ref="funnelRef" class="chart-box funnel-chart"></div>
             </div>
-            <!-- 对话选择气泡(宽) -->
+            <!-- 跳转率: (点击跳出+重定向跳出) ÷ 进入对话页(page_view step=1) -->
             <div class="chart-card wide">
-              <div class="chart-title">对话选择 <span class="chart-sub">各问题回答分布</span></div>
-              <div v-if="dialogBubbles.length" class="chat-list">
-                <div v-for="(item, i) in dialogBubbles" :key="i" class="chat-item">
-                  <div class="chat-q">
-                    <span class="chat-q-avatar">G</span>
-                    <span class="chat-q-text">{{ item.question }}</span>
-                  </div>
-                  <div class="chat-a-row">
-                    <span class="chat-a yes">
-                      <span class="chat-a-label">Yes</span>
-                      <span class="chat-a-count">{{ item.yes }}</span>
-                    </span>
-                    <span class="chat-a no">
-                      <span class="chat-a-label">No</span>
-                      <span class="chat-a-count">{{ item.no }}</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="chart-empty">暂无对话数据</div>
-            </div>
-            <div class="chart-card narrow">
-              <div class="chart-title">跳转率</div>
+              <div class="chart-title">跳转率 <span class="chart-sub">跳出 ÷ 进入对话页</span></div>
               <div ref="readRateRef" class="chart-box tall"></div>
             </div>
           </div>
@@ -272,9 +250,8 @@ const productTop = ref([])                                    // 产品点击 [{
 
 // 对话型 LP(v84杀毒等): 类型检测 + 对话专属数据
 const lpType = ref('ecom')                                     // 'ecom'(滚动电商) | 'dialog'(对话切屏)
-const dialogFunnel = reactive({ enter: 0, done: 0, jump: 0, jumpCta: 0, jumpAuto: 0 })  // 进入/扫完/跳出(=点击+重定向)
+const dialogFunnel = reactive({ enter: 0, scanEnter: 0, done: 0, jump: 0, jumpCta: 0, jumpAuto: 0 })  // 进入对话(step1)/进入扫描(step2)/扫完/跳出(=点击+重定向)
 const avgDwellSec = ref(null)   // 平均停留秒数(仅计有进入+跳出的完整会话)
-const dialogAnswers = ref([])                                  // 对话选择分布 [{name: 问题→答案, value}]
 const pathData = ref(null)                                     // 路径分布(/query/lp-events/paths 返回)
 
 // 路径分布派生: Top10 行 / 占比条 / 题干 tooltip / 最大流失位
@@ -292,23 +269,7 @@ function stepQuestion(step) {
   return (pathData.value?.steps || []).find((s) => s.step === step)?.question || ''
 }
 
-// 对话气泡: 按问题分组, 每个问题一行(问题气泡 + Yes/No 两个回答气泡带数量)
-// note 格式 = "问题前30字 → 是/否", 按 " → " 拆分; 同题的是/否合并到一行
-const dialogBubbles = computed(() => {
-  const byQ = new Map()
-  for (const d of dialogAnswers.value) {
-    const sep = d.name.lastIndexOf(' → ')
-    const q = sep > 0 ? d.name.slice(0, sep) : d.name
-    const a = sep > 0 ? d.name.slice(sep + 3) : ''
-    if (!byQ.has(q)) byQ.set(q, { question: q, yes: 0, no: 0 })
-    const item = byQ.get(q)
-    if (a.includes('是') || a.toLowerCase().includes('yes')) item.yes += d.value
-    else item.no += d.value
-  }
-  return [...byQ.values()]
-})
-
-const noData = computed(() => !statsLoading.value && !statCounts.page_view && !eventDist.value.length && !productTop.value.length && !dialogAnswers.value.length)
+const noData = computed(() => !statsLoading.value && !statCounts.page_view && !eventDist.value.length && !productTop.value.length && !(pathData.value?.paths?.length))
 // 深度图 100% 档用 page_bottom 充当: 没接 scroll_depth 但有读完数据时也出图
 const hasDepth = computed(() => depthSteps[1] + depthSteps[2] + depthSteps[3] > 0 || statCounts.page_bottom > 0)
 const hasEventDist = computed(() => eventDist.value.length > 0)
@@ -357,13 +318,14 @@ function renderAllCharts() {
   if (isDialog) {
     // ===== 对话型: 核心漏斗柱图 + 跳转率环图(对话选择=HTML气泡) =====
 
-    // ① 核心漏斗: echarts 垂直柱(进入/扫完/点击跳出/重定向跳出)
+    // ① 核心漏斗: echarts 垂直柱(进入对话/进扫描页/扫完/点击跳出/重定向跳出)
+    //    双屏 LP 的 page_view 按 step 拆开: step1=对话页, step2=扫描页(混在一起会稀释漏斗)
     renderChart('funnel', funnelRef.value, {
-      grid: { left: 44, right: 12, top: 22, bottom: 28 },
+      grid: { left: 44, right: 12, top: 22, bottom: 40 },
       xAxis: {
         type: 'category',
-        data: ['进入', '扫完', '点击跳出', '重定向跳出'],
-        axisLabel: { interval: 0, fontSize: 10, color: C.text },
+        data: ['进入对话', '进扫描页', '扫完', '点击跳出', '重定向跳出'],
+        axisLabel: { interval: 0, fontSize: 10, color: C.text, rotate: 28 },
         axisLine: { lineStyle: { color: C.gray } }
       },
       yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#f1f3f4' } } },
@@ -372,6 +334,7 @@ function renderAllCharts() {
         barWidth: '52%',
         data: [
           { value: dialogFunnel.enter, itemStyle: { color: '#1a73e8' } },
+          { value: dialogFunnel.scanEnter, itemStyle: { color: '#7baaf7' } },
           { value: dialogFunnel.done, itemStyle: { color: '#fbbc04' } },
           { value: dialogFunnel.jumpCta, itemStyle: { color: '#34a853' } },
           { value: dialogFunnel.jumpAuto, itemStyle: { color: '#00acc1' } }
@@ -381,14 +344,14 @@ function renderAllCharts() {
       }]
     })
 
-    // ② 跳转率环图(右窄卡)
-    const pv = statCounts.page_view
+    // ② 跳转率环图: (点击跳出+重定向跳出) ÷ 进入对话页(page_view step=1)——用户拍板的口径
+    const pv = dialogFunnel.enter
     const jump = dialogFunnel.jump
     const rate = pv ? ((jump / pv) * 100).toFixed(1) : '0.0'
     renderChart('readRate', readRateRef.value, {
       title: {
         text: rate + '%',
-        subtext: `访问 ${pv} · 跳出 ${jump}`,
+        subtext: `进入 ${pv} · 跳出 ${jump}`,
         left: 'center',
         top: '34%',
         textStyle: { fontSize: 24, fontWeight: 600, color: '#202124' },
@@ -406,8 +369,6 @@ function renderAllCharts() {
         ]
       }]
     })
-
-    // ② 对话选择 = HTML气泡(不走echarts, 见模板 dialogBubbles)
 
     return
   }
@@ -589,12 +550,13 @@ async function loadStats() {
   depthSteps[1] = depthSteps[2] = depthSteps[3] = 0
   eventDist.value = []
   productTop.value = []
-  dialogAnswers.value = []
   pathData.value = null
-  dialogFunnel.enter = dialogFunnel.done = dialogFunnel.jump = dialogFunnel.jumpCta = dialogFunnel.jumpAuto = 0
+  dialogFunnel.enter = dialogFunnel.scanEnter = dialogFunnel.done = dialogFunnel.jump = dialogFunnel.jumpCta = dialogFunnel.jumpAuto = 0
   try {
-    const countOf = async (name) => {
-      const res = await getLpEvents({ ...baseParams(), event_name: name, size: 1 })
+    const countOf = async (name, step) => {
+      const p = { ...baseParams(), event_name: name, size: 1 }
+      if (step != null) p.step = step // step 精确过滤(11-17 Go 新增, 双屏 LP 拆 page_view 用)
+      const res = await getLpEvents(p)
       return res?.total ?? 0
     }
     const dictEvents = dictList.value.map((d) => d.event_name)
@@ -617,8 +579,11 @@ async function loadStats() {
       .sort((a, b) => b.value - a.value)
 
     if (lpType.value === 'dialog') {
-      // 对话型: 漏斗(进入/扫完/跳出) + 对话选择分布 + 平均停留
-      dialogFunnel.enter = statCounts.page_view
+      // 对话型: 漏斗(进入对话/进入扫描/扫完/跳出) + 对话选择分布 + 平均停留
+      // 双屏 LP(v84): page_view 拆 step1=对话页 / step2=扫描页, 各算各的(不分会稀释漏斗和跳转率)
+      const [pv1, pv2] = await Promise.all([countOf('page_view', 1), countOf('page_view', 2)])
+      dialogFunnel.enter = pv1
+      dialogFunnel.scanEnter = pv2
       dialogFunnel.done = countMap.scan_done || 0
       dialogFunnel.jumpCta = countMap.cta_click || 0       // 点击按钮跳出
       dialogFunnel.jumpAuto = countMap.auto_redirect || 0  // 倒计时重定向跳出
@@ -627,9 +592,10 @@ async function loadStats() {
 
       // 平均停留: 按 session 逐次配对(进入→紧跟的跳出), 而非取最早/最晚
       // 同一标签页多次测试 session_id 不变, 最早进入配最晚跳出会把间隔算成小时——必须逐次配
-      if (dialogFunnel.jump > 0 && statCounts.page_view > 0) {
+      // 注意: page_view 只取 step=1(对话页进入), step=2 是扫描页不算"进入"
+      if (dialogFunnel.jump > 0 && pv1 > 0) {
         const [pvRes, jumpRes, arRes] = await Promise.all([
-          getLpEvents({ ...baseParams(), event_name: 'page_view', size: 200 }).catch(() => null),
+          getLpEvents({ ...baseParams(), event_name: 'page_view', step: 1, size: 200 }).catch(() => null),
           getLpEvents({ ...baseParams(), event_name: 'cta_click', size: 200 }).catch(() => null),
           getLpEvents({ ...baseParams(), event_name: 'auto_redirect', size: 200 }).catch(() => null)
         ])
@@ -656,19 +622,6 @@ async function loadStats() {
           }
         }
         avgDwellSec.value = n > 0 ? Math.round(total / n / 1000) : null
-      }
-
-      if (countMap.dialog_answer) {
-        const res = await getLpEvents({ ...baseParams(), event_name: 'dialog_answer', size: 100 }).catch(() => null)
-        const byNote = {}
-        for (const r of res?.list || []) {
-          const note = (r.payload?.note || r.event_name || '').toString().slice(0, 40)
-          byNote[note] = (byNote[note] || 0) + 1
-        }
-        dialogAnswers.value = Object.entries(byNote)
-          .map(([name, value]) => ({ name, value }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 8)
       }
 
       // 路径分布: 一次聚合查询(老数据无题号不计入, 卡片内会提示)
@@ -841,14 +794,15 @@ function fmtPayload(p) {
       color: #9aa0a6;
     }
 
-    &.funnel-card { flex: 0 0 260px; } /* 核心漏斗: 垂直柱, 窄卡固定宽 */
+    &.funnel-card { flex: 0 0 330px; } /* 核心漏斗: 垂直柱, 窄卡固定宽 */
     &.wide { flex: 3; }
     &.narrow { flex: 2; }
   }
 }
 
 /* ===== 对话型: 核心漏斗 echarts 柱图 ===== */
-.funnel-chart {
+/* 注意特异性: .chart-card .chart-box(0,2,0) 会盖掉裸 .funnel-chart, 这里同级写出完整链 */
+.chart-card .chart-box.funnel-chart {
   height: 200px;
 }
 
@@ -871,87 +825,6 @@ function fmtPayload(p) {
     font-weight: 700;
     color: #1a73e8;
   }
-}
-
-/* ===== 对话气泡列表(替代echarts横条) ===== */
-.chat-list {
-  max-height: 280px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 4px 0;
-}
-
-.chat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.chat-q {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.chat-q-avatar {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #1a73e8;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.chat-q-text {
-  background: #f1f3f4;
-  color: #202124;
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 6px 12px;
-  border-radius: 2px 12px 12px 12px;
-  max-width: 90%;
-  word-break: break-word;
-}
-
-.chat-a-row {
-  display: flex;
-  gap: 8px;
-  padding-left: 30px;
-}
-
-.chat-a {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 14px;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.chat-a.yes {
-  background: #e6f4ea;
-  color: #137333;
-  border: 1px solid #ceead6;
-}
-
-.chat-a.no {
-  background: #fce8e6;
-  color: #c5221f;
-  border: 1px solid #f6d5d3;
-}
-
-.chat-a-count {
-  font-size: 13px;
-  font-weight: 700;
 }
 
 /* ===== 路径分布卡(对话型第二行) ===== */
@@ -1053,7 +926,7 @@ function fmtPayload(p) {
 
 /* 对话型一行三卡: 漏斗窄(固定) | 对话选择宽 | 跳转率窄 */
 .dialog-row {
-  .chart-card.funnel-card { flex: 0 0 260px; }
+  .chart-card.funnel-card { flex: 0 0 330px; }
   .chart-card.wide { flex: 3; }
   .chart-card.narrow { flex: 2; }
 }
