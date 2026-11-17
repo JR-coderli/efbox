@@ -45,8 +45,10 @@
 
       <!-- ===== 对话型布局: 一行三卡(垂直漏斗 | 对话选择 | 跳转率), 紧凑 ===== -->
       <template v-if="lpType === 'dialog'">
-        <div v-if="!statsLoading && noData" class="empty-hint">当日暂无行为数据</div>
-        <div v-show="!noData" v-loading="statsLoading">
+        <!-- 加载态: 不用灰白蒙版, 直接文字提示(11-17 用户拍板) -->
+        <div v-if="statsLoading" class="empty-hint">数据加载中...</div>
+        <div v-else-if="noData" class="empty-hint">当日暂无行为数据</div>
+        <div v-show="!statsLoading && !noData">
           <div class="charts-row dialog-row">
             <!-- LP 预览图(固定窄卡, 第一个图表左边): el-image 内置预览(滚轮缩放/拖拽, 与落地页列表同款), 下方"查看"新窗口打开 LP -->
             <div class="chart-card preview-card">
@@ -137,12 +139,28 @@
 
       <!-- ===== 电商型布局: 四等分卡片(原有) ===== -->
       <template v-else>
-        <div v-if="!statsLoading && noData" class="empty-hint">当日暂无行为数据</div>
-        <div v-show="!noData" class="charts-row" v-loading="statsLoading">
-          <!-- LP 预览图(固定窄卡, 第一个图表左边) -->
+        <!-- 加载态: 不用灰白蒙版, 直接文字提示(11-17 用户拍板) -->
+        <div v-if="statsLoading" class="empty-hint">数据加载中...</div>
+        <div v-else-if="noData" class="empty-hint">当日暂无行为数据</div>
+        <div v-show="!statsLoading && !noData" class="charts-row">
+          <!-- LP 预览图(固定窄卡, 第一个图表左边): el-image 内置预览(滚轮缩放/拖拽, 与落地页列表同款), 下方"查看"新窗口打开 LP -->
           <div class="chart-card preview-card">
-            <img v-if="previewUrl" :src="previewUrl" class="preview-img" alt="LP预览" />
+            <el-image
+              v-if="previewUrl"
+              :src="previewUrl"
+              :preview-src-list="[previewUrl]"
+              fit="contain"
+              class="preview-img"
+              :preview-teleported="true"
+              hide-on-click-modal
+            />
             <div v-else class="chart-empty">暂无预览图</div>
+            <!-- 新窗口打开 LP(带 go=1 签名参数), 图标与落地页列表 URL 旁同款 -->
+            <a v-if="lpUrl" class="preview-open external-link-btn" title="打开落地页" @click="openLp">
+              <svg viewBox="0 0 24 24" class="external-icon">
+                <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+              </svg>
+            </a>
           </div>
           <div class="chart-card">
             <div class="chart-title">完读率</div>
@@ -185,8 +203,8 @@
           />
         </el-select>
       </div>
-      <!-- 固定高度+表头吸顶+表体内部滚动: 明细再长也不把弹窗撑出滚动条 -->
-      <el-table :data="tableData" v-loading="loading" size="small" border stripe class="events-table" max-height="460">
+      <!-- 固定高度+表头吸顶+表体内部滚动: 明细再长也不把弹窗撑出滚动条; 加载态=空槽文字, 不用蒙版 -->
+      <el-table :data="tableData" size="small" border stripe class="events-table" max-height="460">
         <el-table-column label="时间" width="170" align="center">
           <template #default="{ row }">
             <span class="time-text">{{ fmtTime(row.created_at) }}</span>
@@ -194,12 +212,11 @@
         </el-table-column>
         <el-table-column label="事件" min-width="140" align="center">
           <template #default="{ row }">
-            <el-tooltip :content="dictTooltip(row.event_name)" placement="top" :disabled="!dictTooltip(row.event_name)">
-              <span class="event-cell">
-                <span class="event-display">{{ displayName(row.event_name) }}</span>
-                <span v-if="displayName(row.event_name) !== row.event_name" class="event-raw">{{ row.event_name }}</span>
-              </span>
-            </el-tooltip>
+            <!-- 悬浮无 tooltip(11-17 用户拍板): 直接渲染, 字典中文名+原名两行 -->
+            <span class="event-cell">
+              <span class="event-display">{{ displayName(row.event_name) }}</span>
+              <span v-if="displayName(row.event_name) !== row.event_name" class="event-raw">{{ row.event_name }}</span>
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="step" width="70" align="center">
@@ -224,7 +241,7 @@
           </template>
         </el-table-column>
         <template #empty>
-          <span>{{ loading ? '加载中…' : '暂无数据' }}</span>
+          <span>{{ loading ? '数据加载中...' : '暂无数据' }}</span>
         </template>
       </el-table>
 
@@ -718,9 +735,6 @@ async function loadTable() {
 // ===== 展示辅助 =====
 function displayName(name) {
   return dictList.value.find((d) => d.event_name === name)?.display_name || name
-}
-function dictTooltip(name) {
-  return dictList.value.find((d) => d.event_name === name)?.description || ''
 }
 function fmtTime(s) {
   if (!s) return '-'
