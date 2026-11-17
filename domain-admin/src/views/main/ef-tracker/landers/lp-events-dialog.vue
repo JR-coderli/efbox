@@ -48,11 +48,24 @@
         <div v-if="!statsLoading && noData" class="empty-hint">当日暂无行为数据</div>
         <div v-show="!noData" v-loading="statsLoading">
           <div class="charts-row dialog-row">
-            <!-- LP 预览图(固定窄卡, 第一个图表左边): 点击放大(点遮罩关闭), 下方"查看"新窗口打开 LP -->
+            <!-- LP 预览图(固定窄卡, 第一个图表左边): el-image 内置预览(滚轮缩放/拖拽, 与落地页列表同款), 下方"查看"新窗口打开 LP -->
             <div class="chart-card preview-card">
-              <img v-if="previewUrl" :src="previewUrl" class="preview-img" alt="LP预览" title="点击放大" @click="previewZoom = true" />
+              <el-image
+                v-if="previewUrl"
+                :src="previewUrl"
+                :preview-src-list="[previewUrl]"
+                fit="contain"
+                class="preview-img"
+                :preview-teleported="true"
+                hide-on-click-modal
+              />
               <div v-else class="chart-empty">暂无预览图</div>
-              <a v-if="lpUrl" class="preview-open" @click="openLp">查看</a>
+              <!-- 新窗口打开 LP(带 go=1 签名参数), 图标与落地页列表 URL 旁同款 -->
+              <a v-if="lpUrl" class="preview-open external-link-btn" title="打开落地页" @click="openLp">
+                <svg viewBox="0 0 24 24" class="external-icon">
+                  <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+                </svg>
+              </a>
             </div>
             <!-- 核心漏斗: echarts 垂直柱, 五段(进入对话/进扫描页/扫完/点击跳出/重定向跳出) -->
             <div class="chart-card funnel-card">
@@ -93,13 +106,17 @@
                         </el-tooltip>
                         <span v-if="i < p.steps.length - 1" class="path-arrow">→</span>
                       </template>
+                      <!-- 结局节点: 同一路径可能两种结局都有(答案相同结局不同), 人数看右侧 -->
+                      <template v-if="p.jumped">
+                        <span class="path-arrow">→</span>
+                        <span class="path-chip end jump">跳出</span>
+                      </template>
+                      <template v-if="p.left">
+                        <span class="path-arrow">→</span>
+                        <span class="path-chip end left">中途离开</span>
+                      </template>
                     </div>
                     <div class="path-meta">
-                      <span class="path-outcome">
-                        <template v-if="p.jumped">跳出 {{ p.jumped }}</template>
-                        <template v-if="p.jumped && p.left"> · </template>
-                        <template v-if="p.left">离开 {{ p.left }}</template>
-                      </span>
                       <div class="path-bar-track">
                         <div class="path-bar" :style="{ width: pathPct(p) + '%' }"></div>
                       </div>
@@ -218,13 +235,6 @@
         />
       </div>
     </template>
-
-    <!-- LP 预览图放大层: 点周围遮罩自动关闭(点图本身不关) -->
-    <teleport to="body">
-      <div v-if="previewZoom" class="lp-preview-mask" @click="previewZoom = false">
-        <img :src="previewUrl" class="lp-preview-zoom" @click.stop alt="LP预览放大" />
-      </div>
-    </teleport>
   </el-dialog>
 </template>
 
@@ -245,9 +255,6 @@ const props = defineProps({
   lpUrl: { type: String, default: '' }       // LP 地址("查看"新窗口打开用, 带签名参数, 11-17)
 })
 const emit = defineEmits(['update:modelValue'])
-
-// 预览图放大层开关
-const previewZoom = ref(false)
 
 // "查看"打开 LP: 拼 eflp 访问签名(与两个落地页列表的打开逻辑同一套门禁)
 function openLp() {
@@ -849,23 +856,37 @@ function fmtPayload(p) {
   gap: 8px;
   padding: 8px;
 
+  /* el-image: 外层固定框, 内图 object-fit:contain(fit 属性自带); 点击出内置预览(滚轮缩放) */
   .preview-img {
-    max-width: 100%;
-    max-height: 170px;
-    object-fit: contain;
-    border-radius: 6px;
+    width: 100%;
+    height: 170px;
     display: block;
     cursor: zoom-in;
+    border-radius: 6px;
+    overflow: hidden;
   }
 
+  /* 打开 LP 图标: 与落地页列表 URL 旁同款(方框+箭头) */
   .preview-open {
-    font-size: 12px;
-    color: #1a73e8;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: #5f6368;
     cursor: pointer;
-    user-select: none;
+    border-radius: 4px;
+    transition: all 0.2s;
+
+    .external-icon {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
 
     &:hover {
-      text-decoration: underline;
+      color: #1a73e8;
+      background: #f1f3f4;
     }
   }
 }
@@ -944,6 +965,10 @@ function fmtPayload(p) {
 
       &.yes { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
       &.no { background: #fce8e6; color: #c5221f; border: 1px solid #f6d5d3; }
+
+      /* 结局节点(路径末尾): 跳出=蓝, 中途离开=灰 */
+      &.end.jump { background: #e8f0fe; color: #1a73e8; border: 1px solid #d2e3fc; }
+      &.end.left { background: #f1f3f4; color: #5f6368; border: 1px solid #dadce0; }
     }
 
     .path-arrow {
@@ -957,12 +982,6 @@ function fmtPayload(p) {
     display: flex;
     align-items: center;
     gap: 10px;
-
-    .path-outcome {
-      font-size: 11px;
-      color: #9aa0a6;
-      white-space: nowrap;
-    }
 
     .path-bar-track {
       width: 90px;
@@ -1087,27 +1106,6 @@ function fmtPayload(p) {
     max-width: 1280px;
     margin-left: auto;
     margin-right: auto;
-  }
-}
-
-/* LP 预览图放大层(teleport 到 body, 必须全局样式): 点遮罩关闭 */
-.lp-preview-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 3000;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: zoom-out;
-
-  .lp-preview-zoom {
-    max-width: 90vw;
-    max-height: 90vh;
-    object-fit: contain;
-    border-radius: 8px;
-    cursor: default;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
   }
 }
 </style>
