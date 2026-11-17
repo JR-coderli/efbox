@@ -106,10 +106,14 @@
                         </el-tooltip>
                         <span v-if="i < p.steps.length - 1" class="path-arrow">→</span>
                       </template>
-                      <!-- 结局节点: 同一路径可能两种结局都有(答案相同结局不同), 人数看右侧 -->
-                      <template v-if="p.jumped">
+                      <!-- 结局节点: 跳出拆 点击跳出/倒计时跳出; 同一路径可能多种结局, 人数看右侧 -->
+                      <template v-if="p.jumped_cta">
                         <span class="path-arrow">→</span>
-                        <span class="path-chip end jump">跳出</span>
+                        <span class="path-chip end jump">点击跳出</span>
+                      </template>
+                      <template v-if="p.jumped_auto">
+                        <span class="path-arrow">→</span>
+                        <span class="path-chip end auto">倒计时跳出</span>
                       </template>
                       <template v-if="p.left">
                         <span class="path-arrow">→</span>
@@ -966,8 +970,9 @@ function fmtPayload(p) {
       &.yes { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
       &.no { background: #fce8e6; color: #c5221f; border: 1px solid #f6d5d3; }
 
-      /* 结局节点(路径末尾): 跳出=蓝, 中途离开=灰 */
-      &.end.jump { background: #e8f0fe; color: #1a73e8; border: 1px solid #d2e3fc; }
+      /* 结局节点(路径末尾): 点击跳出=绿(同漏斗 cta 柱), 倒计时跳出=青(同漏斗 auto 柱), 中途离开=灰 */
+      &.end.jump { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+      &.end.auto { background: #e0f7fa; color: #00838f; border: 1px solid #b2ebf2; }
       &.end.left { background: #f1f3f4; color: #5f6368; border: 1px solid #dadce0; }
     }
 
