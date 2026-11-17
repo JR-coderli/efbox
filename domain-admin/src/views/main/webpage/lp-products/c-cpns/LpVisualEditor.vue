@@ -19,6 +19,13 @@
         <el-color-picker v-model="pickedColor" :predefine="PRESET_COLORS" size="small" @change="applyColor" />
       </span>
 
+      <!-- 背景色(如"Verified Buyer"薄荷绿底): 选中文字后取色; 无背景=去除 -->
+      <span class="ve-color-wrap" title="选中文字的背景颜色">
+        <span class="ve-bg-label">背景</span>
+        <el-color-picker v-model="pickedBg" :predefine="PRESET_BGS" size="small" @change="applyBg" />
+      </span>
+      <span class="ve-btn" title="去除选中文字的背景颜色" @click="clearBg">无背景</span>
+
       <el-dropdown trigger="click" @command="applyLineHeight">
         <span class="ve-btn">
           行高 <el-icon><ArrowDown /></el-icon>
@@ -77,9 +84,12 @@ const props = defineProps({
 // 正文常用字号(现内容以 24px 为主, 评分行 18px)与常用颜色
 const FONT_SIZES = ['16px', '18px', '20px', '22px', '24px', '28px', '32px']
 const PRESET_COLORS = ['#333333', '#000000', '#c5221f', '#e65100', '#188038', '#007bff', '#5f6368', '#ffffff']
+// 背景色预设(浅色系: 薄荷绿=评论标星常见底色, 其余为常用高亮色)
+const PRESET_BGS = ['#d4f5e5', '#fff3c4', '#ffe1e1', '#ddeaff', '#fdebd0', '#eeeeee']
 
 const iframeRef = ref(null)
 const pickedColor = ref(null)
+const pickedBg = ref(null)
 
 // —— 当前选中文字的样式回显(选中/光标移动时刷新) ——
 const curSize = ref('')        // 如 '24px'
@@ -264,6 +274,44 @@ function applyColor(hex) {
   exec('foreColor', hex)
 }
 
+// 背景色(块级盒子, 11-17 用户拍板改法): 不是逐行文字高亮, 而是选中文字所在的
+// 整个段落块(正文根的直接子块)加 background+padding+圆角——像评论卡片那样整块底色。
+// 选中跨几个块就染几个块(与 applyLineHeight 同套 range.intersectsNode 遍历)。
+function eachSelectedBlock(cb, warnMsg) {
+  const idoc = iframeRef.value?.contentDocument
+  if (!idoc || !restoreSelection()) {
+    ElMessage.warning(warnMsg || '请先在正文中选中要设置背景的文字')
+    return
+  }
+  const range = idoc.getSelection().getRangeAt(0)
+  const root = idoc.querySelector('.smb-section-main')
+  let touched = 0
+  Array.from(root.children).forEach((el) => {
+    if (!range.intersectsNode(el)) return
+    cb(el)
+    touched++
+  })
+  if (!touched) ElMessage.warning('没找到选中文字所在的段落块')
+}
+
+function applyBg(hex) {
+  if (!hex) return
+  eachSelectedBlock((el) => {
+    el.style.backgroundColor = hex
+    el.style.padding = '10px 14px'
+    el.style.borderRadius = '8px'
+  })
+}
+
+// 去除背景盒: 背景/padding/圆角一并移除(只清我们加的这三个属性, 不动其它样式)
+function clearBg() {
+  eachSelectedBlock((el) => {
+    el.style.backgroundColor = ''
+    el.style.padding = ''
+    el.style.borderRadius = ''
+  }, '请先选中要去掉背景的文字')
+}
+
 // 行高: 作用于选区覆盖到的所有段落(p / 飞书 rich-text-paragraph)。
 // 段落级设置才是"不同产品行距不一致"的病根(有的段落带 line-height:29px !important),
 // 用 setProperty(...,'important') 保证能覆盖已存在的 !important 行高; 空值=移除
@@ -349,5 +397,7 @@ onBeforeUnmount(() => {
 .ve-apply { color: #409eff; font-weight: 600; }
 .ve-color-wrap { display: inline-flex; align-items: center; gap: 4px; }
 .ve-color-dot { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #dcdfe6; display: inline-block; }
+/* 背景色按钮前的文字标签(与 ve-btn 同风格, 但不可点击仅标识) */
+.ve-bg-label { font-size: 12px; color: #606266; user-select: none; }
 .ve-frame { width: 100%; border: 1px solid #dcdfe6; border-radius: 0 0 4px 4px; background: #fff; display: block; }
 </style>
