@@ -73,8 +73,8 @@
             <div class="chart-card funnel-card">
               <div class="chart-title">
                 核心漏斗
-                <span v-if="avgDwellSec != null" class="dwell-badge" title="仅统计有进入且有跳出的完整会话">
-                  平均停留 <b>{{ avgDwellSec >= 60 ? Math.floor(avgDwellSec / 60) + 'm' + (avgDwellSec % 60) + 's' : avgDwellSec + 's' }}</b>
+                <span v-if="avgDwellSec != null" class="dwell-badge" title="有进入且有跳出的会话, 按进入→跳出间隔取中位数(抗挂起标签页等极端值)">
+                  停留中位数 <b>{{ avgDwellSec >= 60 ? Math.floor(avgDwellSec / 60) + 'm' + (avgDwellSec % 60) + 's' : avgDwellSec + 's' }}</b>
                 </span>
               </div>
               <div ref="funnelRef" class="chart-box funnel-chart"></div>
@@ -89,7 +89,7 @@
           <!-- 第二行: 路径分布(全宽, 按作答会话的路径组合统计) -->
           <div class="charts-row">
             <div class="chart-card">
-              <div class="chart-title">路径分布 <span class="chart-sub">按作答会话统计 · Top10</span></div>
+              <div class="chart-title">路径分布 <span class="chart-sub">按作答会话统计 · Top20</span></div>
               <template v-if="pathData && pathData.paths && pathData.paths.length">
                 <div class="path-summary">
                   <span>作答会话 <b>{{ pathData.totals.answered }}</b></span>
@@ -316,8 +316,8 @@ const dialogFunnel = reactive({ enter: 0, scanEnter: 0, done: 0, jump: 0, jumpCt
 const avgDwellSec = ref(null)   // 平均停留秒数(仅计有进入+跳出的完整会话)
 const pathData = ref(null)                                     // 路径分布(/query/lp-events/paths 返回)
 
-// 路径分布派生: Top10 行 / 占比条 / 题干 tooltip / 最大流失位
-const pathRows = computed(() => (pathData.value?.paths || []).slice(0, 10))
+// 路径分布派生: Top20 行 / 占比条 / 题干 tooltip / 最大流失位
+const pathRows = computed(() => (pathData.value?.paths || []).slice(0, 20))
 const maxDropStep = computed(() => {
   const steps = (pathData.value?.steps || []).filter((s) => s.drop_here > 0)
   if (!steps.length) return null
@@ -671,6 +671,7 @@ async function loadStats() {
         ].sort((a, b) => a.t - b.t)
 
         let total = 0, n = 0
+        const gapList = [] // 各次配对间隔(ms), 供中位数用
         const pending = new Map() // sid → 最近一次未配对的进入时间
         for (const ev of all) {
           if (ev.enter) {
@@ -679,12 +680,21 @@ async function loadStats() {
             const eTime = pending.get(ev.sid)
             if (eTime != null && ev.t > eTime) {
               total += (ev.t - eTime)
+              gapList.push(ev.t - eTime)
               n++
               pending.delete(ev.sid) // 消耗掉这次进入, 下次进入重新配
             }
           }
         }
-        avgDwellSec.value = n > 0 ? Math.round(total / n / 1000) : null
+        // 11-17 实案: 挂起的标签页/异常会话产生 20-63 分钟极端间隔, 平均数被拖到 14m17s
+        // 而中位数只有 93s——改用中位数(一半人比它快, 一半比它慢, 抗极端值)
+        if (n > 0) {
+          gapList.sort((a, b) => a - b)
+          const mid = n % 2 === 1 ? gapList[(n - 1) / 2] : (gapList[n / 2 - 1] + gapList[n / 2]) / 2
+          avgDwellSec.value = Math.round(mid / 1000)
+        } else {
+          avgDwellSec.value = null
+        }
       }
 
       // 路径分布: 一次聚合查询(老数据无题号不计入, 卡片内会提示)
