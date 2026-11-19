@@ -160,6 +160,13 @@ export function getLpEventPaths(params = {}) {
   return query('/query/lp-events/paths', params)
 }
 
+// 通用回传事件日志(2026-11-19, 日志管理>转化回传 tab 非 Sales 事件查询): GET /query/postback-events
+// params: event_type(lead/tk_clicks/lp_u_visits/lp_u_clicks 精确)/keyword(scid/mcid 模糊)/mid/tid + 通用分页时间
+// 返回标准分页信封; 行含 event_type/media_postback_url/http_status_code/response_body 等
+export function getPostbackEvents(params = {}) {
+  return query('/query/postback-events', params)
+}
+
 // ============================================================
 // 13. 服务器状态面板 —— /query/status（唯一带鉴权的查询接口）
 // 返回 { local: { server, db, partitions, archive }, peer?: { reachable, status, error, addr } }

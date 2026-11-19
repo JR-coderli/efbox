@@ -47,7 +47,7 @@
         </div>
       </div>
 
-      <!-- 表格 -->
+      <!-- 表格(单表格: "类型"列表头内置类型选择器, 默认 Sales; 切类型只换数据, 2026-11-19) -->
       <div class="table-wrapper" ref="tableWrapperRef">
         <!-- 加载蒙版：只盖表体，每行行首一枚「圆环+Loading」动画（不受 td 宽度限制，表头不加蒙版） -->
         <div v-if="loading" class="rows-loading-mask">
@@ -61,6 +61,24 @@
           <el-table-column label="ID" align="center">
             <el-table-column prop="id" align="center" :width="colWidths.id" />
           </el-table-column>
+
+          <!-- 类型列: 二级表头内置类型选择器(默认 Sales), 切换即换数据——单表格形态, 无顶部 tab -->
+          <el-table-column label="类型" align="center">
+            <el-table-column align="center" width="150">
+              <template #header>
+                <el-select v-model="eventType" size="small" @change="handleEventTypeChange">
+                  <el-option label="Sales" value="sales" />
+                  <el-option label="Lead" value="lead" />
+                  <el-option label="TK_CLICKS" value="tk_clicks" />
+                  <el-option label="LP_U_VISITS" value="lp_u_visits" />
+                  <el-option label="LP_U_CLICKS" value="lp_u_clicks" />
+                </el-select>
+              </template>
+              <template #default="{ row }">
+                <el-tag size="small" effect="plain">{{ eventType === 'sales' ? 'sales' : row.event_type }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table-column>
           <el-table-column label="上游回传时间">
             <el-table-column prop="created_at" :width="colWidths.created_at">
               <template #default="{ row }">
@@ -70,7 +88,7 @@
           </el-table-column>
           <!-- 广告主/客户名：oid → ab_offers.aid → ab_advertisers.name；按名称稳定散列到不同底色，
                同一广告主在任何页码/刷新下颜色一致，肉眼快速区分客户 -->
-          <el-table-column label="广告主">
+          <el-table-column label="广告主" v-if="eventType === 'sales'">
             <el-table-column prop="names.advertiser" :width="colWidths.advertiser" min-width="110" show-overflow-tooltip>
               <template #default="{ row }">
                 <span class="advertiser-chip" :class="advertiserColorClass(row.names?.advertiser)">{{ row.names?.advertiser || '-' }}</span>
@@ -86,7 +104,7 @@
           <el-table-column label="media_click_id">
             <el-table-column prop="media_click_id" :width="colWidths.media_click_id" min-width="160" show-overflow-tooltip />
           </el-table-column>
-          <el-table-column label="Media_name">
+          <el-table-column label="Media_name" v-if="eventType === 'sales'">
             <el-table-column prop="names.media" :width="colWidths.media" min-width="110" show-overflow-tooltip>
               <template #default="{ row }">
                 <span>{{ row.names?.media || '-' }}</span>
@@ -109,7 +127,7 @@
               </template>
             </el-table-column>
           </el-table-column>
-          <el-table-column label="Tracker_name">
+          <el-table-column label="Tracker_name" v-if="eventType === 'sales'">
             <el-table-column prop="names.tracker" :width="colWidths.tracker" min-width="110" show-overflow-tooltip>
               <template #default="{ row }">
                 <span>{{ row.names?.tracker || '-' }}</span>
@@ -132,7 +150,7 @@
               </template>
             </el-table-column>
           </el-table-column>
-          <el-table-column label="应下发" align="center" class-name="group-media-postback">
+          <el-table-column label="应下发" align="center" class-name="group-media-postback" v-if="eventType === 'sales'">
             <el-table-column prop="should_postback" align="center" class-name="group-media-postback" :width="colWidths.should_postback">
               <template #header>
                 <el-select
@@ -162,7 +180,9 @@
           <el-table-column label="下发状态" align="center">
             <el-table-column prop="http_status_code" align="center" :width="colWidths.http_status_code">
               <template #header>
+                <!-- 状态码过滤仅 Sales 支持(通用事件接口无此参数), 其他类型不显示输入框 -->
                 <el-input
+                  v-if="eventType === 'sales'"
                   v-model="filters.http_status_code"
                   size="small"
                   placeholder="下发状态"
@@ -191,7 +211,7 @@
         </el-table>
       </div>
 
-      <!-- 分页 -->
+      <!-- 分页(统一) -->
       <div class="pagination-wrapper">
         <el-pagination
           v-model:current-page="pagination.page"
@@ -211,7 +231,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getConversions } from '@/services/main/ef-tracker'
+import { getConversions, getPostbackEvents } from '@/services/main/ef-tracker'
 import CellLoading from '../clicks/cell-loading.vue'
 
 const loading = ref(false)
@@ -395,9 +415,14 @@ function buildParams() {
   if (filters.keyword) p.keyword = filters.keyword
   if (filters.mid) p.mid = filters.mid
   if (filters.tid) p.tid = filters.tid
-  if (filters.http_status_code) p.http_status_code = filters.http_status_code
-  if (filters.should_postback) p.should_postback = filters.should_postback
-  p.with_names = true // 返回 mid/tid 对应的名称（names 字段）
+  if (eventType.value === 'sales') {
+    // Sales 专属: 状态码/应下发过滤 + 名称映射(其他事件接口不支持这些参数)
+    if (filters.http_status_code) p.http_status_code = filters.http_status_code
+    if (filters.should_postback) p.should_postback = filters.should_postback
+    p.with_names = true
+  } else {
+    p.event_type = eventType.value
+  }
   Object.assign(p, rangeToParams(dateRange.value))
   return p
 }
@@ -408,7 +433,10 @@ async function loadData() {
   // 空表格 + 蒙版即「每页 N 行、每行行首一枚加载动画」的效果
   tableData.value = []
   try {
-    const result = await getConversions(buildParams())
+    // Sales→转化表(带名称); 其他事件→通用回传事件表(字段同为小写蛇形, 直接渲染)
+    const result = eventType.value === 'sales'
+      ? await getConversions(buildParams())
+      : await getPostbackEvents(buildParams())
     tableData.value = result?.list || []
     total.value = result?.total ?? 0
   } catch (error) {
@@ -419,6 +447,16 @@ async function loadData() {
 }
 
 function handleSearch() {
+  pagination.page = 1
+  loadData()
+}
+
+// ===== 事件类型(2026-11-19 单表格版): "类型"列表头选择器切换, 默认 Sales =====
+// Sales→/query/conversions(带名称/扣量过滤); 其他→/query/postback-events。
+// 通用过滤(page/size/tz/keyword/mid/tid/日期)两类型共用; Sales 专属(with_names/http_status/should_postback)仅 Sales 带。
+const eventType = ref('sales')
+
+function handleEventTypeChange() {
   pagination.page = 1
   loadData()
 }
@@ -487,6 +525,7 @@ onUnmounted(() => {
   border-bottom: 1px solid #e8eaed;
   background-color: #f8f9fa;
 }
+
 
 .filter-row {
   display: flex;
