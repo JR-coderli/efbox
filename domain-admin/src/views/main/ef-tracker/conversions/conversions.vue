@@ -7,16 +7,7 @@
         <div class="filter-row">
           <div class="filter-items">
             <el-form :inline="true" class="filter-form" @submit.prevent>
-              <el-form-item label="关键词">
-                <el-input
-                  v-model="filters.keyword"
-                  placeholder="click_id / response_body"
-                  clearable
-                  style="width: 240px"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                />
-              </el-form-item>
+              <!-- 顶部关键词框已去除(2026-11-19): scid/mcid 改为各自列表头的精确搜索框(可走索引, 比模糊快) -->
               <el-form-item label="时区">
                 <el-select v-model="tz" style="width: 130px" @change="handleSearch">
                   <el-option v-for="o in tzOptions" :key="o.value" :label="o.label" :value="o.value" />
@@ -100,10 +91,35 @@
             <el-table-column prop="payout" align="right" class-name="col-money" :width="colWidths.payout" />
           </el-table-column>
           <el-table-column label="system_click_id">
-            <el-table-column prop="system_click_id" :width="colWidths.system_click_id" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="system_click_id" :width="colWidths.system_click_id" min-width="200" show-overflow-tooltip>
+              <template #header>
+                <!-- 专属精确搜索框(2026-11-19): 替代顶部关键词模糊搜, 精确匹配走索引 -->
+                <el-input
+                  v-model="filters.system_click_id"
+                  size="small"
+                  placeholder="system_click_id"
+                  clearable
+                  class="header-filter-input"
+                  @keyup.enter="handleSearch"
+                  @clear="handleSearch"
+                />
+              </template>
+            </el-table-column>
           </el-table-column>
           <el-table-column label="media_click_id">
-            <el-table-column prop="media_click_id" :width="colWidths.media_click_id" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="media_click_id" :width="colWidths.media_click_id" min-width="160" show-overflow-tooltip>
+              <template #header>
+                <el-input
+                  v-model="filters.media_click_id"
+                  size="small"
+                  placeholder="media_click_id"
+                  clearable
+                  class="header-filter-input"
+                  @keyup.enter="handleSearch"
+                  @clear="handleSearch"
+                />
+              </template>
+            </el-table-column>
           </el-table-column>
           <el-table-column label="Media_name" v-if="eventType === 'sales'">
             <el-table-column prop="names.media" :width="colWidths.media" min-width="110" show-overflow-tooltip>
@@ -181,9 +197,8 @@
           <el-table-column label="下发状态" align="center">
             <el-table-column prop="http_status_code" align="center" :width="colWidths.http_status_code">
               <template #header>
-                <!-- 状态码过滤仅 Sales 支持(通用事件接口无此参数), 其他类型不显示输入框 -->
+                <!-- 状态码精确过滤(全类型可用, 2026-11-19 Go 已补齐 postback-events/混排该参数) -->
                 <el-input
-                  v-if="eventType === 'sales'"
                   v-model="filters.http_status_code"
                   size="small"
                   placeholder="下发状态"
@@ -354,6 +369,8 @@ const tzOptions = [
 
 const filters = reactive({
   keyword: '',
+  system_click_id: '',
+  media_click_id: '',
   mid: '',
   tid: '',
   http_status_code: '',
@@ -414,11 +431,14 @@ function buildParams() {
     tz: tz.value
   }
   if (filters.keyword) p.keyword = filters.keyword
+  // scid/mcid/状态码 = 各列专属精确过滤(全类型可用, 2026-11-19)
+  if (filters.system_click_id) p.system_click_id = filters.system_click_id
+  if (filters.media_click_id) p.media_click_id = filters.media_click_id
+  if (filters.http_status_code) p.http_status_code = filters.http_status_code
   if (filters.mid) p.mid = filters.mid
   if (filters.tid) p.tid = filters.tid
   if (eventType.value === 'sales') {
-    // Sales 专属: 状态码/应下发过滤 + 名称映射(其他事件接口不支持这些参数)
-    if (filters.http_status_code) p.http_status_code = filters.http_status_code
+    // Sales 专属: 应下发过滤 + 名称映射(其他事件接口不支持这些参数)
     if (filters.should_postback) p.should_postback = filters.should_postback
     p.with_names = true
   } else {
