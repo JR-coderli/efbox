@@ -187,6 +187,22 @@
               </template>
             </el-table-column>
           </el-table-column>
+          <!-- 扣量两列(Sales 专属, 2026-11-19): 紧跟"应下发"——解释 should_postback=否 的原因。
+               BlockReason=规则代码(dedup/qdf_count 等), BlockNote=中文说明; 未扣量行为空 -->
+          <el-table-column label="扣量原因" v-if="eventType === 'sales'">
+            <el-table-column prop="block_reason" :width="colWidths.block_reason" min-width="120" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.block_reason || '-' }}</span>
+              </template>
+            </el-table-column>
+          </el-table-column>
+          <el-table-column label="扣量说明" v-if="eventType === 'sales'">
+            <el-table-column prop="block_note" :width="colWidths.block_note" min-width="280" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.block_note || '-' }}</span>
+              </template>
+            </el-table-column>
+          </el-table-column>
           <el-table-column label="下发媒体时间">
             <el-table-column prop="posted_at" :width="colWidths.posted_at">
               <template #default="{ row }">
@@ -265,7 +281,8 @@ const pagination = reactive({
 // 列顺序（模板里的 el-table-column 顺序）与这里一一对应。
 const COLUMN_KEYS = [
   'id', 'created_at', 'advertiser', 'payout', 'system_click_id', 'media_click_id',
-  'media', 'mid', 'tracker', 'tid', 'should_postback', 'posted_at', 'http_status_code',
+  'media', 'mid', 'tracker', 'tid', 'should_postback', 'block_reason', 'block_note',
+  'posted_at', 'http_status_code',
   'media_postback_url', 'response_body'
 ]
 // 各列初始宽度：null = 未拖过，走各自 min-width；表头带过滤控件的列给足默认宽度，避免控件被挤压

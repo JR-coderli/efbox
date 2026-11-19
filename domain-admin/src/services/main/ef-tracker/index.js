@@ -32,6 +32,8 @@ function normalizeConversion(item) {
     tid: item.TID,
     payout: item.Payout,
     should_postback: item.ShouldPostback,
+    block_reason: item.BlockReason, // 扣量原因代码(如 dedup/qdf_count); 未扣量为空
+    block_note: item.BlockNote,     // 扣量中文说明(命中哪条规则)
     media_postback_url: item.MediaPostbackURL,
     http_status_code: item.HTTPStatusCode,
     response_body: item.ResponseBody,
