@@ -606,8 +606,8 @@ watch(currentRouteId, (newVal) => {
     content: '';
     position: absolute;
     left: 30px;
-    top: calc(4px + (var(--ai, 1) - 1) * 36px);
-    height: 36px;
+    top: calc(4px + (var(--ai, 1) - 1) * 36px + 3px);
+    height: 30px; /* 比行高(36px)上下各收 3px, 蓝段不超过选中行高度 */
     width: 2px;
     border-radius: 1px;
     background: #1a73e8;
