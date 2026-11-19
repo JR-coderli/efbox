@@ -392,7 +392,7 @@ watch(currentRouteId, (newVal) => {
 
 .menu-item {
   margin: 0 8px 4px 8px;
-  border-radius: 24px;
+  border-radius: 12px;
   cursor: pointer;
   transition: background-color 0.2s ease;
 
@@ -620,7 +620,7 @@ watch(currentRouteId, (newVal) => {
     height: 36px;
     padding: 0 16px;
     margin: 0 8px;
-    border-radius: 18px;
+    border-radius: 12px;
     cursor: pointer;
     transition: background-color 0.2s ease;
 
