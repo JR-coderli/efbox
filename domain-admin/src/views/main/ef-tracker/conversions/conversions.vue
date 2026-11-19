@@ -67,6 +67,7 @@
             <el-table-column align="center" width="150">
               <template #header>
                 <el-select v-model="eventType" size="small" @change="handleEventTypeChange">
+                  <el-option label="全部事件" value="all" />
                   <el-option label="Sales" value="sales" />
                   <el-option label="Lead" value="lead" />
                   <el-option label="TK_CLICKS" value="tk_clicks" />
@@ -454,7 +455,7 @@ function handleSearch() {
 // ===== 事件类型(2026-11-19 单表格版): "类型"列表头选择器切换, 默认 Sales =====
 // Sales→/query/conversions(带名称/扣量过滤); 其他→/query/postback-events。
 // 通用过滤(page/size/tz/keyword/mid/tid/日期)两类型共用; Sales 专属(with_names/http_status/should_postback)仅 Sales 带。
-const eventType = ref('sales')
+const eventType = ref('all')
 
 function handleEventTypeChange() {
   pagination.page = 1
