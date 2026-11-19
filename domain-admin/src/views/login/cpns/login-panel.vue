@@ -57,6 +57,8 @@ watch(isRemPwd, (newValue) => {
 
 async function handleLoginBtnClick() {
   if (activeName.value === 'account') {
+    // 防重复提交: 按钮 disabled 只管点击, 表单回车 submit 还能再次触发本函数(2026-11-19)
+    if (isLoading.value) return
     isLoading.value = true
     try {
       await accountRef.value?.loginAction(isRemPwd.value)
