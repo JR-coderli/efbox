@@ -7,16 +7,7 @@
         <div class="filter-row">
           <div class="filter-items">
             <el-form :inline="true" class="filter-form" @submit.prevent>
-              <el-form-item label="关键词">
-                <el-input
-                  v-model="filters.keyword"
-                  placeholder="错误码 / 错误信息 / URL / endpoint / IP"
-                  clearable
-                  style="width: 260px"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                />
-              </el-form-item>
+              <!-- 顶部关键词框已去除(2026-11-19): error_code 改为列表头独立搜索框(与排除错误码互不相干) -->
               <el-form-item label="时区">
                 <el-select v-model="tz" style="width: 130px" @change="handleSearch">
                   <el-option v-for="o in tzOptions" :key="o.value" :label="o.label" :value="o.value" />
@@ -129,7 +120,7 @@
                 </template>
               </el-table-column>
               <!-- 表头精确查询列（mid/tid/http_status/error_code）：第二行为查询输入框；digits 列只允许数字；
-                   error_code 列是"排除包含该串"的反向过滤（placeholder 说明） -->
+                   error_code 列=独立搜索该错误码(包含该串, 2026-11-19 起与顶部"排除错误码"互不相干) -->
               <el-table-column
                 v-else-if="col.type === 'filter'"
                 :prop="col.prop"
@@ -158,7 +149,7 @@
                   <template v-else>{{ row[col.prop] }}</template>
                 </template>
               </el-table-column>
-              <!-- method：请求方法徽章（GET 蓝 / POST 绿 / 其他灰） -->
+              <!-- method：请求方法徽章（GET 蓝 / POST 绿 / 其他灰）; 表头=下拉选择筛选(2026-11-19, 不用手输) -->
               <el-table-column
                 v-else-if="col.key === 'method'"
                 :prop="col.prop"
@@ -167,6 +158,17 @@
                 :align="col.align"
                 :show-overflow-tooltip="col.overflow"
               >
+                <template #header>
+                  <el-select v-model="filters.request_method" size="small" placeholder="method" clearable @change="handleSearch">
+                    <el-option value="GET" label="GET" />
+                    <el-option value="POST" label="POST" />
+                    <el-option value="PUT" label="PUT" />
+                    <el-option value="DELETE" label="DELETE" />
+                    <el-option value="PATCH" label="PATCH" />
+                    <el-option value="HEAD" label="HEAD" />
+                    <el-option value="OPTIONS" label="OPTIONS" />
+                  </el-select>
+                </template>
                 <template #default="{ row }">
                   <span class="method-chip" :class="methodChipClass(row.request_method)">{{ row.request_method || '-' }}</span>
                 </template>
@@ -244,6 +246,8 @@ const tzOptions = [
 
 const filters = reactive({
   keyword: '',
+  error_code: '',      // error_code 列表头独立搜索(与顶部排除错误码互不相干, 2026-11-19)
+  request_method: '',  // method 列表头下拉精确筛选
   mid: '',
   tid: '',
   http_status: '',
@@ -285,6 +289,8 @@ function buildParams() {
   if (filters.mid) p.mid = filters.mid
   if (filters.tid) p.tid = filters.tid
   if (filters.http_status) p.http_status = filters.http_status
+  if (filters.error_code) p.error_code = filters.error_code // error_code 列独立搜索(包含该串, 与排除框无关)
+  if (filters.request_method) p.request_method = filters.request_method // method 列下拉精确筛选
   if (filters.exclude_error_code) p.exclude_error_code = filters.exclude_error_code // 排除某个 error_code（如高频的 SYSTEM_CLICK_FORMAT_ERR）
   Object.assign(p, rangeToParams(dateRange.value))
   return p
@@ -379,7 +385,7 @@ const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
   { key: 'request_url', label: 'request_url', type: 'plain', prop: 'request_url', minWidth: 220, overflow: true },
-  { key: 'error_code', label: 'error_code', type: 'filter', prop: 'error_code', filterKey: 'exclude_error_code', width: 220, overflow: true, placeholder: '排除包含该串' },
+  { key: 'error_code', label: 'error_code', type: 'filter', prop: 'error_code', filterKey: 'error_code', width: 220, overflow: true, placeholder: '搜索错误码' },
   { key: 'http_status', label: 'http状态', type: 'filter', prop: 'http_status', filterKey: 'http_status', width: 110, align: 'center' },
   { key: 'error_message', label: 'error_message', type: 'plain', prop: 'error_message', minWidth: 220, overflow: true },
   { key: 'error_reason', label: 'error_reason', type: 'plain', prop: 'error_reason', minWidth: 180, overflow: true },
@@ -392,7 +398,10 @@ const DEFAULT_COLUMNS = [
 
 // 表头过滤输入框统一入口：数字列（mid/tid/http_status）只保留数字（接口对非数字返回 400）
 function onFilterInput(col, v) {
-  filters[col.filterKey] = String(v ?? '').replace(/\D/g, '')
+  // 仅数字列(mid/tid/http_status)过滤非数字字符;
+  // error_code 等文本列必须原样保留(2026-11-19 修: 统一 replace(/\D/g) 导致错误码字母输入全被吞)
+  const digitsOnly = ['mid', 'tid', 'http_status'].includes(col.key)
+  filters[col.filterKey] = digitsOnly ? String(v ?? '').replace(/\D/g, '') : String(v ?? '')
 }
 
 // ===== 单元格特殊样式 =====
@@ -599,9 +608,9 @@ onUnmounted(() => {
 
 .filter-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center; /* 原 flex-start: 与按钮组垂直对齐 */
   gap: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* 原 wrap: 强制同一行显示(2026-11-19 用户拍板) */
 }
 
 .filter-items {
@@ -613,12 +622,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-top: 30px;
+  padding-top: 0; /* 原 30px: 旧关键词框时代的偏移, 会把按钮压得像第二行 */
+  flex-shrink: 0;
 }
 
 .filter-form {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* 原 wrap: 表单项同样一行 */
   gap: 12px 24px;
 
   :deep(.el-form-item) {
