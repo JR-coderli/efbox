@@ -36,14 +36,16 @@
             </div>
           </div>
 
-          <!-- 展开状态的子菜单 -->
+          <!-- 展开状态的子菜单: --ai(选中序号 1-based)直接绑在容器上——
+               CSS 变量只能父→子继承, 绑子项上 ::after 拿不到(踩过的坑) -->
           <div
             v-show="!isFold && item.directLink !== 1 && expandedMenus.includes(item.id)"
             class="submenu"
             :data-parent-id="item.id"
+            :style="activeSubIndex(item)"
           >
             <div
-              v-for="(subitem, subIndex) in item.children"
+              v-for="subitem in item.children"
               :key="subitem.id"
               :data-id="subitem.id"
               :data-level="2"
@@ -190,6 +192,14 @@ const currentRouteId = computed(() => {
   const pathMenu = mapPathToMenu(route.path, userMenus.value)
   return pathMenu?.id
 })
+
+// 选中子项在组内的序号(1-based), 绑到 .submenu 容器的行内 style 上:
+// ::after 蓝段按它定位; 该组无选中项时返回 null(变量缺省 → 蓝段 hidden)
+function activeSubIndex(item) {
+  if (!item.children) return null
+  const idx = item.children.findIndex((c) => c.id === currentRouteId.value)
+  return idx > -1 ? { '--ai': idx + 1, '--ai-show': 'visible' } : null
+}
 
 
 function isParentActive(item) {
@@ -569,7 +579,40 @@ watch(currentRouteId, (newVal) => {
 
 
 .submenu {
+  /* 一级→二级连接线(2026-11-19, 参考 Binom 风格): 一条贯穿竖线(2px 浅灰), 无横线。
+     ★ 选中段高亮(参考图同款): 选中项模板上带 --ai(序号, 1-based)+--ai-show,
+     .submenu 自身的 ::after 按序号定位画蓝色段——不借子项定位, padding/margin 随便改都不影响。
+     行高 36px: 第 i 段 top = 22px(竖线顶) + (i-1)*36px, 高 36px。 */
+  position: relative;
   padding: 4px 0 12px 48px;
+
+  /* 浅灰长竖线: 顶=首行顶(4px padding), 底=末行底(到 12px padding 内缘)——
+     完整盖住整组二级菜单(此前按"中心到中心"裁剪显得短了半截) */
+  &::before {
+    content: '';
+    position: absolute;
+    left: 30px;
+    top: 4px; /* 容器 padding-top, 即首个子项顶缘 */
+    bottom: 12px; /* 容器 padding-bottom, 即末个子项底缘 */
+    width: 2px;
+    border-radius: 1px;
+    background: #e5e7eb;
+  }
+
+  /* 选中段(蓝): 与选中行同高同位(top=4px 容器padding + 序号×行高36px, height=36px 行高),
+     和 ::before 同轴同口径; 变量绑在 .submenu 容器行内 style(activeSubIndex);
+     无选中时 --ai-show 缺省 hidden 不显示 */
+  &::after {
+    content: '';
+    position: absolute;
+    left: 30px;
+    top: calc(4px + (var(--ai, 1) - 1) * 36px);
+    height: 36px;
+    width: 2px;
+    border-radius: 1px;
+    background: #1a73e8;
+    visibility: var(--ai-show, hidden);
+  }
 
   .submenu-item {
     display: flex;
