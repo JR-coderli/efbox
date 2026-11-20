@@ -176,14 +176,14 @@
                     >转化</span>
                     <span class="funnel-arrow">›</span>
                     <span
-                      class="funnel-step"
-                      :class="[postbackClass(row.funnel.media_postback), 'funnel-clickable']"
-                      :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)"
+                      class="funnel-step funnel-clickable"
+                      :class="dispatchClass(row.funnel)"
+                      :data-tip="dispatchTitle(row.funnel)"
                       @click="filterByFunnelStep('postback')"
-                    >下发</span>
+                    >{{ dispatchLabel(row.funnel) }}</span>
                   </template>
                   <template v-else>
-                    <!-- 路径1：媒体点击 › LP展示 › LP点击 › 转化 › 下发 -->
+                    <!-- 路径1：媒体点击 › LP展示 › LP点击 › 转化 › 下发（Lead/Sales 并行结果单节点合并展示）-->
                     <span class="funnel-step fs-ok" :data-tip="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
                     <span class="funnel-arrow">›</span>
                     <span
@@ -208,11 +208,11 @@
                     >转化</span>
                     <span class="funnel-arrow">›</span>
                     <span
-                      class="funnel-step"
-                      :class="[postbackClass(row.funnel.media_postback), 'funnel-clickable']"
-                      :data-tip="postbackTitle(row.funnel.media_postback, row.funnel.media_postback_at)"
+                      class="funnel-step funnel-clickable"
+                      :class="dispatchClass(row.funnel)"
+                      :data-tip="dispatchTitle(row.funnel)"
                       @click="filterByFunnelStep('postback')"
-                    >下发</span>
+                    >{{ dispatchLabel(row.funnel) }}</span>
                   </template>
                 </div>
                 <span v-else>-</span>
@@ -612,35 +612,52 @@ async function fetchScreenshots() {
 }
 
 // ===== 归因漏斗（funnel）徽章渲染 =====
-// funnel 由外部接口 with_funnel=true 返回：reached_lp / lp_click / converted（布尔）+ media_postback（枚举）
-// 布尔阶段用 绿(完成)/灰(未完成) 两态；media_postback 用查表 + 默认灰，兼容未知枚举值
+// funnel 由外部接口 with_funnel=true 返回：reached_lp / lp_click / converted / lead_sent（布尔）
+// + media_postback（枚举，= Sales 转化的下发状态；Lead 下发 = lead_sent 布尔）
+// 布尔阶段用 绿(完成)/灰(未完成) 两态；下发为 Lead/Sales 的**并行结果**(非先后链, 2026-11-20 二版
+// 由两节点合并为单节点三态)，标签=实际发出的部分，tooltip 两段带全量细节。
 const PB_LABEL = {
   none: '未下发',
-  pending: '处理中',
-  sent: '已发送',
+  pending: '待发',
+  sent: '已下发',
+  deducted: '已扣量',
   success: '成功',
   failed: '失败',
   error: '错误'
 }
-const PB_CLASS = {
-  none: 'fs-no',
-  pending: 'fs-wait',
-  sent: 'fs-wait',
-  success: 'fs-ok',
-  failed: 'fs-bad',
-  error: 'fs-bad'
+
+// 下发节点标签：实际发出的部分(下发Lead / 下发Sales / 下发Lead、Sales)；
+// 什么都没发出时按 Sales 状态兜底(待发=应发未发 / 已扣量=故意不发 / 下发=无转化, 灰显)。
+function dispatchLabel(f) {
+  const parts = []
+  if (f.lead_sent) parts.push('Lead')
+  if (f.media_postback === 'sent') parts.push('Sales')
+  if (parts.length) return '下发' + parts.join('、')
+  if (f.media_postback === 'pending') return '待发'
+  if (f.media_postback === 'deducted') return '已扣量'
+  return '下发'
+}
+
+// 下发节点颜色优先级：已扣量(红)>待发(橙)>有实际发出(绿)>未下发(灰)——
+// 扣量/待发即使 Lead 已发出也优先展示(对运营更值得注意), 细节看 tooltip。
+function dispatchClass(f) {
+  if (f.media_postback === 'deducted') return 'fs-bad'
+  if (f.media_postback === 'pending') return 'fs-wait'
+  if (f.lead_sent || f.media_postback === 'sent') return 'fs-ok'
+  return 'fs-no'
+}
+
+// 下发节点 tooltip：Lead 与 Sales 两段并列, 各带状态与时间; 状态词汇统一(已下发/未下发/待发/已扣量)。
+function dispatchTitle(f) {
+  const lead = `下发Lead：${f.lead_sent ? '已下发' : '未下发'}${f.lead_sent_at ? ' · ' + fmtTime(f.lead_sent_at) : ''}`
+  const sales = `下发Sales：${PB_LABEL[f.media_postback] || f.media_postback || '-'}${f.media_postback_at ? ' · ' + fmtTime(f.media_postback_at) : ''}`
+  return lead + ' ｜ ' + sales
 }
 function stepBoolClass(ok) {
   return ok ? 'fs-ok' : 'fs-no'
 }
 function stepBoolTitle(label, ok, at) {
   return `${label}：${ok ? '是' : '否'}${at ? ' · ' + fmtTime(at) : ''}`
-}
-function postbackClass(v) {
-  return PB_CLASS[v] || 'fs-no'
-}
-function postbackTitle(v, at) {
-  return `媒体下发：${PB_LABEL[v] || v || '-'}${at ? ' · ' + fmtTime(at) : ''}`
 }
 
 // 直连路径判定（2026-11-11 起用配置事实）：优先读后端 funnel.path_destination
@@ -712,7 +729,7 @@ const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
   { key: 'ip', label: 'ip', type: 'filter', prop: 'ip_address', filterKey: 'ip_address', minWidth: 140, overflow: true, defaultHidden: true },
-  { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 350, align: 'center' },
+  { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 370, align: 'center' }, // 370: 11-20 下发节点合并展示(标签变长 下发Lead、Sales)
   { key: 'total_time', label: '总用时', type: 'duration', width: 90, align: 'center' },
   { key: 'preview_img', label: '预览图', type: 'screenshot', width: 120, align: 'center' },
   // type=filter：多级表头精确查询（第一行列名、第二行输入框），走专用查询串，不走 keyword
