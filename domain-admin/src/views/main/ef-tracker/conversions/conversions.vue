@@ -28,6 +28,36 @@
             </el-form>
           </div>
           <div class="filter-actions">
+            <el-popover
+              trigger="click"
+              placement="bottom-end"
+              :width="260"
+              popper-class="conversions-col-popover"
+              @after-enter="onPanelShown"
+              @hide="onPanelHidden"
+            >
+              <template #reference>
+                <button class="google-btn google-btn-secondary" title="配置列（显示 / 排序）">
+                  <svg class="btn-icon" viewBox="0 0 24 24">
+                    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                  </svg>
+                </button>
+              </template>
+              <div class="col-config-panel">
+                <div class="col-config-header">
+                  <span>列配置</span>
+                  <button class="col-reset-btn" @click="resetColumns">重置</button>
+                </div>
+                <ul ref="colListRef" class="col-config-list">
+                  <li v-for="col in columns" :key="col.key" class="col-config-item" :class="{ 'is-hidden': !col.visible }">
+                    <span class="col-drag-handle" title="拖拽排序">
+                      <svg class="grip-icon" viewBox="0 0 10 16"><circle cx="2.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></svg>
+                    </span>
+                    <el-checkbox v-model="col.visible">{{ col.label }}</el-checkbox>
+                  </li>
+                </ul>
+              </div>
+            </el-popover>
             <button class="google-btn google-btn-secondary" @click="handleRefresh" :disabled="loading || refreshCountdown > 0">
               <svg class="btn-icon" :class="{ 'is-loading': loading }" viewBox="0 0 24 24">
                 <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
@@ -47,13 +77,10 @@
           </div>
         </div>
         <el-table ref="tableRef" :data="tableData" class="google-table" :border="false" :max-height="tableMaxHeight" :tooltip-options="{ popperClass: 'conversions-overflow-tooltip' }">
-          <!-- 所有列统一两级表头：第一行列名、第二行过滤行——mid/tid 内嵌精确查询输入框，其余列空白，形似媒体点击 Tab。
-               内层列 :width 绑定 colWidths（第一行表头拖动改的就是它）；null = 未拖过，走 min-width 弹性 -->
+          <!-- 固定列: ID + 类型(事件切换器)不参与列配置 -->
           <el-table-column label="ID" align="center">
             <el-table-column prop="id" align="center" :width="colWidths.id" />
           </el-table-column>
-
-          <!-- 类型列: 二级表头内置类型选择器(默认 Sales), 切换即换数据——单表格形态, 无顶部 tab -->
           <el-table-column label="类型" align="center">
             <el-table-column align="center" width="150">
               <template #header>
@@ -71,174 +98,96 @@
               </template>
             </el-table-column>
           </el-table-column>
-          <el-table-column label="上游回传时间">
-            <el-table-column prop="created_at" :width="colWidths.created_at">
-              <template #default="{ row }">
-                <span class="date-text">{{ fmtTime(row.created_at) }}</span>
-              </template>
+
+          <!-- 可配置列(2026-11-20, 参考媒体点击 tab): 齿轮面板显隐+拖拽排序, ui_settings 持久化 -->
+          <template v-for="col in visibleColumns" :key="col.key">
+            <!-- time: 时间格式化列 -->
+            <el-table-column v-if="col.type === 'time'" :label="col.label">
+              <el-table-column :prop="col.prop" :width="colWidths[col.key]" :min-width="col.minWidth">
+                <template #default="{ row }">
+                  <span class="date-text">{{ fmtTime(row[col.prop]) }}</span>
+                </template>
+              </el-table-column>
             </el-table-column>
-          </el-table-column>
-          <!-- 广告主/客户名：oid → ab_offers.aid → ab_advertisers.name；按名称稳定散列到不同底色，
-               同一广告主在任何页码/刷新下颜色一致，肉眼快速区分客户 -->
-          <el-table-column label="广告主" v-if="eventType === 'sales'">
-            <el-table-column prop="names.advertiser" :width="colWidths.advertiser" min-width="110" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span class="advertiser-chip" :class="advertiserColorClass(row.names?.advertiser)">{{ row.names?.advertiser || '-' }}</span>
-              </template>
+            <!-- names: 名称映射列; advertiser 带稳定散列彩 chip -->
+            <el-table-column v-else-if="col.type === 'names'" :label="col.label">
+              <el-table-column :prop="col.prop" :width="colWidths[col.key]" :min-width="col.minWidth" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="col.key === 'advertiser'" class="advertiser-chip" :class="advertiserColorClass(row.names?.advertiser)">{{ row.names?.advertiser || '-' }}</span>
+                  <span v-else>{{ row.names?.[col.nameKey] || '-' }}</span>
+                </template>
+              </el-table-column>
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="payout" align="right">
-            <el-table-column prop="payout" align="right" class-name="col-money" :width="colWidths.payout" />
-          </el-table-column>
-          <el-table-column label="system_click_id">
-            <el-table-column prop="system_click_id" :width="colWidths.system_click_id" min-width="200" show-overflow-tooltip>
-              <template #header>
-                <!-- 专属精确搜索框(2026-11-19): 替代顶部关键词模糊搜, 精确匹配走索引 -->
-                <el-input
-                  v-model="filters.system_click_id"
-                  size="small"
-                  placeholder="system_click_id"
-                  clearable
-                  class="header-filter-input"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                />
-              </template>
+            <!-- money: 金额右对齐 -->
+            <el-table-column v-else-if="col.type === 'money'" :label="col.label" align="right">
+              <el-table-column :prop="col.prop" align="right" class-name="col-money" :width="colWidths[col.key]" :min-width="col.minWidth" />
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="media_click_id">
-            <el-table-column prop="media_click_id" :width="colWidths.media_click_id" min-width="160" show-overflow-tooltip>
-              <template #header>
-                <el-input
-                  v-model="filters.media_click_id"
-                  size="small"
-                  placeholder="media_click_id"
-                  clearable
-                  class="header-filter-input"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                />
-              </template>
+            <!-- filter: 表头第二行精确查询输入框 -->
+            <el-table-column v-else-if="col.type === 'filter'" :label="col.label" :align="col.align || 'center'">
+              <el-table-column :prop="col.prop" :align="col.align || 'center'" :width="colWidths[col.key]" :min-width="col.minWidth" show-overflow-tooltip>
+                <template #header>
+                  <el-input
+                    v-model="filters[col.filterKey]"
+                    size="small"
+                    :placeholder="col.placeholder || col.label"
+                    clearable
+                    class="header-filter-input"
+                    @input="(v) => (filters[col.filterKey] = col.digits ? String(v ?? '').replace(/\D/g, '') : filters[col.filterKey])"
+                    @keyup.enter="handleSearch"
+                    @clear="handleSearch"
+                  />
+                </template>
+              </el-table-column>
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="Media_name" v-if="eventType === 'sales'">
-            <el-table-column prop="names.media" :width="colWidths.media" min-width="110" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.names?.media || '-' }}</span>
-              </template>
+            <!-- bool-tag: 应下发 是/否; 表头下拉过滤 -->
+            <el-table-column v-else-if="col.type === 'bool-tag'" :label="col.label" align="center">
+              <el-table-column :prop="col.prop" align="center" :width="colWidths[col.key]" :min-width="col.minWidth">
+                <template #header>
+                  <el-select v-model="filters[col.filterKey]" size="small" clearable placeholder="全部" class="header-filter-input" @change="handleSearch">
+                    <el-option label="是" value="true" />
+                    <el-option label="否" value="false" />
+                  </el-select>
+                </template>
+                <template #default="{ row }">
+                  <el-tag :type="row[col.prop] ? 'success' : 'danger'" size="small">{{ row[col.prop] ? '是' : '否' }}</el-tag>
+                </template>
+              </el-table-column>
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="mid" align="center">
-            <el-table-column prop="mid" align="center" :width="colWidths.mid">
-              <template #header>
-                <el-input
-                  v-model="filters.mid"
-                  size="small"
-                  placeholder="mid"
-                  clearable
-                  class="header-filter-input"
-                  @input="(v) => (filters.mid = String(v ?? '').replace(/\D/g, ''))"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                />
-              </template>
+            <!-- block-reason: 枚举码 + 悬浮中文 -->
+            <el-table-column v-else-if="col.type === 'block-reason'" :label="col.label">
+              <el-table-column :prop="col.prop" :width="colWidths[col.key]" :min-width="col.minWidth" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <el-tooltip :content="blockReasonText(row.block_reason)" placement="top" :disabled="!row.block_reason">
+                    <span>{{ row.block_reason || '-' }}</span>
+                  </el-tooltip>
+                </template>
+              </el-table-column>
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="Tracker_name" v-if="eventType === 'sales'">
-            <el-table-column prop="names.tracker" :width="colWidths.tracker" min-width="110" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.names?.tracker || '-' }}</span>
-              </template>
+            <!-- status-chip: 状态码区间着色 + 表头精确过滤 -->
+            <el-table-column v-else-if="col.type === 'status-chip'" :label="col.label" align="center">
+              <el-table-column :prop="col.prop" align="center" :width="colWidths[col.key]" :min-width="col.minWidth">
+                <template #header>
+                  <el-input
+                    v-model="filters[col.filterKey]"
+                    size="small"
+                    :placeholder="col.placeholder || col.label"
+                    clearable
+                    class="header-filter-input"
+                    @input="(v) => (filters[col.filterKey] = String(v ?? '').replace(/\D/g, ''))"
+                    @keyup.enter="handleSearch"
+                    @clear="handleSearch"
+                  />
+                </template>
+                <template #default="{ row }">
+                  <span class="status-chip" :class="statusChipClass(row.http_status_code)">{{ row.http_status_code ?? '-' }}</span>
+                </template>
+              </el-table-column>
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="tid" align="center">
-            <el-table-column prop="tid" align="center" :width="colWidths.tid">
-              <template #header>
-                <el-input
-                  v-model="filters.tid"
-                  size="small"
-                  placeholder="tid"
-                  clearable
-                  class="header-filter-input"
-                  @input="(v) => (filters.tid = String(v ?? '').replace(/\D/g, ''))"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                />
-              </template>
+            <!-- text: 纯文本省略列(默认) -->
+            <el-table-column v-else :label="col.label">
+              <el-table-column :prop="col.prop" :width="colWidths[col.key]" :min-width="col.minWidth" show-overflow-tooltip />
             </el-table-column>
-          </el-table-column>
-          <el-table-column label="应下发" align="center" class-name="group-media-postback" v-if="eventType === 'sales'">
-            <el-table-column prop="should_postback" align="center" class-name="group-media-postback" :width="colWidths.should_postback">
-              <template #header>
-                <el-select
-                  v-model="filters.should_postback"
-                  size="small"
-                  clearable
-                  placeholder="全部"
-                  class="header-filter-input"
-                  @change="handleSearch"
-                >
-                  <el-option label="是" value="true" />
-                  <el-option label="否" value="false" />
-                </el-select>
-              </template>
-              <template #default="{ row }">
-                <el-tag :type="row.should_postback ? 'success' : 'danger'" size="small">{{ row.should_postback ? '是' : '否' }}</el-tag>
-              </template>
-            </el-table-column>
-          </el-table-column>
-          <!-- 扣量两列(Sales 专属, 2026-11-19): 紧跟"应下发"——解释 should_postback=否 的原因。
-               BlockReason=规则代码(dedup/qdf_count 等), BlockNote=中文说明; 未扣量行为空 -->
-          <el-table-column label="扣量原因" v-if="eventType === 'sales'">
-            <el-table-column prop="block_reason" :width="colWidths.block_reason" min-width="120" show-overflow-tooltip>
-              <template #default="{ row }">
-                <el-tooltip :content="blockReasonText(row.block_reason)" placement="top" :disabled="!row.block_reason">
-                  <span>{{ row.block_reason || '-' }}</span>
-                </el-tooltip>
-              </template>
-            </el-table-column>
-          </el-table-column>
-          <el-table-column label="扣量说明" v-if="eventType === 'sales'">
-            <el-table-column prop="block_note" :width="colWidths.block_note" min-width="280" show-overflow-tooltip>
-              <template #default="{ row }">
-                <span>{{ row.block_note || '-' }}</span>
-              </template>
-            </el-table-column>
-          </el-table-column>
-          <el-table-column label="下发媒体时间">
-            <el-table-column prop="posted_at" :width="colWidths.posted_at">
-              <template #default="{ row }">
-                <span class="date-text">{{ fmtTime(row.posted_at) }}</span>
-              </template>
-            </el-table-column>
-          </el-table-column>
-          <el-table-column label="下发状态" align="center">
-            <el-table-column prop="http_status_code" align="center" :width="colWidths.http_status_code">
-              <template #header>
-                <!-- 状态码精确过滤(全类型可用, 2026-11-19 Go 已补齐 postback-events/混排该参数) -->
-                <el-input
-                  v-model="filters.http_status_code"
-                  size="small"
-                  placeholder="下发状态"
-                  clearable
-                  class="header-filter-input"
-                  @input="(v) => (filters.http_status_code = String(v ?? '').replace(/\D/g, ''))"
-                  @keyup.enter="handleSearch"
-                  @clear="handleSearch"
-                />
-              </template>
-              <!-- 按区间着色：2xx 绿 / 3xx 蓝 / 4xx 橙 / 5xx 红 / 空 灰（同错误日志 Tab） -->
-              <template #default="{ row }">
-                <span class="status-chip" :class="statusChipClass(row.http_status_code)">{{ row.http_status_code ?? '-' }}</span>
-              </template>
-            </el-table-column>
-          </el-table-column>
-          <el-table-column label="media_postback_url">
-            <el-table-column prop="media_postback_url" :width="colWidths.media_postback_url" min-width="200" show-overflow-tooltip />
-          </el-table-column>
-          <el-table-column label="response_body">
-            <el-table-column prop="response_body" :width="colWidths.response_body" min-width="220" show-overflow-tooltip />
-          </el-table-column>
+          </template>
           <template #empty>
             <el-empty description="暂无数据" />
           </template>
@@ -266,6 +215,9 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getConversions, getPostbackEvents } from '@/services/main/ef-tracker'
+import Sortable from 'sortablejs'
+import useSystemStore from '@/stores/main/system/system'
+import { localCache } from '@/utils/cache'
 import CellLoading from '../clicks/cell-loading.vue'
 
 const loading = ref(false)
@@ -276,6 +228,105 @@ const pagination = reactive({
   page: 1,
   pageSize: 10
 })
+
+// ===== 列配置（2026-11-20, 参考媒体点击 tab）: 齿轮面板显隐 + 拖拽排序, ui_settings 按用户+页面持久化 =====
+// type: time 时间 / names 名称映射 / money 金额 / filter 表头精确查询框 / bool-tag 是否 /
+//       block-reason 扣量枚举码 / status-chip 状态码 / text 纯文本
+// salesOnly: 仅 Sales 类型显示(非 Sales 类型自动隐藏——数据来自 with_names/转化表, 其他事件没有)
+const DEFAULT_COLUMNS = [
+  { key: 'created_at', label: '上游回传时间', type: 'time', prop: 'created_at', minWidth: 180 },
+  { key: 'advertiser', label: '广告主', type: 'names', nameKey: 'advertiser', prop: 'names.advertiser', minWidth: 110, salesOnly: true },
+  { key: 'payout', label: 'payout', type: 'money', prop: 'payout', minWidth: 90 },
+  { key: 'system_click_id', label: 'system_click_id', type: 'filter', prop: 'system_click_id', filterKey: 'system_click_id', minWidth: 200, placeholder: 'system_click_id' },
+  { key: 'media_click_id', label: 'media_click_id', type: 'filter', prop: 'media_click_id', filterKey: 'media_click_id', minWidth: 160, placeholder: 'media_click_id' },
+  { key: 'media', label: 'Media_name', type: 'names', nameKey: 'media', prop: 'names.media', minWidth: 110, salesOnly: true },
+  { key: 'mid', label: 'mid', type: 'filter', prop: 'mid', filterKey: 'mid', minWidth: 90, digits: true, placeholder: 'mid' },
+  { key: 'tracker', label: 'Tracker_name', type: 'names', nameKey: 'tracker', prop: 'names.tracker', minWidth: 110, salesOnly: true },
+  { key: 'tid', label: 'tid', type: 'filter', prop: 'tid', filterKey: 'tid', minWidth: 90, digits: true, placeholder: 'tid' },
+  { key: 'should_postback', label: '应下发', type: 'bool-tag', prop: 'should_postback', filterKey: 'should_postback', minWidth: 110, salesOnly: true },
+  { key: 'block_reason', label: '扣量原因', type: 'block-reason', prop: 'block_reason', minWidth: 120, salesOnly: true },
+  { key: 'block_note', label: '扣量说明', type: 'text', prop: 'block_note', minWidth: 280, salesOnly: true },
+  { key: 'posted_at', label: '下发媒体时间', type: 'time', prop: 'posted_at', minWidth: 180 },
+  { key: 'http_status_code', label: '下发状态', type: 'status-chip', prop: 'http_status_code', filterKey: 'http_status_code', minWidth: 110, placeholder: '下发状态' },
+  { key: 'media_postback_url', label: 'media_postback_url', type: 'text', prop: 'media_postback_url', minWidth: 200, defaultHidden: true },
+  { key: 'response_body', label: 'response_body', type: 'text', prop: 'response_body', minWidth: 220, defaultHidden: true }
+]
+
+const columns = ref(DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden })))
+// 可见列 = 勾选显示 && (非 salesOnly 或 当前是 Sales); ID/类型是固定列不在其中
+const visibleColumns = computed(() =>
+  columns.value.filter((c) => c.visible && (!c.salesOnly || eventType.value === 'sales'))
+)
+
+const COLUMN_SETTINGS_PAGE_KEY = 'ef_tracker_conversions'
+const systemStore = useSystemStore()
+
+// 库中偏好(可能缺列/多列)与 DEFAULT_COLUMNS 对齐: 新列按默认补进, 死键丢弃
+function mergeColumns(saved) {
+  const defByKey = new Map(DEFAULT_COLUMNS.map((c) => [c.key, c]))
+  const seen = new Set()
+  const merged = []
+  for (const item of saved || []) {
+    const def = defByKey.get(item.key)
+    if (!def) continue
+    merged.push({ ...def, visible: item.visible !== false })
+    seen.add(def.key)
+  }
+  for (const def of DEFAULT_COLUMNS) {
+    if (!seen.has(def.key)) merged.push({ ...def, visible: !def.defaultHidden })
+  }
+  return merged
+}
+
+function persistColumns() {
+  systemStore
+    .saveUiColumnSettingsAction(
+      COLUMN_SETTINGS_PAGE_KEY,
+      columns.value.map((c) => ({ key: c.key, visible: c.visible !== false }))
+    )
+    .catch(() => {})
+}
+
+async function loadColumns() {
+  try {
+    const saved = await systemStore.getUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY)
+    if (Array.isArray(saved) && saved.length > 0) {
+      columns.value = mergeColumns(saved)
+    }
+  } catch { /* 读库失败保持默认 */ }
+}
+
+const colListRef = ref(null)
+let sortableInstance = null
+
+function resetColumns() {
+  systemStore.removeUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY).catch(() => {})
+  columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden }))
+}
+
+function ensureSortable() {
+  if (!colListRef.value) return
+  if (sortableInstance) sortableInstance.destroy()
+  sortableInstance = Sortable.create(colListRef.value, {
+    animation: 150,
+    handle: '.col-drag-handle',
+    ghostClass: 'col-sortable-ghost',
+    chosenClass: 'col-sortable-chosen',
+    onEnd: ({ oldIndex, newIndex }) => {
+      if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return
+      const arr = [...columns.value]
+      const [moved] = arr.splice(oldIndex, 1)
+      arr.splice(newIndex, 0, moved)
+      columns.value = arr
+      persistColumns()
+    }
+  })
+}
+
+function onPanelShown() { nextTick(ensureSortable) }
+function onPanelHidden() {
+  if (sortableInstance) { sortableInstance.destroy(); sortableInstance = null }
+}
 
 // ===== 列宽：默认值 + 第一行表头拖动（复制自媒体点击 Tab 的方案）=====
 // EP 的列宽拖动只对叶子列表头生效，组表头（第一行）拖不了 → 事件委托在表头容器上，
@@ -295,14 +346,16 @@ const tableRef = ref(null)
 const colDrag = { col: null, startX: 0, startWidth: 0, active: false }
 let headerWrapEl = null
 
-// 反查：事件 target 所在的第一行 th → COLUMN_KEYS 中同下标的列 key
+// 反查：事件 target 所在的第一行 th → 当前可见列中同下标的列 key
+// 前两列是固定列(ID/类型), 配置列从下标 2 开始; 列顺序随齿轮面板拖拽动态变化
 function row1ColOf(e) {
   const th = e.target?.closest?.('th')
   if (!th || !headerWrapEl) return null
   const thead = headerWrapEl.querySelector('thead')
   if (!thead || th.parentElement !== thead.rows[0]) return null // 只处理第一行（组表头行）
   const idx = Array.prototype.indexOf.call(th.parentElement.children, th)
-  return COLUMN_KEYS[idx] || null
+  const keys = ['id', '__type__', ...visibleColumns.value.map((c) => c.key)]
+  return keys[idx] || null
 }
 
 function onHeaderMouseMove(e) {
@@ -511,9 +564,13 @@ function handleSearch() {
 // ===== 事件类型(2026-11-19 单表格版): "类型"列表头选择器切换, 默认 Sales =====
 // Sales→/query/conversions(带名称/扣量过滤); 其他→/query/postback-events。
 // 通用过滤(page/size/tz/keyword/mid/tid/日期)两类型共用; Sales 专属(with_names/http_status/should_postback)仅 Sales 带。
-const eventType = ref('all')
+// 事件类型默认值记在 localStorage(2026-11-20 用户拍板: 不入库): 刷新/重登回到上次选的类型
+const EVENT_TYPE_KEYS = ['all', 'sales', 'lead', 'tk_clicks', 'lp_u_visits', 'lp_u_clicks']
+const EVENT_TYPE_CACHE_KEY = 'ef_conversions_event_type'
+const eventType = ref(EVENT_TYPE_KEYS.includes(localCache.getCache(EVENT_TYPE_CACHE_KEY)) ? localCache.getCache(EVENT_TYPE_CACHE_KEY) : 'all')
 
 function handleEventTypeChange() {
+  localCache.setCache(EVENT_TYPE_CACHE_KEY, eventType.value)
   pagination.page = 1
   loadData()
 }
@@ -531,6 +588,7 @@ function handleCurrentChange(page) {
 
 onMounted(() => {
   loadData()
+  loadColumns() // 列偏好(顺序+可见性)从 ui_settings 异步加载, 加载前先渲染默认列
   nextTick(() => {
     calcTableHeight() // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
     bindHeaderDrag() // 同时机挂表头列宽拖动
@@ -716,11 +774,6 @@ onUnmounted(() => {
 
   // 分组分隔线：应回传列是「我们 → 媒体回传」分组的起始（左边是广告主 → 我们的回传数据），
   // 其左侧画一条明显的深色竖线，表头两行 + 表体单元格都要有
-  th.group-media-postback,
-  td.group-media-postback {
-    border-left: 2px solid #bdc1c6;
-  }
-
   .el-table__header-wrapper {
     th {
       background-color: #f1f3f4;
@@ -930,5 +983,102 @@ onUnmounted(() => {
 .conversions-overflow-tooltip {
   max-width: 400px;
   word-break: break-all;
+}
+</style>
+
+<!-- 列配置面板(2026-11-20, popover teleported 到 body, 全局样式) -->
+<style>
+.conversions-col-popover.el-popper {
+  padding: 0 !important;
+}
+
+.col-config-panel {
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+}
+
+.col-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e8eaed;
+  font-size: 13px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.col-reset-btn {
+  border: none;
+  background: transparent;
+  color: #1a73e8;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.col-reset-btn:hover {
+  background: #f1f3f4;
+}
+
+.col-config-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.col-config-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.col-config-item:hover {
+  background: #f8f9fa;
+}
+
+.col-config-item.is-hidden {
+  opacity: 0.5;
+}
+
+.col-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  cursor: grab;
+  color: #bdc1c6;
+}
+
+.col-drag-handle:active {
+  cursor: grabbing;
+}
+
+.grip-icon {
+  width: 10px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.col-config-item .el-checkbox {
+  flex: 1;
+  height: auto;
+  margin-right: 0;
+}
+
+.col-config-item .el-checkbox__label {
+  font-size: 13px;
+  color: #202124;
+}
+
+.col-sortable-ghost {
+  opacity: 0.4;
+}
+
+.col-sortable-chosen {
+  background: #e8f0fe;
+  border-radius: 6px;
 }
 </style>
