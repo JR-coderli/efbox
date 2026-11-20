@@ -605,11 +605,14 @@ watch(currentRouteId, (newVal) => {
   &::after {
     content: '';
     position: absolute;
-    left: 30px;
-    top: calc(4px + (var(--ai, 1) - 1) * 36px + 3px);
-    height: 30px; /* 比行高(36px)上下各收 3px, 蓝段不超过选中行高度 */
-    width: 2px;
-    border-radius: 1px;
+    /* 宽 3px 且左右各超出浅灰竖线(2px@left:30px)半像素 → 视觉上明显粗于竖线;
+       用 left+width 定位(不用 transform 居中, 保持 top 滑动动画的简单性) */
+    /* 左右超出均分: 浅灰竖线 2px@left:30~32px; 蓝段 3px → 左缘 29.5px 各超出 0.5px 居中 */
+    left: 29.5px;
+    width: 3px;
+    top: calc(4px + (var(--ai, 1) - 1) * 36px + 6px);
+    height: 24px; /* 比行高(36px)上下各收 6px, 段高再收窄 */
+    border-radius: 2px;
     background: #1a73e8;
     visibility: var(--ai-show, hidden);
     /* 切换选中项时蓝段平滑滑动: --ai 变化 → calc(插值) → top 过渡(同组内上下移动有动画;
