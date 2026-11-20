@@ -1415,6 +1415,7 @@ function renderTimelineChart() {
   z-index: 3;
   background: rgba(255, 255, 255, 0.9);
   pointer-events: none; /* 不拦截点击 */
+  overflow: hidden; /* 加载行数=pageSize, 大页(100条)时超出容器 → 裁掉超出部分, 加载期间不出滚动条(2026-11-20) */
 }
 
 .rows-loading-row {

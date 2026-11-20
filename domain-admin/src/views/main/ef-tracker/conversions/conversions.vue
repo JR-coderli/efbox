@@ -751,6 +751,7 @@ onUnmounted(() => {
   z-index: 3;
   background: rgba(255, 255, 255, 0.9);
   pointer-events: none;
+  overflow: hidden; /* 加载行数=pageSize 超出容器时裁掉, 加载期间不出滚动条(2026-11-20) */
 }
 
 .rows-loading-row {
