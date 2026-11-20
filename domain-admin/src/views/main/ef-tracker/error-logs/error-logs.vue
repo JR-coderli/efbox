@@ -56,7 +56,7 @@
                     <span class="col-drag-handle" title="拖拽排序">
                       <svg class="grip-icon" viewBox="0 0 10 16"><circle cx="2.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></svg>
                     </span>
-                    <el-checkbox v-model="col.visible" @change="rebindHeaderDrag">{{ col.label }}</el-checkbox>
+                    <el-checkbox v-model="col.visible" @change="onColVisibleChange">{{ col.label }}</el-checkbox>
                   </li>
                 </ul>
               </div>
@@ -225,6 +225,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import Sortable from 'sortablejs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getErrorLogs, deleteErrorLogs } from '@/services/main/ef-tracker'
+import useSystemStore from '@/stores/main/system/system'
 import CellLoading from '../clicks/cell-loading.vue'
 
 const loading = ref(false)
@@ -379,7 +380,8 @@ function calcTableHeight() {
 
 // ===== 列配置（数据驱动，齿轮面板做显隐 / 拖拽排序）=====
 // type：plain 纯字段 / time 时间格式化 / filter 表头精确查询（第二行输入框，走专用查询串）
-// 不做持久化：组件每次重建（路由切换 / 刷新）都回到 DEFAULT_COLUMNS 的默认顺序与可见性
+// 持久化(2026-11-20 起, 与媒体点击/转化回传同款)：显隐/顺序存后端库 ui_column_settings(用户+页面维度),
+// 刷新/重登/换机保持; 读库失败保持默认。此前"不做持久化"导致每次刷新回到默认列。
 // defaultHidden: true → 该列默认隐藏（可在齿轮面板里手动勾开）
 const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
@@ -426,11 +428,58 @@ function methodChipClass(m) {
 const columns = ref(DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden })))
 const visibleColumns = computed(() => columns.value.filter((c) => c.visible))
 
+// ===== 列设置持久化(存后端库, 按 用户+页面 维度; 见文件头注释) =====
+const COLUMN_SETTINGS_PAGE_KEY = 'ef_tracker_error_logs'
+const systemStore = useSystemStore()
+
+// 库中偏好(可能缺列/多列)与 DEFAULT_COLUMNS 对齐: 新列按默认补进, 死键丢弃
+function mergeColumns(saved) {
+  const defByKey = new Map(DEFAULT_COLUMNS.map((c) => [c.key, c]))
+  const seen = new Set()
+  const merged = []
+  for (const item of saved || []) {
+    const def = defByKey.get(item.key)
+    if (!def) continue
+    merged.push({ ...def, visible: item.visible !== false })
+    seen.add(def.key)
+  }
+  for (const def of DEFAULT_COLUMNS) {
+    if (!seen.has(def.key)) merged.push({ ...def, visible: !def.defaultHidden })
+  }
+  return merged
+}
+
+// 保存失败必须可见(2026-11-20 教训: conversions 页存储超长被静默吞掉, 用户勾选刷新即丢还无从排查)
+function persistColumns() {
+  systemStore
+    .saveUiColumnSettingsAction(
+      COLUMN_SETTINGS_PAGE_KEY,
+      columns.value.map((c) => ({ key: c.key, visible: c.visible !== false }))
+    )
+    .catch(() => ElMessage.warning('列设置保存失败(后端/存储异常), 刷新后将恢复默认'))
+}
+
+async function loadColumns() {
+  try {
+    const saved = await systemStore.getUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY)
+    if (Array.isArray(saved) && saved.length > 0) {
+      columns.value = mergeColumns(saved)
+    }
+  } catch { /* 读库失败保持默认 */ }
+}
+
+// 勾选显隐 = 先持久化, 再重挂表头列宽拖拽(列数变了)
+function onColVisibleChange() {
+  persistColumns()
+  rebindHeaderDrag()
+}
+
 // 齿轮配置面板
 const colListRef = ref(null)
 let sortableInstance = null
 
 function resetColumns() {
+  systemStore.removeUiColumnSettingsAction(COLUMN_SETTINGS_PAGE_KEY).catch(() => {})
   columns.value = DEFAULT_COLUMNS.map((c) => ({ ...c, visible: !c.defaultHidden }))
 }
 
@@ -450,6 +499,7 @@ function ensureSortable() {
       const [moved] = arr.splice(oldIndex, 1)
       arr.splice(newIndex, 0, moved)
       columns.value = arr
+      persistColumns()
     }
   })
 }
@@ -550,6 +600,7 @@ function rebindHeaderDrag() {
 
 onMounted(() => {
   loadData()
+  loadColumns()
   nextTick(() => {
     calcTableHeight()
     bindHeaderDrag()

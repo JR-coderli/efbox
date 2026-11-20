@@ -53,7 +53,7 @@
                     <span class="col-drag-handle" title="拖拽排序">
                       <svg class="grip-icon" viewBox="0 0 10 16"><circle cx="2.5" cy="3" r="1.2"/><circle cx="2.5" cy="8" r="1.2"/><circle cx="2.5" cy="13" r="1.2"/><circle cx="7.5" cy="3" r="1.2"/><circle cx="7.5" cy="8" r="1.2"/><circle cx="7.5" cy="13" r="1.2"/></svg>
                     </span>
-                    <el-checkbox v-model="col.visible">{{ col.label }}</el-checkbox>
+                    <el-checkbox v-model="col.visible" @change="persistColumns">{{ col.label }}</el-checkbox>
                   </li>
                 </ul>
               </div>
@@ -284,7 +284,8 @@ function persistColumns() {
       COLUMN_SETTINGS_PAGE_KEY,
       columns.value.map((c) => ({ key: c.key, visible: c.visible !== false }))
     )
-    .catch(() => {})
+    // 保存失败必须可见(2026-11-20: columns_json 存储超长报错被静默吞掉, 勾选刷新即丢无从排查)
+    .catch(() => ElMessage.warning('列设置保存失败(后端/存储异常), 刷新后将恢复默认'))
 }
 
 async function loadColumns() {
