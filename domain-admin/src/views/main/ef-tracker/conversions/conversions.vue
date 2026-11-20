@@ -192,7 +192,9 @@
           <el-table-column label="扣量原因" v-if="eventType === 'sales'">
             <el-table-column prop="block_reason" :width="colWidths.block_reason" min-width="120" show-overflow-tooltip>
               <template #default="{ row }">
-                <span>{{ row.block_reason || '-' }}</span>
+                <el-tooltip :content="blockReasonText(row.block_reason)" placement="top" :disabled="!row.block_reason">
+                  <span>{{ row.block_reason || '-' }}</span>
+                </el-tooltip>
               </template>
             </el-table-column>
           </el-table-column>
@@ -424,6 +426,23 @@ function advertiserColorClass(name) {
     h = (h * 31 + name.charCodeAt(i)) >>> 0
   }
   return 'adv-c' + (h % 8)
+}
+
+// 扣量原因枚举码 → 中文(2026-11-20): 与后端 block_reason 写入值一一对应(docs/33)
+const BLOCK_REASON_TEXT = {
+  qdf_count: '按次数扣量',
+  qdf_workday: '按工作日扣量',
+  qdf_amount: '按金额扣量',
+  dedup: '当天去重',
+  media_disabled: '媒体总闸',
+  no_config: '未配Sales回传地址',
+  invalid_url: '媒体URL无效',
+  send_failed: '发送失败'
+}
+function blockReasonText(code) {
+  if (!code) return '-'
+  // qdf_amount 的 note 里带判定条件, 主码是纯枚举; 兜底显示原码
+  return BLOCK_REASON_TEXT[code] || code
 }
 
 function fmtTime(s) {

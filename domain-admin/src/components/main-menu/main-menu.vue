@@ -198,7 +198,30 @@ const currentRouteId = computed(() => {
 function activeSubIndex(item) {
   if (!item.children) return null
   const idx = item.children.findIndex((c) => c.id === currentRouteId.value)
-  return idx > -1 ? { '--ai': idx + 1, '--ai-show': 'visible' } : null
+  if (idx === -1) return null
+  const count = item.children.length
+  // 几何: 容器 padding-top=4px, 行高 36px。行 i(0-based) 顶缘 = 4 + i*36。
+  // 贴边语义(2026-11-20 用户拍板): 首项→蓝段贴竖线顶(只收底边6px);
+  // 末项→贴底(只收顶边6px); 仅一项→沾满整条竖线; 中间项→上下各收6px居中段。
+  // 直接算好 --seg-top/--seg-h 传入(CSS 属性选择器匹配不了 Vue 的行内变量格式, 已弃)。
+  const rowTop = 4 + idx * 36
+  let segTop, segH
+  if (count === 1) {
+    segTop = '4px'
+    segH = `calc(100% - 16px)` // 4px 顶 + 12px 底 padding, 沾满整条竖线
+  } else if (idx === 0) {
+    segTop = '4px'
+    segH = '30px'
+  } else if (idx === count - 1) {
+    // 贴底: 蓝段底缘须贴到竖线末端(= 末行内容底缘 4+count*36)。
+    // top = 底缘-30 → rowTop+6; 顶边收 6px 底边贴死(此前写成 rowTop 差了 6px 没贴到底)
+    segTop = `${rowTop + 6}px`
+    segH = '30px'
+  } else {
+    segTop = `${rowTop + 6}px`
+    segH = '24px'
+  }
+  return { '--ai': idx + 1, '--ac': count, '--seg-top': segTop, '--seg-h': segH, '--ai-show': 'visible' }
 }
 
 
@@ -605,20 +628,27 @@ watch(currentRouteId, (newVal) => {
   &::after {
     content: '';
     position: absolute;
-    /* 宽 3px 且左右各超出浅灰竖线(2px@left:30px)半像素 → 视觉上明显粗于竖线;
-       用 left+width 定位(不用 transform 居中, 保持 top 滑动动画的简单性) */
-    /* 左右超出均分: 浅灰竖线 2px@left:30~32px; 蓝段 3px → 左缘 29.5px 各超出 0.5px 居中 */
+    /* 宽 3px 居中骑在浅灰竖线(2px@left:30~32px)上, 左右各超出 0.5px */
     left: 29.5px;
     width: 3px;
-    top: calc(4px + (var(--ai, 1) - 1) * 36px + 6px);
-    height: 24px; /* 比行高(36px)上下各收 6px, 段高再收窄 */
     border-radius: 2px;
     background: #1a73e8;
     visibility: var(--ai-show, hidden);
+    /* 高度/位置按贴边模式(--edge, 由 activeSubIndex 提供):
+       - 空(中间项): 行内居中段, 上下各收 6px
+       - top(首项):   贴竖线顶(4px), 高度=行高36-6=30px 只收底边(下拉圆角)
+       - bottom(末项): 贴竖线底, 只收顶边
+       - full(仅一项): 沾满整条竖线(4px ~ bottom 12px)
+       默认值=中间项形态; 行内 --edge 变量走 CSS 分支技巧: 用 --edge-top 等开关量切换 */
+    /* 位置/高度: activeSubIndex 直接算好(贴顶/贴底/沾满/居中四形态), 行内变量传入 */
+    top: var(--seg-top, calc(4px + (var(--ai, 1) - 1) * 36px + 6px));
+    height: var(--seg-h, 24px);
     /* 切换选中项时蓝段平滑滑动: --ai 变化 → calc(插值) → top 过渡(同组内上下移动有动画;
        跨组时 --ai-show 先 hidden(位移无意义), 出现时淡入 */
-    transition: top 0.25s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.25s;
+    transition: top 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.25s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.25s;
   }
+
+
 
   .submenu-item {
     display: flex;
