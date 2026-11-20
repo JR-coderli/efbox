@@ -612,6 +612,9 @@ watch(currentRouteId, (newVal) => {
     border-radius: 1px;
     background: #1a73e8;
     visibility: var(--ai-show, hidden);
+    /* 切换选中项时蓝段平滑滑动: --ai 变化 → calc(插值) → top 过渡(同组内上下移动有动画;
+       跨组时 --ai-show 先 hidden(位移无意义), 出现时淡入 */
+    transition: top 0.25s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.25s;
   }
 
   .submenu-item {
