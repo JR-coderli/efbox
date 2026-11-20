@@ -73,21 +73,6 @@
 
       <!-- 表格 -->
       <div class="table-wrapper" ref="tableWrapperRef">
-        <div class="table-toolbar">
-          <span class="selected-info">
-            {{ selectedRows.length ? `已选 ${selectedRows.length} 条` : '勾选多条可批量删除' }}
-          </span>
-          <button
-            class="google-btn google-btn-danger"
-            :disabled="!selectedRows.length || deleting"
-            @click="handleDelete"
-          >
-            <svg class="btn-icon" viewBox="0 0 24 24">
-              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-            </svg>
-            <span>删除选中</span>
-          </button>
-        </div>
         <!-- 加载蒙版：只盖表体，每行行首一枚「圆环+Loading」动画（不受 td 宽度限制，表头不加蒙版）。
              top 额外加上工具栏高度（~53px）：蒙版挂在 el-table 的容器内，表头以下开始 -->
         <div v-if="loading" class="rows-loading-mask">
@@ -203,8 +188,23 @@
         </el-table>
       </div>
 
-      <!-- 分页 -->
+      <!-- 分页: 批量删除条(2026-11-20 用户拍板)放分页栏内左侧, 勾选后才出现(常规文档流) -->
       <div class="pagination-wrapper">
+        <transition name="toolbar-fade">
+          <div v-if="selectedRows.length" class="batch-delete-bar">
+            <span class="selected-info">已选 {{ selectedRows.length }} 条</span>
+            <button
+              class="google-btn google-btn-danger"
+              :disabled="deleting"
+              @click="handleDelete"
+            >
+              <svg class="btn-icon" viewBox="0 0 24 24">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+              <span>删除选中</span>
+            </button>
+          </div>
+        </transition>
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
@@ -718,6 +718,26 @@ onUnmounted(() => {
   background-color: #f8f9fa;
 }
 
+/* 批量删除条(2026-11-20): 常规文档流放在分页栏内左侧; 勾选才出现, 分页在右侧不受影响 */
+.batch-delete-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: auto; /* 推分页控件到右侧 */
+}
+
+/* 出现/消失: 淡入, 高度变化由 pagination-wrapper 自适应 */
+.toolbar-fade-enter-active,
+.toolbar-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.toolbar-fade-enter-from,
+.toolbar-fade-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
 .selected-info {
   font-size: 13px;
   color: #5f6368;
@@ -733,7 +753,7 @@ onUnmounted(() => {
    行高对齐 td(48px) + 1px 分隔线（同媒体点击 Tab） */
 .rows-loading-mask {
   position: absolute;
-  top: 143px; /* 工具栏 ~53px + 两级表头 ~90px（第一行列名 44 + 第二行过滤行 ~46） */
+  top: 90px; /* 两级表头 ~90px（工具栏已改悬浮非常驻, 不再占位, 2026-11-20） */
   left: 0;
   right: 0;
   bottom: 0;
