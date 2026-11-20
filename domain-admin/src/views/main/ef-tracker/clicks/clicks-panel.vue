@@ -27,11 +27,7 @@
             </el-form>
           </div>
           <div class="filter-actions">
-            <!-- 漏斗步骤筛选指示：筛选中时显示在按钮区左侧（显眼位置），点 × 取消恢复全量 -->
-            <div v-if="funnelStepFilter" class="funnel-filter-tag">
-              已按漏斗筛选：<b>{{ funnelStepLabel }}</b>
-              <span class="funnel-filter-clear" @click="filterByFunnelStep(funnelStepFilter)">× 取消</span>
-            </div>
+            <!-- 漏斗筛选指示已移入漏斗列表头(2026-11-20): 不在按钮区旁显示 -->
             <el-popover
               trigger="click"
               placement="bottom-end"
@@ -146,12 +142,18 @@
           <template v-for="col in visibleColumns" :key="col.key">
             <!-- 所有列统一两级表头（多级表头）：第一行列名、第二行过滤行——type=filter 列内嵌精确查询输入框，其余列空白，形似 Clickflare -->
             <el-table-column :label="col.label" :align="col.align">
-            <!-- 漏斗列 -->
+            <!-- 漏斗列: 多级表头第二行 = 筛选状态提示(2026-11-20 用户拍板: 提示放本列表头, 不放别处) -->
             <el-table-column
               v-if="col.type === 'funnel'"
               :min-width="col.minWidth"
               :align="col.align"
             >
+              <template #header>
+                <div v-if="funnelStepFilter" class="funnel-filter-chip" @click.stop>
+                  {{ funnelStepLabel }}
+                  <span class="chip-close" title="取消该过滤" @click="filterByFunnelStep(funnelStepFilter)">×</span>
+                </div>
+              </template>
               <template #default="{ row }">
                 <div
                   v-if="row.funnel"
@@ -1643,6 +1645,44 @@ function renderTimelineChart() {
 
   b {
     font-weight: 500;
+  }
+
+}
+
+/* 表头内小标签(2026-11-20 用户拍板: 不占满列宽, 小胶囊+右侧叉号):
+   形态 = 「LP展示 ×」, 点 × 取消过滤; hover 叉号变红 */
+.funnel-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 4px 0 10px;
+  background: #e8f0fe;
+  color: #1a73e8;
+  border: 1px solid #c6dafc;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+
+  .chip-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 13px;
+    line-height: 1;
+    color: #5f6368;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+
+    &:hover {
+      background: #c5221f;
+      color: #fff;
+    }
   }
 }
 
