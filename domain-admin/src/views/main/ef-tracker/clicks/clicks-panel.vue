@@ -166,7 +166,11 @@
                     <!-- 路径2：媒体点击 › Offer › 转化 › 下发（直连，未经 LP）-->
                     <span class="funnel-step fs-ok" :data-tip="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
                     <span class="funnel-arrow">›</span>
-                    <span class="funnel-step fs-ok" data-tip="Offer：是 · 直连路径（未经 LP）">Offer</span>
+                    <span
+                      class="funnel-step fs-ok funnel-clickable"
+                      data-tip="Offer: 直连路径 (未经 LP)"
+                      @click="filterByFunnelStep('direct')"
+                    >Offer</span>
                     <span class="funnel-arrow">›</span>
                     <span
                       class="funnel-step"
@@ -710,7 +714,7 @@ function onStepOut(e) {
 const funnelStepFilter = ref('') // '' = 不按漏斗步骤过滤
 
 // 步骤值 → 中文标签（筛选指示条显示用）
-const FUNNEL_STEP_LABEL = { lp_visit: 'LP展示', lp_click: 'LP点击', converted: '转化', postback: '下发' }
+const FUNNEL_STEP_LABEL = { lp_visit: 'LP展示', lp_click: 'LP点击', converted: '转化', postback: '下发', direct: '直跳Offer' }
 const funnelStepLabel = computed(() => FUNNEL_STEP_LABEL[funnelStepFilter.value] || funnelStepFilter.value)
 
 function filterByFunnelStep(step) {
