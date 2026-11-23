@@ -24,6 +24,9 @@
                   @change="handleSearch"
                 />
               </el-form-item>
+              <el-form-item label="code">
+                <el-input v-model="filters.path_code" placeholder="投放code" clearable style="width: 130px" @keyup.enter="handleSearch" @clear="handleSearch" @change="handleSearch" />
+              </el-form-item>
               <!-- mid/tid/应回传/回传状态 的精确查询已集成到多级表头第二行，此处不再重复放输入框 -->
             </el-form>
           </div>
@@ -212,7 +215,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getConversions, getPostbackEvents } from '@/services/main/ef-tracker'
 import Sortable from 'sortablejs'
@@ -444,6 +448,7 @@ const filters = reactive({
   keyword: '',
   system_click_id: '',
   media_click_id: '',
+  path_code: '', // 投放 code 过滤(2026-11-20, 图表tab总览页联动; 后端经 system_clicks 半连接)
   mid: '',
   tid: '',
   http_status_code: '',
@@ -527,6 +532,7 @@ function buildParams() {
   if (filters.http_status_code) p.http_status_code = filters.http_status_code
   if (filters.mid) p.mid = filters.mid
   if (filters.tid) p.tid = filters.tid
+  if (filters.path_code) p.path_code = filters.path_code
   if (eventType.value === 'sales') {
     // Sales 专属: 应下发过滤 + 名称映射(其他事件接口不支持这些参数)
     if (filters.should_postback) p.should_postback = filters.should_postback
@@ -562,6 +568,26 @@ function handleSearch() {
   loadData()
 }
 
+// ===== 图表tab联动(2026-11-20): 总览页"查看转化明细"跳转带 path_code(+start/end), 本面板接管过滤并加载 =====
+const route = useRoute()
+// 面板保活(v-show 不销毁), 再次跳转靠 watch 刷新; query 无 path_code 时不动用户手动筛选
+function applyRouteQuery(q) {
+  let touched = false
+  if (q.path_code) { filters.path_code = String(q.path_code); touched = true }
+  if (q.start && q.end) {
+    const s = new Date(String(q.start).slice(0, 10) + 'T00:00:00')
+    const e = new Date(String(q.end).slice(0, 10) + 'T00:00:00')
+    if (!isNaN(s) && !isNaN(e)) {
+      e.setDate(e.getDate() - 1) // query 的 end 是排他上界(次日0点), 回退一天对齐 datepicker 含当天语义
+      dateRange.value = [s, e]
+      touched = true
+    }
+  }
+  if (touched) handleSearch()
+  return touched
+}
+watch(() => route.query, (q) => { if (q.tab === 'conversions') applyRouteQuery(q) })
+
 // ===== 事件类型(2026-11-19 单表格版): "类型"列表头选择器切换, 默认 Sales =====
 // Sales→/query/conversions(带名称/扣量过滤); 其他→/query/postback-events。
 // 通用过滤(page/size/tz/keyword/mid/tid/日期)两类型共用; Sales 专属(with_names/http_status/should_postback)仅 Sales 带。
@@ -588,7 +614,7 @@ function handleCurrentChange(page) {
 }
 
 onMounted(() => {
-  loadData()
+  if (!applyRouteQuery(route.query)) loadData()
   loadColumns() // 列偏好(顺序+可见性)从 ui_settings 异步加载, 加载前先渲染默认列
   nextTick(() => {
     calcTableHeight() // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）

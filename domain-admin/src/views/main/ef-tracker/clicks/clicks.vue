@@ -14,6 +14,7 @@
 
     <!-- 三个面板分属各自文件：懒挂载（首次切到才渲染，onMounted 才发请求）
          + v-show 保活（切走不销毁，切回保留筛选/分页状态、不重复请求） -->
+    <tracker-overview-panel v-if="visited.overview" v-show="activeTab === 'overview'" />
     <clicks-panel v-if="visited.clicks" v-show="activeTab === 'clicks'" />
     <conversions-panel v-if="visited.conversions" v-show="activeTab === 'conversions'" />
     <error-logs-panel v-if="visited.errors" v-show="activeTab === 'errors'" />
@@ -24,6 +25,7 @@
 import { ref, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { localCache } from '@/utils/cache'
+import TrackerOverviewPanel from './tracker-overview-panel.vue'
 import ClicksPanel from './clicks-panel.vue'
 import ConversionsPanel from '../conversions/conversions.vue'
 import ErrorLogsPanel from '../error-logs/error-logs.vue'
@@ -31,8 +33,9 @@ import ErrorLogsPanel from '../error-logs/error-logs.vue'
 const route = useRoute()
 const router = useRouter()
 
-// Tab 定义：key 用于 ?tab= 参数
+// Tab 定义：key 用于 ?tab= 参数(2026-11-20 加「图表」=tracker 一键总览)
 const TABS = [
+  { key: 'overview', label: '图表' },
   { key: 'clicks', label: '媒体点击' },
   { key: 'conversions', label: '转化回传' },
   { key: 'errors', label: '错误日志' }
@@ -55,7 +58,7 @@ function normalizeTab(tab) {
 
 const activeTab = ref(normalizeTab(route.query.tab))
 localCache.setCache(LAST_TAB_KEY, activeTab.value)
-const visited = reactive({ clicks: false, conversions: false, errors: false })
+const visited = reactive({ overview: false, clicks: false, conversions: false, errors: false })
 visited[activeTab.value] = true
 
 function switchTab(tab) {

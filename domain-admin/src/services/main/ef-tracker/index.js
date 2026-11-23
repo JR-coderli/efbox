@@ -97,6 +97,15 @@ export function getRecentPathCodes(params = {}) {
   return query('/query/path-codes', params)
 }
 
+// 6.6 tracker 一键总览 —— /query/tracker-overview(2026-11-20, 日志页「图表」tab)
+// 输入投放 code 一次返回全部: paths[](条件组按id升序在前+保底组殿后: 条件配置/LP/Offer池/形态/
+// 老用户开关/counts{clicks,reached_lp,lp_click,converted,sent,deducted,lead_sent})、
+// errors{total, by_code:TOP20}、conversions{total,sent,deducted,pending,revenue,by_offer:TOP10}
+// params: code 必填; start/end 或 date; tz。code 不存在返回 404 {error}。
+export function getTrackerOverview(params = {}) {
+  return query('/query/tracker-overview', params)
+}
+
 // 7. 单维度分组聚合报表 —— /query/stats/group(2026-09-03 上线,替代已废弃的 /query/stats/breakdown)
 // params: by(必填,本次分组维度,如 lander)、range|start/end、tz、
 //         以及下钻过滤(已展开的上层维度传具体值,如 lander=10、date=2026-09-03)

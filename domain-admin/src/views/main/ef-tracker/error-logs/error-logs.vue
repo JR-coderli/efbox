@@ -24,6 +24,9 @@
                   @change="handleSearch"
                 />
               </el-form-item>
+              <el-form-item label="code">
+                <el-input v-model="filters.path_code" placeholder="投放code" clearable style="width: 130px" @keyup.enter="handleSearch" @clear="handleSearch" @change="handleSearch" />
+              </el-form-item>
               <el-form-item label="排除错误码">
                 <el-input v-model="filters.exclude_error_code" placeholder="如 SYSTEM_CLICK_FORMAT_ERR" clearable style="width: 240px" @keyup.enter="handleSearch" @clear="handleSearch" />
               </el-form-item>
@@ -221,7 +224,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import Sortable from 'sortablejs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getErrorLogs, deleteErrorLogs } from '@/services/main/ef-tracker'
@@ -249,6 +253,7 @@ const filters = reactive({
   keyword: '',
   error_code: '',      // error_code 列表头独立搜索(与顶部排除错误码互不相干, 2026-11-19)
   request_method: '',  // method 列表头下拉精确筛选
+  path_code: '',       // 投放 code 精确过滤(2026-11-20, 图表tab总览页"查看错误明细"联动跳转带入)
   mid: '',
   tid: '',
   http_status: '',
@@ -293,6 +298,7 @@ function buildParams() {
   if (filters.error_code) p.error_code = filters.error_code // error_code 列独立搜索(包含该串, 与排除框无关)
   if (filters.request_method) p.request_method = filters.request_method // method 列下拉精确筛选
   if (filters.exclude_error_code) p.exclude_error_code = filters.exclude_error_code // 排除某个 error_code（如高频的 SYSTEM_CLICK_FORMAT_ERR）
+  if (filters.path_code) p.path_code = filters.path_code
   Object.assign(p, rangeToParams(dateRange.value))
   return p
 }
@@ -317,6 +323,26 @@ function handleSearch() {
   pagination.page = 1
   loadData()
 }
+
+// ===== 图表tab联动(2026-11-20): 总览页"查看错误明细"跳转带 path_code(+start/end), 本面板接管过滤并加载 =====
+const route = useRoute()
+// 面板保活(v-show 不销毁), 再次跳转靠 watch 刷新; query 无 path_code 时不动用户手动筛选
+function applyRouteQuery(q) {
+  let touched = false
+  if (q.path_code) { filters.path_code = String(q.path_code); touched = true }
+  if (q.start && q.end) {
+    const s = new Date(String(q.start).slice(0, 10) + 'T00:00:00')
+    const e = new Date(String(q.end).slice(0, 10) + 'T00:00:00')
+    if (!isNaN(s) && !isNaN(e)) {
+      e.setDate(e.getDate() - 1) // query 的 end 是排他上界(次日0点), 回退一天对齐 datepicker 含当天语义
+      dateRange.value = [s, e]
+      touched = true
+    }
+  }
+  if (touched) handleSearch()
+  return touched
+}
+watch(() => route.query, (q) => { if (q.tab === 'errors') applyRouteQuery(q) })
 
 function handleSizeChange(size) {
   pagination.pageSize = size
@@ -599,7 +625,7 @@ function rebindHeaderDrag() {
 }
 
 onMounted(() => {
-  loadData()
+  if (!applyRouteQuery(route.query)) loadData()
   loadColumns()
   nextTick(() => {
     calcTableHeight()

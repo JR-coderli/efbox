@@ -369,6 +369,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import Sortable from 'sortablejs'
 import useSystemStore from '@/stores/main/system/system'
@@ -958,6 +959,26 @@ function handleSearch() {
   loadData()
 }
 
+// ===== 图表tab联动(2026-11-20): 总览页点击漏斗数字跳转带 path_code(+start/end), 本面板接管过滤并加载 =====
+const route = useRoute()
+// 面板保活(v-show 不销毁), 再次跳转靠 watch 刷新; query 无 path_code 时不动用户手动筛选
+function applyRouteQuery(q) {
+  let touched = false
+  if (q.path_code) { filters.path_code = String(q.path_code); touched = true }
+  if (q.start && q.end) {
+    const s = new Date(String(q.start).slice(0, 10) + 'T00:00:00')
+    const e = new Date(String(q.end).slice(0, 10) + 'T00:00:00')
+    if (!isNaN(s) && !isNaN(e)) {
+      e.setDate(e.getDate() - 1) // query 的 end 是排他上界(次日0点), 回退一天对齐 datepicker 含当天语义
+      dateRange.value = [s, e]
+      touched = true
+    }
+  }
+  if (touched) handleSearch()
+  return touched
+}
+watch(() => route.query, (q) => { if (q.tab === 'clicks') applyRouteQuery(q) })
+
 function handleSizeChange(size) {
   pagination.pageSize = size
   pagination.page = 1
@@ -970,7 +991,7 @@ function handleCurrentChange(page) {
 }
 
 onMounted(() => {
-  loadData()
+  if (!applyRouteQuery(route.query)) loadData()
   loadColumns() // 异步加载库中列设置，回来后覆盖默认配置（不阻塞列表首屏）
   nextTick(calcTableHeight) // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
   window.addEventListener('resize', calcTableHeight)
