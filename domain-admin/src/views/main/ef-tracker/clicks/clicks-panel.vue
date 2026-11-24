@@ -147,6 +147,7 @@
               v-if="col.type === 'funnel'"
               :min-width="col.minWidth"
               :align="col.align"
+              class-name="col-funnel"
             >
               <template #header>
                 <div v-if="funnelStepFilter" class="funnel-filter-chip" @click.stop>
@@ -192,7 +193,7 @@
                     <span class="funnel-arrow">›</span>
                     <!-- 真实/未分类都按原节点亮起; 安全页仅在 LP 两段外描框并标注 cloak -->
                     <span class="lp-stage-group" :class="{ 'is-cloak': isCloakFunnel(row.funnel) }">
-                      <span v-if="isCloakFunnel(row.funnel)" class="cloak-label">cloak</span>
+                      <span v-if="isCloakFunnel(row.funnel)" class="cloak-label">cloak拦截:安全页</span>
                       <span
                         class="funnel-step"
                         :class="[stepBoolClass(row.funnel.reached_lp), 'funnel-clickable']"
@@ -1674,6 +1675,7 @@ function renderTimelineChart() {
 
 .cloak-label {
   position: absolute;
+  z-index: 1; // 标签向上溢出单元格, 提层级避免被相邻内容压住
   top: -8px;
   left: 50%;
   transform: translateX(-50%);
@@ -1683,6 +1685,12 @@ function renderTimelineChart() {
   font-size: 9px;
   line-height: 12px;
   letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+// cloak 标签(top:-8px)向上超出 .cell, Element 的 .cell 自带 overflow:hidden 会把标签裁掉 → 漏斗列单独放开裁剪
+:deep(.google-table td.col-funnel .cell) {
+  overflow: visible;
 }
 
 .funnel-tip {
