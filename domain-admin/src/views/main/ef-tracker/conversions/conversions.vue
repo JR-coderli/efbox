@@ -24,10 +24,8 @@
                   @change="handleSearch"
                 />
               </el-form-item>
-              <el-form-item label="code">
-                <el-input v-model="filters.path_code" placeholder="投放code" clearable style="width: 130px" @keyup.enter="handleSearch" @clear="handleSearch" @change="handleSearch" />
-              </el-form-item>
               <!-- mid/tid/应回传/回传状态 的精确查询已集成到多级表头第二行，此处不再重复放输入框 -->
+              <!-- code 已移到多级表头第二行(与 mid/tid 同款专属搜索框), 顶部不再重复 -->
             </el-form>
           </div>
           <div class="filter-actions">
@@ -243,6 +241,7 @@ const DEFAULT_COLUMNS = [
   { key: 'payout', label: 'payout', type: 'money', prop: 'payout', minWidth: 90 },
   { key: 'system_click_id', label: 'system_click_id', type: 'filter', prop: 'system_click_id', filterKey: 'system_click_id', minWidth: 200, placeholder: 'system_click_id' },
   { key: 'media_click_id', label: 'media_click_id', type: 'filter', prop: 'media_click_id', filterKey: 'media_click_id', minWidth: 160, placeholder: 'media_click_id' },
+  { key: 'path_code', label: 'code', type: 'filter', prop: 'path_code', filterKey: 'path_code', minWidth: 90, placeholder: 'code' },
   { key: 'media', label: 'Media_name', type: 'names', nameKey: 'media', prop: 'names.media', minWidth: 110, salesOnly: true },
   { key: 'mid', label: 'mid', type: 'filter', prop: 'mid', filterKey: 'mid', minWidth: 90, digits: true, placeholder: 'mid' },
   { key: 'tracker', label: 'Tracker_name', type: 'names', nameKey: 'tracker', prop: 'names.tracker', minWidth: 110, salesOnly: true },

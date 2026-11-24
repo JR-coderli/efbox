@@ -39,6 +39,7 @@ function normalizeConversion(item) {
     response_body: item.ResponseBody,
     created_at: item.CreatedAt,
     posted_at: item.PostedAt,
+    path_code: item.PathCode || item.path_code || '', // 2026-11-24 加: with_names 返回的投放 code
     names: rawNames
       ? {
           media: rawNames.media ?? rawNames.Media ?? '',

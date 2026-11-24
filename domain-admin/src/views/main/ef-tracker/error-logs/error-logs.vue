@@ -24,9 +24,6 @@
                   @change="handleSearch"
                 />
               </el-form-item>
-              <el-form-item label="code">
-                <el-input v-model="filters.path_code" placeholder="投放code" clearable style="width: 130px" @keyup.enter="handleSearch" @clear="handleSearch" @change="handleSearch" />
-              </el-form-item>
               <el-form-item label="排除错误码">
                 <el-input v-model="filters.exclude_error_code" placeholder="如 SYSTEM_CLICK_FORMAT_ERR" clearable style="width: 240px" @keyup.enter="handleSearch" @clear="handleSearch" />
               </el-form-item>
@@ -418,9 +415,10 @@ const DEFAULT_COLUMNS = [
   { key: 'error_message', label: 'error_message', type: 'plain', prop: 'error_message', minWidth: 220, overflow: true },
   { key: 'error_reason', label: 'error_reason', type: 'plain', prop: 'error_reason', minWidth: 180, overflow: true },
   { key: 'endpoint', label: 'endpoint', type: 'plain', prop: 'endpoint', minWidth: 160, overflow: true },
-  { key: 'method', label: 'method', type: 'plain', prop: 'request_method', width: 80, align: 'center' },
+  { key: 'method', label: 'method', type: 'plain', prop: 'request_method', width: 100, align: 'center' },
   { key: 'mid', label: 'mid', type: 'filter', prop: 'mid', filterKey: 'mid', width: 110, align: 'center' },
   { key: 'tid', label: 'tid', type: 'filter', prop: 'tid', filterKey: 'tid', width: 110, align: 'center' },
+  { key: 'path_code', label: 'code', type: 'filter', prop: 'path_code', filterKey: 'path_code', width: 100, placeholder: 'code' },
   { key: 'ip', label: 'ip', type: 'plain', prop: 'ip_address', width: 120, overflow: true }
 ]
 
