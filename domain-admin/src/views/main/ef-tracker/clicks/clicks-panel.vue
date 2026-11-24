@@ -190,19 +190,23 @@
                     <!-- 路径1：媒体点击 › LP展示 › LP点击 › 转化 › 下发（Lead/Sales 并行结果单节点合并展示）-->
                     <span class="funnel-step fs-ok" :data-tip="stepBoolTitle('媒体点击', true, row.created_at)">媒体点击</span>
                     <span class="funnel-arrow">›</span>
-                    <span
-                      class="funnel-step"
-                      :class="[stepBoolClass(row.funnel.reached_lp), 'funnel-clickable']"
-                      :data-tip="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)"
-                      @click="filterByFunnelStep('lp_visit')"
-                    >LP展示</span>
-                    <span class="funnel-arrow">›</span>
-                    <span
-                      class="funnel-step"
-                      :class="[stepBoolClass(row.funnel.lp_click), 'funnel-clickable']"
-                      :data-tip="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)"
-                      @click="filterByFunnelStep('lp_click')"
-                    >LP点击</span>
+                    <!-- 真实/未分类都按原节点亮起; 安全页仅在 LP 两段外描框并标注 cloak -->
+                    <span class="lp-stage-group" :class="{ 'is-cloak': isCloakFunnel(row.funnel) }">
+                      <span v-if="isCloakFunnel(row.funnel)" class="cloak-label">cloak</span>
+                      <span
+                        class="funnel-step"
+                        :class="[stepBoolClass(row.funnel.reached_lp), 'funnel-clickable']"
+                        :data-tip="stepBoolTitle('到达落地页', row.funnel.reached_lp, row.funnel.reached_lp_at)"
+                        @click="filterByFunnelStep('lp_visit')"
+                      >LP展示</span>
+                      <span class="funnel-arrow">›</span>
+                      <span
+                        class="funnel-step"
+                        :class="[stepBoolClass(row.funnel.lp_click), 'funnel-clickable']"
+                        :data-tip="stepBoolTitle('点击 Offer', row.funnel.lp_click, row.funnel.lp_click_at)"
+                        @click="filterByFunnelStep('lp_click')"
+                      >LP点击</span>
+                    </span>
                     <span class="funnel-arrow">›</span>
                     <span
                       class="funnel-step"
@@ -665,6 +669,11 @@ function stepBoolTitle(label, ok, at) {
   return `${label}：${ok ? '是' : '否'}${at ? ' · ' + fmtTime(at) : ''}`
 }
 
+// 仅安全页需要 cloak 描框; 真实/未分类/旧后端都保持原 LP 节点显示。
+function isCloakFunnel(f) {
+  return !!(f && (f.reached_lp_safe || f.lp_click_safe))
+}
+
 // 直连路径判定（2026-11-11 起用配置事实）：优先读后端 funnel.path_destination
 //   0=经 LP（路径1），1=直跳 Offer（路径2），-1=path 查不到（老数据）回退启发式
 // 启发式兜底（旧响应/查不到）：已转化但完全没碰 LP → 按直连渲染
@@ -734,7 +743,7 @@ const DEFAULT_COLUMNS = [
   { key: 'id', label: 'ID', type: 'plain', prop: 'id', width: 80, align: 'center' },
   { key: 'created_at', label: '创建时间', type: 'time', prop: 'created_at', width: 200 },
   { key: 'ip', label: 'ip', type: 'filter', prop: 'ip_address', filterKey: 'ip_address', minWidth: 140, overflow: true, defaultHidden: true },
-  { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 370, align: 'center' }, // 370: 11-20 下发节点合并展示(标签变长 下发Lead、Sales)
+  { key: 'funnel', label: '漏斗', type: 'funnel', minWidth: 400, align: 'center' }, // 400: cloak 描框略增宽, 其余保持原布局
   { key: 'total_time', label: '总用时', type: 'duration', width: 90, align: 'center' },
   { key: 'preview_img', label: '预览图', type: 'screenshot', width: 120, align: 'center' },
   // type=filter：多级表头精确查询（第一行列名、第二行输入框），走专用查询串，不走 keyword
@@ -1646,6 +1655,34 @@ function renderTimelineChart() {
 .fs-bad {
   background: #fce8e6;
   color: #c5221f;
+}
+
+// LP 展示+LP点击是一个整体; 仅安全页加描框, 节点名字与亮灭逻辑保持原样
+.lp-stage-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+
+  &.is-cloak {
+    margin: -7px -4px -4px;
+    padding: 7px 4px 4px;
+    border: 1px solid #b06000;
+    border-radius: 8px;
+  }
+}
+
+.cloak-label {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 4px;
+  background: #fff;
+  color: #b06000;
+  font-size: 9px;
+  line-height: 12px;
+  letter-spacing: 0.2px;
 }
 
 .funnel-tip {
