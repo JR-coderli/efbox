@@ -4,7 +4,7 @@
          页面入口由「媒体点击」菜单项控制，进到页面后三个 Tab 人人都可用 -->
     <div class="tab-bar">
       <div
-        v-for="tab in TABS"
+        v-for="tab in VISIBLE_TABS"
         :key="tab.key"
         class="tab-item"
         :class="{ 'is-active': activeTab === tab.key }"
@@ -35,13 +35,15 @@ const router = useRouter()
 
 // Tab 定义：key 用于 ?tab= 参数(2026-11-20 加「图表」=tracker 一键总览)
 const TABS = [
-  { key: 'overview', label: '图表' },
+  // 2026-11-24 临时隐藏「图表」Tab，组件与联动逻辑保留；恢复时删除 hidden 即可
+  { key: 'overview', label: '图表', hidden: true },
   { key: 'clicks', label: '媒体点击' },
   { key: 'conversions', label: '转化回传' },
   { key: 'errors', label: '错误日志' }
 ]
 
-const TAB_KEYS = TABS.map((t) => t.key)
+const VISIBLE_TABS = TABS.filter((tab) => !tab.hidden)
+const TAB_KEYS = VISIBLE_TABS.map((t) => t.key)
 
 // 记住用户最后一次所在的 Tab（localStorage，跨会话保留）：
 // 再次从菜单进入「日志」页且 URL 未指定 ?tab= 时，直接回到上次离开的 Tab
