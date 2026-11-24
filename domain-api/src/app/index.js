@@ -39,6 +39,22 @@ const app = new Koa()
 // 因此在创建 server 之前先 require 错误处理器，保证业务 emit('error', 错误码字符串) 由它接管。
 require('../utils/handle-error').attachErrorHandler(app)
 
+// 慢请求耗时日志(2026-11-24 登录卡顿排查): 记录每个请求的耗时, >1s 打 WARN。
+// 目的=把"登录偶发卡顿"做实成证据: 复现时看日志就知道是哪个请求慢、慢几秒、发生在何时,
+// 从而区分三类根因——①MySQL 等连接/慢查询(配合 SHOW FULL PROCESSLIST) ②Node 进程被
+// 定时任务(截图 puppeteer/域名检测 crawler)阻塞 ③网络层。观测本身零行为影响。
+app.use(async (ctx, next) => {
+  const start = Date.now()
+  try {
+    await next()
+  } finally {
+    const dur = Date.now() - start
+    if (dur > 1000) {
+      console.warn(`[slow-req] ${dur}ms ${ctx.method} ${ctx.url} -> ${ctx.status}`)
+    }
+  }
+})
+
 // LP 公开域名守卫:zorfell.com 只放行 /lp/ 前缀,其余一律 404(必须挂在最前,
 // 连 CORS 头都不给被拦截的请求返回),后台管理域名不受任何影响
 app.use(require('../middleware/lp-host-guard.middleware'))

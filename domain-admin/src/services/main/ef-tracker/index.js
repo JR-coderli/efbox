@@ -102,8 +102,12 @@ export function getRecentPathCodes(params = {}) {
 // 老用户开关/counts{clicks,reached_lp,lp_click,converted,sent,deducted,lead_sent})、
 // errors{total, by_code:TOP20}、conversions{total,sent,deducted,pending,revenue,by_offer:TOP10}
 // params: code 必填; start/end 或 date; tz。code 不存在返回 404 {error}。
+// timeout 30s: 2026-11-24 后端已优化(EXISTS→JOIN 预聚合, 3倍提速), 30s 兜底防御大 code
 export function getTrackerOverview(params = {}) {
-  return query('/query/tracker-overview', params)
+  return queryRequest
+    .get('/query/tracker-overview', { params, timeout: 30000 })
+    .then((res) => res.data)
+    .catch((err) => Promise.reject(err))
 }
 
 // 7. 单维度分组聚合报表 —— /query/stats/group(2026-09-03 上线,替代已废弃的 /query/stats/breakdown)

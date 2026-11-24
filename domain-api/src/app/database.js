@@ -15,6 +15,12 @@ const dbConfig = {
   // 会把 5 个连接占满 → 登录 SQL 排队等连接(表现为"点登录卡住一会"), 本地无并发任务所以快。
   // 20 对 MySQL 默认 max_connections=151 很安全; 若仍慢, 下一步查长任务(processlist)。
   connectionLimit: 20,
+  // 2026-11-24 登录偶发卡顿二次修复: 空闲连接防死。
+  // mysql2 默认不开 TCP keepalive——池里的空闲连接被 MySQL wait_timeout(云库常配 60~300s)
+  // 掐掉后, 下一个请求从池里拿到的是"死连接": 连接报错/重连, 表现为偶发的请求卡顿或失败。
+  // enableKeepAlive 让连接层周期发 ping 保活, 配合 acquireTimeout 给取连接一个上限。
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
   dateStrings: true // dateStrings: true 会让 DATETIME / DATE / TIMESTAMP 字段直接返回字符串，而不是 JS Date 对象
 }
 
