@@ -302,6 +302,7 @@
                 <!-- suggest='recent'(code 列)：聚焦弹出"最近创建的 code+创建时间"快捷面板，点选即填入并搜索 -->
                 <el-autocomplete
                   v-if="col.suggest === 'recent'"
+                  ref="codeSuggestRef"
                   v-model="filters[col.filterKey]"
                   size="small"
                   :fetch-suggestions="fetchRecentPathCodes"
@@ -450,8 +451,25 @@ function onFilterInput(col, v) {
 // 改为直接给表头容器挂原生监听：鼠标移到第一行某个 th 右缘 8px 内 → col-resize 光标；
 // 按下拖动 → 按 th 在第一行中的位置反查列配置，新宽度写回 col.width（模板 :width 响应式生效）。
 const tableRef = ref(null)
+const codeSuggestRef = ref(null) // code 列表头 autocomplete(suggest='recent' 全表仅此一列)
 const colDrag = { col: null, startX: 0, startWidth: 0, active: false }
 let headerWrapEl = null
+
+// 任何滚动(表格内部 el-scrollbar__wrap / .table-wrapper / 页面本身)都收起 code 列下拉:
+// popper 挂在 body 上随输入框的几何位置走, 输入框被滚出视口右侧时弹层也会跑到视口外,
+// 不收起会把整个页面撑出水平滚动条
+function onBodyScrollCloseSuggest() {
+  const ac = codeSuggestRef.value
+  if (!ac) return
+  ac.close()
+  // close 只关弹层、焦点仍在输入框上, 已聚焦的输入框再次点击不会触发 focus(下拉重开不了) → 顺手失焦
+  const input = ac.$el?.querySelector('input')
+  if (input && document.activeElement === input) input.blur()
+}
+
+// 页面级横向滚动兜底: 本页表格在内部自滚动, 页面本身不需要横向滚动;
+// overflow-x:hidden 会传播到视口, 弹层即便溢出视口右侧也撑不出页面水平滚动条
+let prevBodyOverflowX = ''
 
 // 反查：事件 target 所在的第一行 th → visibleColumns 中同下标的列配置
 function row1ColOf(e) {
@@ -1005,6 +1023,12 @@ onMounted(() => {
   loadColumns() // 异步加载库中列设置，回来后覆盖默认配置（不阻塞列表首屏）
   nextTick(calcTableHeight) // 等 DOM 渲染完再测量表格上方占位（Tab 栏 + 筛选区）
   window.addEventListener('resize', calcTableHeight)
+  nextTick(() => {
+    // 捕获阶段挂 window: scroll 不冒泡但可捕获, 表格内部/外层容器/页面本身的滚动全覆盖
+    window.addEventListener('scroll', onBodyScrollCloseSuggest, true)
+    prevBodyOverflowX = document.body.style.overflowX
+    document.body.style.overflowX = 'hidden'
+  })
   // 时间线：用户上次是打开状态（或首次默认）→ 直接加载图表数据
   if (timelineVisible.value) {
     loadTimeline()
@@ -1033,6 +1057,8 @@ onUnmounted(() => {
   clearInterval(refreshTimer)
   refreshTimer = null
   window.removeEventListener('resize', calcTableHeight)
+  window.removeEventListener('scroll', onBodyScrollCloseSuggest, true)
+  document.body.style.overflowX = prevBodyOverflowX
   unbindHeaderDrag()
   if (timelineChart) {
     timelineChart.dispose()
@@ -1682,7 +1708,7 @@ function renderTimelineChart() {
   padding: 0 4px;
   background: #fff;
   color: #b06000;
-  font-size: 9px;
+  font-size: 11px;
   line-height: 12px;
   letter-spacing: 0.2px;
   white-space: nowrap;
@@ -1871,7 +1897,8 @@ function renderTimelineChart() {
   padding: 0 !important;
 }
 
-/* code 列"最近创建"快捷面板（el-autocomplete popper 传送到 body，写在全局）：code 等宽字体 + 右侧灰色时间 */
+/* code 列"最近创建"快捷面板（el-autocomplete popper 传送到 body，写在全局）：
+   code 左 + 创建时间右 同一行; 弹层按内容撑宽, 页面水平滚动由 body overflow-x:hidden + 滚动收起兜底 */
 .clicks-code-popper {
   .recent-code-item {
     display: flex;
@@ -1879,6 +1906,7 @@ function renderTimelineChart() {
     align-items: center;
     gap: 12px;
     padding: 0 4px;
+    white-space: nowrap;
   }
 
   .recent-code-value {
