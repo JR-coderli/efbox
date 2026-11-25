@@ -296,6 +296,7 @@
               :width="col.width"
               :min-width="col.minWidth"
               :class-name="col.cellClass"
+              :label-class-name="isColFiltered(col) ? 'th-filtered' : ''"
               :show-overflow-tooltip="col.overflow"
             >
               <template #header>
@@ -444,6 +445,11 @@ const filters = reactive({
 // 表头过滤输入框统一入口：digits 列（mid/tid/oid/lid）只保留数字，其余原样
 function onFilterInput(col, v) {
   filters[col.filterKey] = col.digits ? String(v ?? '').replace(/\D/g, '') : v
+}
+
+// 该列是否设了筛选 → 二级表头(输入框行)边框高亮, 列被横向滚出视野后滚回来也能一眼识别
+function isColFiltered(col) {
+  return col.type === 'filter' && col.filterKey && String(filters[col.filterKey] ?? '').trim() !== ''
 }
 
 // ===== 第一行表头（列名行）自定义列宽拖动（事件委托实现）=====
@@ -1606,6 +1612,16 @@ function renderTimelineChart() {
     tr:first-child th .cell {
       font-weight: 700;
       color: #202124;
+    }
+  }
+}
+
+// 设了筛选的列(isColFiltered): 仅二级表头(输入框行)蓝色高亮整框, 一级列名行不高亮;
+// inset box-shadow 不改盒模型, 不影响列宽与拖动
+:deep(.google-table) {
+  .el-table__header-wrapper {
+    tr:nth-child(2) th.th-filtered {
+      box-shadow: inset 0 0 0 2px #1a73e8;
     }
   }
 }

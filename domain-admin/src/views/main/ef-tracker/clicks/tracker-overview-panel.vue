@@ -19,14 +19,17 @@
                 />
               </el-form-item>
               <el-form-item label="日期">
-                <el-date-picker
-                  v-model="dateRange"
-                  type="daterange"
-                  start-placeholder="开始日期"
-                  end-placeholder="结束日期"
-                  clearable
-                  style="width: 240px"
-                />
+                <!-- 固定 5 个预设范围单选(今天/昨天/前天/近3天/近7天), 谷歌风格按钮; 切换即重新查询 -->
+                <div class="date-presets">
+                  <button
+                    v-for="p in DATE_PRESETS"
+                    :key="p.key"
+                    type="button"
+                    class="date-preset-btn"
+                    :class="{ active: dateKey === p.key }"
+                    @click="selectDatePreset(p.key)"
+                  >{{ p.label }}</button>
+                </div>
               </el-form-item>
             </el-form>
           </div>
@@ -116,13 +119,31 @@
                 </template>
                 <!-- 直跳形态: 组 → Offer -->
                 <div v-else class="flow-line"><span class="fl-text">{{ p.counts.clicks }} 人</span></div>
-                <!-- Offer 节点 -->
+                <!-- Offer 节点: 单 offer 直接展示; 多 offer(多按钮)默认折叠成一个汇总节点, 点击展开/收起,
+                     避免每条线路把全部 offer 铺开把页面撑出长滚动条 -->
                 <div class="offers-col">
-                  <div v-for="o in p.offers" :key="o.oid" class="offer-node">
-                    <span class="offer-pct" v-if="p.offers.length > 1">{{ o.offer_percentage }}%</span>
-                    <span class="offer-name" :title="o.offer_name">#{{ o.oid }} {{ o.offer_name }}</span>
-                    <span class="offer-btn" v-if="p.offers.length > 1 && o.button_id">btn{{ o.button_id }}</span>
-                    <span class="offer-clicks" @click="goTab('clicks')"><b :class="{ zero: !o.clicks }">{{ o.clicks }}</b> 人</span>
+                  <div
+                    v-if="p.offers.length > 1"
+                    class="offer-toggle"
+                    :title="expandedOffers[p.group] ? '收起 Offer 列表' : '展开 Offer 列表'"
+                    @click="toggleOffers(p.group)"
+                  >
+                    <span class="ot-arrow" :class="{ open: expandedOffers[p.group] }">▸</span>
+                    <span>{{ p.offers.length }} 个 Offer</span>
+                    <span class="ot-sum">共 <b :class="{ zero: !offerSum(p) }">{{ offerSum(p) }}</b> 人</span>
+                  </div>
+                  <!-- offer 列表: 多 offer 展开后限高 + 自身垂直滚动(滚动不链到页面), 不把页面撑出长滚动条 -->
+                  <div
+                    class="offer-list"
+                    :class="{ 'is-scroll': p.offers.length > 1 }"
+                    v-show="p.offers.length === 1 || expandedOffers[p.group]"
+                  >
+                    <div v-for="o in p.offers" :key="o.oid" class="offer-node">
+                      <span class="offer-pct" v-if="p.offers.length > 1">{{ o.offer_percentage }}%</span>
+                      <span class="offer-name" :title="o.offer_name">#{{ o.oid }} {{ o.offer_name }}</span>
+                      <span class="offer-btn" v-if="p.offers.length > 1 && o.button_id">btn{{ o.button_id }}</span>
+                      <span class="offer-clicks" @click="goTab('clicks')"><b :class="{ zero: !o.clicks }">{{ o.clicks }}</b> 人</span>
+                    </div>
                   </div>
                   <div v-if="p.returning && p.returning.enabled" class="offer-node node-returning" title="老用户(同tracker二次点击)固定跳此Offer, 不参与轮转">
                     <span class="offer-name">老用户 → #{{ p.returning.offer_id }} {{ p.returning.offer_name }}</span>
@@ -191,12 +212,23 @@ const route = useRoute()
 const router = useRouter()
 
 const code = ref('')
-const dateRange = ref([daysAgo(2), daysAgo(0)])
+const dateKey = ref('3d') // 选中的日期预设 key, 默认近 3 天
+const dateRange = computed(() => DATE_PRESETS.find((p) => p.key === dateKey.value)?.range() || [])
 const loading = ref(false)
 const data = ref(null)
 const errMsg = ref('')
 
 const totalClicks = computed(() => (data.value?.paths || []).reduce((s, p) => s + (p.counts?.clicks || 0), 0))
+
+// 多 Offer(多按钮)线路的展开状态: key=p.group("fallback"/条件组 id), 默认全部折叠, 重新查询时重置
+const expandedOffers = ref({})
+function toggleOffers(group) {
+  expandedOffers.value[group] = !expandedOffers.value[group]
+}
+// 折叠汇总节点上的总人数 = 该线路各 offer 人数之和
+function offerSum(p) {
+  return (p.offers || []).reduce((s, o) => s + (o.clicks || 0), 0)
+}
 const winLabel = computed(() => {
   const p = rangeToParams(dateRange.value)
   return p.start && p.end ? `${String(p.start).slice(0, 10)} ~ ${String(p.end).slice(0, 10)}` : '全部时间'
@@ -213,6 +245,16 @@ function daysAgo(n) {
   d.setDate(d.getDate() - n)
   return d
 }
+
+// 日期范围固定为 5 个预设(今天/昨天/前天/近3天/近7天), 页面上单选按钮直接切换, 不提供日历组件——
+// 既避免大范围查询拖慢总览接口, 也不需要再做范围校验。range 每次取值时现算, 跨天也不会停留在旧日期上。
+const DATE_PRESETS = [
+  { key: 'today', label: '今天', range: () => [daysAgo(0), daysAgo(0)] },
+  { key: 'yesterday', label: '昨天', range: () => [daysAgo(1), daysAgo(1)] },
+  { key: 'day2', label: '前天', range: () => [daysAgo(2), daysAgo(2)] },
+  { key: '3d', label: '近 3 天', range: () => [daysAgo(2), daysAgo(0)] },
+  { key: '7d', label: '近 7 天', range: () => [daysAgo(6), daysAgo(0)] }
+]
 function rangeToParams(range) {
   if (!range || range.length !== 2) return {}
   const [d1, d2] = range
@@ -235,6 +277,13 @@ function fetchCodeSuggest(qs, cb) {
     .catch(() => cb([]))
 }
 
+// 切换日期预设 = 重新查询(无需再点「查询」); 点当前已选项不重复请求; 未填 code 时 load 内部直接返回
+function selectDatePreset(key) {
+  if (key === dateKey.value) return
+  dateKey.value = key
+  load()
+}
+
 async function load() {
   if (!code.value) return
   loading.value = true
@@ -242,6 +291,7 @@ async function load() {
   try {
     const res = await getTrackerOverview({ code: code.value.trim(), tz: 8, ...rangeToParams(dateRange.value) })
     data.value = res
+    expandedOffers.value = {} // 新数据: 多 Offer 线路回到默认折叠
   } catch (e) {
     data.value = null
     errMsg.value = e?.response?.status === 404
@@ -323,6 +373,32 @@ function goTab(tab) {
   font-size: 14px;
   cursor: pointer;
   &:disabled { background: #9aa8b5; cursor: default; }
+}
+/* 日期预设单选(谷歌风格, 与媒体点击页时间线的范围按钮同一套配色): 白底灰字, 选中态浅蓝底+蓝框蓝字 */
+.date-presets {
+  display: flex;
+  gap: 4px;
+}
+.date-preset-btn {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: #fff;
+  color: #5f6368;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+
+  &:hover { background: #f1f3f4; }
+
+  &.active {
+    background: #e8f0fe;
+    border-color: #1a73e8;
+    color: #1a73e8;
+    font-weight: 500;
+  }
 }
 .empty-hint {
   padding: 48px 0;
@@ -529,6 +605,22 @@ function goTab(tab) {
   gap: 4px;
   min-width: 0;
 }
+/* offer 列表容器: 单 offer 时只是普通竖排; 多 offer 展开后限高 + 自身垂直滚动条 */
+.offer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  &.is-scroll {
+    max-height: 180px; // 约 6 行 offer
+    overflow-y: auto;
+    overscroll-behavior: contain; // 列表滚到底/顶不链到页面滚动
+    scrollbar-width: thin;
+    &::-webkit-scrollbar { width: 6px; }
+    &::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 3px; }
+    &::-webkit-scrollbar-thumb:hover { background: #bdc1c6; }
+  }
+}
 .offer-node {
   display: flex;
   align-items: center;
@@ -540,6 +632,35 @@ function goTab(tab) {
   max-width: 330px;
 }
 .offer-pct { color: #1a73e8; font-weight: 500; }
+/* 多 Offer 折叠汇总节点: 整行可点击, 箭头随展开旋转, 展开后 offer 列表排在其下 */
+.offer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed #bdc1c6;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #3c4043;
+  max-width: 330px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  &:hover { border-color: #1a73e8; background: #f8faff; color: #1a73e8; }
+  .ot-arrow {
+    display: inline-block;
+    font-size: 11px;
+    color: #9aa0a6;
+    transition: transform 0.15s;
+    &.open { transform: rotate(90deg); }
+  }
+  .ot-sum {
+    margin-left: auto;
+    color: #5f6368;
+    b { color: #1a73e8; }
+    b.zero { color: #9aa0a6; }
+  }
+}
 .offer-name {
   color: #202124;
   overflow: hidden;
