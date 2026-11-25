@@ -52,25 +52,16 @@
       <div v-if="errMsg" class="empty-hint err">{{ errMsg }}</div>
 
       <template v-if="data">
-        <!-- 总览条 -->
-        <div class="ov-strip">
-          <span class="ov-chip"><b>{{ data.tracker_name || ('tid ' + data.tid) }}</b></span>
-          <span class="ov-chip">{{ data.media_name || ('mid ' + data.mid) }}</span>
-          <span class="ov-chip">code {{ data.code }}</span>
-          <span class="ov-chip">{{ winLabel }}</span>
-          <span class="ov-chip total">总点击 {{ totalClicks }}</span>
-        </div>
-
         <!--
           路径工作流(2026-11-20 二版, 用户拍板: 线路图形态 + LP 预览图):
           [媒体点击根节点] ──干线──▶ 每条线路一行:
             组节点(条件摘要/兜底) ──n人──▶ [LP节点: 预览图+到达/CTA] ──CTA n──▶ Offer节点(各带人数)
           直跳形态无 LP 节点, 组 ──n人──▶ Offer; 条件组之间以「↓ 不匹配」串行(评估顺序)。
         -->
-        <div class="paths-head">
+        <!-- <div class="paths-head">
           <span>路径工作流</span>
           <span class="paths-sub">每条线路的用户数为所选时间段数据; 点击数字可跳明细</span>
-        </div>
+        </div> -->
         <div class="flow">
           <div class="flow-root">
             <div class="root-node">
@@ -165,6 +156,15 @@
               </div>
             </template>
           </div>
+        </div>
+
+        <!-- 总览条(tracker/媒体/code/时间范围/总点击): 位于底部, 与错误日志、转化回传卡片同区; 每项「字段名：值」 -->
+        <div class="ov-strip">
+          <span class="ov-chip"><span class="ov-k">tracker_name：</span>{{ data.tracker_name || ('tid ' + data.tid) }}</span>
+          <span class="ov-chip"><span class="ov-k">media_name：</span>{{ data.media_name || ('mid ' + data.mid) }}</span>
+          <span class="ov-chip"><span class="ov-k">code：</span>{{ data.code }}</span>
+          <span class="ov-chip"><span class="ov-k">日期：</span>{{ winLabel }}</span>
+          <span class="ov-chip total"><span class="ov-k">总点击：</span>{{ totalClicks }}</span>
         </div>
 
         <!-- 错误日志 + 转化回传 两卡并排 -->
@@ -433,20 +433,31 @@ function goTab(tab) {
   font-size: 13px;
   &.err { color: #d93025; }
 }
+/* 总览条: 位于路径工作流下方、错误日志/转化回传卡片上方, 与卡片同款边框方框;
+   上间距同 .bottom-grid 的 margin-top, 下间距同卡片间距 gap */
 .ov-strip {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  padding: 12px 0;
+  padding: 10px 14px;
+  border: 1px solid #e8eaed;
+  border-radius: 8px;
+  margin: 16px 0 12px;
 }
 .ov-chip {
   background: #f1f3f4;
   border-radius: 14px;
   padding: 3px 12px;
   font-size: 12px;
-  color: #3c4043;
-  b { color: #202124; }
-  &.total { background: #e8f0fe; color: #1a73e8; b { color: #1a73e8; } }
+  color: #202124;
+  /* 字段名(「tracker_name：」这类前缀) 用浅灰, 值用正常字色 */
+  .ov-k { color: #5f6368; }
+  &.total {
+    background: #e8f0fe;
+    color: #1a73e8;
+    .ov-k { color: #1a73e8; }
+  }
 }
 .paths-head {
   display: flex;
@@ -459,7 +470,8 @@ function goTab(tab) {
   .paths-sub { font-size: 12px; font-weight: 400; color: #80868b; }
 }
 
-/* ===== 工作流布局: 左根节点 + 右线路列表, 干线=branches 左边框 ===== */
+/* ===== 工作流布局: 左根节点 + 右线路列表, 干线=branches 左边框 =====
+   页面高度不固定(超出屏幕走窗口滚动条); 节点保持紧凑, 仅在条件组与兜底组之间拉开距离 */
 .flow {
   display: flex;
   align-items: stretch;
@@ -468,21 +480,32 @@ function goTab(tab) {
 .flow-root {
   display: flex;
   align-items: center;
-  padding-right: 14px;
+  position: relative;
+  padding-right: 28px;
+  /* 根节点 → 干线 的水平连线, 与各线路引线同色同粗, 括号形态完整 */
+  &::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: 28px;
+    height: 2px;
+    background: #dadce0;
+  }
 }
 .root-node {
-  width: 96px;
+  width: 88px;
   text-align: center;
   border: 2px solid #1a73e8;
   border-radius: 10px;
-  padding: 10px 6px;
+  padding: 6px 4px;
   background: #e8f0fe;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .root-label { font-size: 12px; color: #174ea6; }
-.root-num { font-size: 20px; font-weight: 600; color: #1a73e8; }
+.root-num { font-size: 18px; font-weight: 600; color: #1a73e8; }
 .flow-branches {
   flex: 1;
   border-left: 2px solid #dadce0;
@@ -490,15 +513,16 @@ function goTab(tab) {
   min-width: 0;
 }
 .branch-sep {
-  padding: 2px 0 2px 18px;
+  padding: 4px 0 0 12px;
   font-size: 11px;
   color: #9aa0a6;
-  &.fb { color: #137333; }
+  /* 兜底组与上方条件组之间拉开距离: 「匹配字段过滤」与「不匹配」一眼分开 */
+  &.fb { color: #137333; margin-top: 36px; }
 }
 .branch {
   display: flex;
   align-items: center;
-  padding: 8px 0 8px 0;
+  padding: 12px 0 12px 0;
   position: relative;
   flex-wrap: wrap;
   gap: 0;
@@ -508,18 +532,18 @@ function goTab(tab) {
     position: absolute;
     left: 0;
     top: 50%;
-    width: 14px;
+    width: 32px;
     height: 2px;
     background: #dadce0;
   }
 }
 .b-count {
-  margin-left: 14px;
+  margin-left: 32px;
   min-width: 64px;
   text-align: center;
   cursor: pointer;
   b { display: block; font-size: 16px; color: #1a73e8; }
-  span { font-size: 11px; color: #5f6368; }
+  span { font-size: 12px; color: #5f6368; }
   &:hover b { text-decoration: underline; }
 }
 .node {
@@ -581,14 +605,14 @@ function goTab(tab) {
 }
 .lp-node {
   display: flex;
-  gap: 8px;
-  padding: 6px;
-  width: 240px;
+  gap: 10px;
+  padding: 8px;
+  width: 300px;
 }
 .lp-img-wrap { flex-shrink: 0; }
 .lp-img {
-  width: 72px;
-  height: 54px;
+  width: 108px;
+  height: 81px;
   border-radius: 4px;
   border: 1px solid #e8eaed;
   cursor: zoom-in;
@@ -618,7 +642,7 @@ function goTab(tab) {
 .lp-nums {
   display: flex;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: #5f6368;
   b { color: #1a73e8; }
   b.zero { color: #9aa0a6; }
