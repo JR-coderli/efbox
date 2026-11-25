@@ -264,13 +264,16 @@
           v-model="customerState"
           :fetch-suggestions="queryModalSearchAsync"
           placeholder="查找客户"
+          hide-loading
           @select="handleModalSelect"
           @blur="handleModalBlur"
           :teleported="false"
           style="width: 100%"
         >
           <template #default="{ item }">
-            <div class="customer-option">
+            <!-- 首次无缓存时的"加载中"占位行(item._loading), 不可选 -->
+            <div v-if="item._loading" class="customer-option customer-option__loading">加载中…</div>
+            <div v-else class="customer-option">
               <span class="customer-option__full">{{ item.full_name }}</span>
               <span v-if="item.short_name" class="customer-option__short">{{ item.short_name }}</span>
             </div>
@@ -542,11 +545,18 @@ function handleCustomerClick(customer) {
   systemStore.postPageListAction(contentConfig.pageName, queryInfo, "attalist")
 }
 
+// 弹窗客户联想防闪(同图表页 code 框): el-autocomplete 关闭后仍保留上次的 suggestions, 再次聚焦会先显示旧列表,
+// 等 debounce(300ms)后进入 loading 再换成新列表 → 「旧数据 → 加载中 → 新数据」闪一下。
+// 处理: hide-loading 让 loading 不替换列表; 取数时先把上次(同关键字)返回的列表同步回填(与正在显示的旧列表相同,
+// 视觉零变化), 请求回来后再无缝换成新数据; 关键字变了或首次无缓存 → 先回填一行"加载中"占位(item._loading)。
+let modalLastKw = null
+let modalLastList = null
 const queryModalSearchAsync = (queryString, cb) => {
+  const kw = String(queryString || '').trim()
 
   const queryInfo = {
     filters: {
-      name_keyword: queryString // 后端对 full_name / short_name 做联合模糊搜索
+      name_keyword: kw // 后端对 full_name / short_name 做联合模糊搜索
     },
     options: {
       page: 1,
@@ -554,18 +564,24 @@ const queryModalSearchAsync = (queryString, cb) => {
     }
   }
 
-  mainStore.postPageListAction(contentConfig.pageName, queryInfo).then((res) => {
+  // 同步占位: value 取当前关键字 → 即使被点中/回车, v-model 也不会被改掉
+  const placeholder = modalLastKw === kw && modalLastList ? modalLastList : [{ value: kw, _loading: true }]
+  cb(placeholder)
+
+  return mainStore.postPageListAction(contentConfig.pageName, queryInfo).then((res) => {
     if (!res || !Array.isArray(res)) {
       cb([])
       return
     }
     res.forEach(item => { item.value = item.full_name }) // el-autocomplete要求返回的数据中必须有value属性（下拉展示样式见 #default 插槽）
 
-
-
     validList.value = res.map(item => item.full_name)
+    modalLastKw = kw
+    modalLastList = res
 
     cb(res) // 将获取到的客户列表数据, 传递给 el-autocomplete 组件, 用于显示在下拉列表中
+  }).catch(() => {
+    cb(modalLastKw === kw && modalLastList ? modalLastList : [])
   })
 }
 const queryContentSearchAsync = (queryString, cb) => {
@@ -652,6 +668,7 @@ function handleSearchBlur() {
 }
 
 function handleModalSelect(item) {
+  if (item?._loading) return // "加载中"占位行不可选
   selectCustomer(item, "attachment-modal")
   customerState.value = item.full_name
 }
@@ -1763,6 +1780,11 @@ onUnmounted(() => {
 
   &__short {
     flex-shrink: 0;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+
+  &__loading {
     font-size: 12px;
     color: var(--el-text-color-secondary);
   }

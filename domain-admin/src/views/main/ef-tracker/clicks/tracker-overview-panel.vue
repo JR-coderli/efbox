@@ -12,11 +12,17 @@
                   :fetch-suggestions="fetchCodeSuggest"
                   placeholder="投放 code(/r/:code)"
                   clearable
+                  hide-loading
                   style="width: 220px"
                   value-key="value"
-                  @select="load"
+                  @select="onCodeSelect"
                   @keydown.enter="load"
-                />
+                >
+                  <template #default="{ item }">
+                    <div v-if="item._loading" style="font-size: 12px; color: #9aa0a6">加载中…</div>
+                    <template v-else>{{ item.value }}</template>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
               <el-form-item label="日期">
                 <!-- 固定 5 个预设范围单选(今天/昨天/前天/近3天/近7天), 谷歌风格按钮; 切换即重新查询 -->
@@ -269,12 +275,32 @@ function fmtTime(s) {
   return String(s).replace('T', ' ').replace(/\.\d+/, '').replace(/([+-])(\d{2}):(\d{2})$/, (_m, sign, h, min) => ' ' + sign + parseInt(h, 10) + (parseInt(min, 10) ? ':' + parseInt(min, 10) : '')).replace(/Z$/, ' +0')
 }
 
-// code 联想: 空=最近code, 键入=全量模糊(复用 /query/path-codes, 同媒体点击页 code 框)
+// code 联想: 空=最近code, 键入=全量模糊(复用 /query/path-codes, 同媒体点击页 code 框)。
+// el-autocomplete 关闭后仍保留上次的 suggestions, 再次聚焦会先把旧列表显示出来, 等 debounce(300ms)后进入
+// loading 再换成新列表 → 「旧数据 → 加载中 → 新数据」闪一下。处理: hide-loading 让 loading 不替换列表;
+// 聚焦时把上次缓存的列表同步回填(与正在显示的旧列表相同, 视觉零变化), 请求回来后再无缝换成新数据;
+// 仅首次打开(无缓存)先回填一行"加载中"占位, 避免空弹层。
+let codeCache = null
+function toCodeItems(res) {
+  return (res?.list || []).map((r) => ({ value: r.code }))
+}
 function fetchCodeSuggest(qs, cb) {
   const kw = String(qs || '').trim()
-  getRecentPathCodes({ kw, limit: 20, tz: 8 })
-    .then((res) => cb((res?.list || []).map((r) => ({ value: r.code }))))
-    .catch(() => cb([]))
+  if (kw) {
+    // 键入搜索不走缓存
+    getRecentPathCodes({ kw, limit: 20, tz: 8 })
+      .then((res) => cb(toCodeItems(res)))
+      .catch(() => cb([]))
+    return
+  }
+  cb(codeCache || [{ value: '', _loading: true }])
+  return getRecentPathCodes({ kw, limit: 20, tz: 8 })
+    .then((res) => { codeCache = toCodeItems(res); cb(codeCache) })
+    .catch(() => cb(codeCache || []))
+}
+function onCodeSelect(item) {
+  if (item?._loading) return // 占位行不可选
+  load()
 }
 
 // 切换日期预设 = 重新查询(无需再点「查询」); 点当前已选项不重复请求; 未填 code 时 load 内部直接返回
